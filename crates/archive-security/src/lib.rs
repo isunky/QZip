@@ -26,20 +26,11 @@ impl Default for ExtractionLimits {
         }
     }
 }
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ExtractionSecurityPolicy {
     pub allow_symlinks: bool,
     pub allow_hardlinks: bool,
     pub limits: ExtractionLimits,
-}
-impl Default for ExtractionSecurityPolicy {
-    fn default() -> Self {
-        Self {
-            allow_symlinks: false,
-            allow_hardlinks: false,
-            limits: ExtractionLimits::default(),
-        }
-    }
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ArchiveRisk {

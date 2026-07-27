@@ -13,6 +13,7 @@ archive-core = { path = "../archive-core" }
 archive-security = { path = "../archive-security" }
 async-trait.workspace = true
 secrecy.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

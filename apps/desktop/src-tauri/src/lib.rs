@@ -321,10 +321,10 @@ async fn scan_input_paths(paths: Vec<PathBuf>) -> Result<ScanResult, CommandErro
         let mut normal = Vec::new();
         let mut total = 0;
         for path in &paths {
-            if let Ok(metadata) = std::fs::metadata(path) {
-                if metadata.is_file() {
-                    total += metadata.len();
-                }
+            if let Ok(metadata) = std::fs::metadata(path)
+                && metadata.is_file()
+            {
+                total += metadata.len();
             }
             if detect(path) == ArchiveFormat::Unknown {
                 normal.push(path.clone());

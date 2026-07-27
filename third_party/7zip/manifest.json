@@ -7,7 +7,11 @@
     "url": "https://www.7-zip.org/a/7z2602-x64.msi",
     "sha256": "db407a4f6d4999e5c7bc00ce8a882be94717b56e7fa68140fe3f12605d91643e",
     "archive": "7z2602-x64.msi",
-    "files": ["7z.exe", "7z.dll"]
+    "files": ["7z.exe", "7z.dll"],
+    "fileHashes": {
+      "7z.exe": "83967f1b02b43c4efeda302795722c809e0e81b8307de73558d10484d5676a7d",
+      "7z.dll": "69fd4df057985c40e510e2fac182881c7f85e90aa13ec703f763a8fdb2ce61f8"
+    }
   },
   "source": {
     "url": "https://www.7-zip.org/a/7z2602-src.tar.xz",

@@ -9,3 +9,6 @@ QZip uses the unmodified official 7-Zip 26.02 Windows x64 runtime. Its MSI,
 source archive, SHA-256 values, licence, source availability and modification
 status are recorded in `third_party/7zip/manifest.json`. The binary is fetched
 locally and is intentionally not tracked in this repository.
+
+The release build verifies both `7z.exe` and `7z.dll` against the recorded
+SHA-256 values before bundling and again before each runtime invocation.

@@ -22,7 +22,11 @@ function Assert-Hash([string]$Path, [string]$Expected) {
 }
 
 if ($VerifyOnly) {
-  foreach ($file in $manifest.runtime.files) { if (-not (Test-Path -LiteralPath (Join-Path $runtimeDir $file))) { throw "Missing sidecar file: $file" } }
+  foreach ($file in $manifest.runtime.files) {
+    $runtimeFile = Join-Path $runtimeDir $file
+    if (-not (Test-Path -LiteralPath $runtimeFile)) { throw "Missing sidecar file: $file" }
+    Assert-Hash $runtimeFile $manifest.runtime.fileHashes.$file
+  }
   Assert-Hash $sourcePath $manifest.source.sha256
   & (Join-Path $runtimeDir '7z.exe') i | Out-Null
   if ($LASTEXITCODE -gt 1) { throw "7-Zip sidecar did not start" }
@@ -49,6 +53,7 @@ try {
   New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
   Copy-Item -LiteralPath $foundExe.FullName -Destination (Join-Path $runtimeDir '7z.exe') -Force
   Copy-Item -LiteralPath $foundDll.FullName -Destination (Join-Path $runtimeDir '7z.dll') -Force
+  foreach ($file in $manifest.runtime.files) { Assert-Hash (Join-Path $runtimeDir $file) $manifest.runtime.fileHashes.$file }
   & (Join-Path $runtimeDir '7z.exe') i | Out-Null
   if ($LASTEXITCODE -gt 1) { throw 'Extracted 7-Zip sidecar did not start.' }
   Write-Host "7-Zip $($manifest.version) sidecar extracted to $runtimeDir and source archived locally."

@@ -6,7 +6,7 @@
 use std::{
     collections::BTreeMap,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -18,6 +18,7 @@ use archive_core::{
     TestArchiveRequest, TestResult, UpdateArchiveRequest,
 };
 use archive_security::{ExtractionSecurityPolicy, assess_entries};
+use fs2::available_space;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Semaphore, broadcast};
@@ -289,7 +290,7 @@ impl TaskManager {
         cancellation: CancellationToken,
     ) -> Result<Vec<String>, ArchiveError> {
         self.set_status(task_id, TaskStatus::Running, None);
-        let result = match spec {
+        match spec {
             TaskSpec::Create {
                 inputs,
                 output,
@@ -299,12 +300,14 @@ impl TaskManager {
                 test_after_create,
                 ..
             } => {
+                validate_create_destination(inputs, output)?;
+                let temporary_output = temporary_archive_path(output)?;
                 let result = self
                     .backend
                     .create(
                         CreateArchiveRequest {
                             inputs: inputs.clone(),
-                            output: output.clone(),
+                            output: temporary_output.clone(),
                             format: *format,
                             profile: *profile,
                             password,
@@ -314,18 +317,35 @@ impl TaskManager {
                         reporter,
                         cancellation.child_token(),
                     )
-                    .await?;
+                    .await;
+                let result = match result {
+                    Ok(result) => result,
+                    Err(error) => {
+                        let _ = fs::remove_file(&temporary_output);
+                        return Err(error);
+                    }
+                };
                 if *test_after_create {
-                    self.backend
+                    let test = self
+                        .backend
                         .test(
                             TestArchiveRequest {
-                                archive: output.clone(),
+                                archive: temporary_output.clone(),
                                 password: None,
                             },
                             cancellation.child_token(),
                         )
-                        .await?;
+                        .await;
+                    if let Err(error) = test {
+                        let _ = fs::remove_file(&temporary_output);
+                        return Err(error);
+                    }
                 }
+                if cancellation.is_cancelled() {
+                    let _ = fs::remove_file(&temporary_output);
+                    return Err(ArchiveError::new(ArchiveErrorCode::Cancelled, "任务已取消"));
+                }
+                commit_created_archive(&temporary_output, output)?;
                 Ok(result.warnings)
             }
             TaskSpec::Extract {
@@ -348,10 +368,14 @@ impl TaskManager {
                 let archive_size = std::fs::metadata(archive)
                     .map(|metadata| metadata.len())
                     .unwrap_or(0);
+                let available_bytes = output.parent().and_then(|parent| {
+                    fs::create_dir_all(parent).ok()?;
+                    available_space(parent).ok()
+                });
                 let risks = assess_entries(
                     &entries,
                     archive_size,
-                    None,
+                    available_bytes,
                     &ExtractionSecurityPolicy::default(),
                 );
                 if risks.iter().any(|risk| !risk.overridable)
@@ -369,12 +393,13 @@ impl TaskManager {
                             .unwrap_or_else(|| "压缩包风险检查失败".into()),
                     ));
                 }
+                let staging = prepare_extraction_staging(output)?;
                 let result = self
                     .backend
                     .extract(
                         ExtractArchiveRequest {
                             archive: archive.clone(),
-                            output: output.clone(),
+                            output: staging.clone(),
                             selected_entries: selected_entries.clone(),
                             conflict_policy: *conflict_policy,
                             password,
@@ -382,7 +407,22 @@ impl TaskManager {
                         reporter,
                         cancellation.child_token(),
                     )
-                    .await?;
+                    .await;
+                let result = match result {
+                    Ok(result) if !cancellation.is_cancelled() => result,
+                    Ok(_) => {
+                        cleanup_staging(&staging);
+                        return Err(ArchiveError::new(ArchiveErrorCode::Cancelled, "任务已取消"));
+                    }
+                    Err(error) => {
+                        cleanup_staging(&staging);
+                        return Err(error);
+                    }
+                };
+                if let Err(error) = commit_extraction(&staging, output, *conflict_policy) {
+                    cleanup_staging(&staging);
+                    return Err(error);
+                }
                 Ok(result.warnings)
             }
             TaskSpec::Test { archive } => {
@@ -413,8 +453,7 @@ impl TaskManager {
                     .await?;
                 Ok(result.warnings)
             }
-        };
-        result
+        }
     }
     fn set_status(&self, task_id: &str, status: TaskStatus, progress: Option<RuntimeProgress>) {
         if let Some(record) = self.tasks.lock().expect("task lock").get_mut(task_id) {
@@ -507,13 +546,247 @@ impl TaskManager {
             let _ = fs::create_dir_all(parent);
         }
         let temporary = self.history_path.with_extension("json.tmp");
-        if let Ok(file) = fs::File::create(&temporary) {
-            if serde_json::to_writer(file, &history).is_ok() {
-                let _ = fs::remove_file(&self.history_path);
-                let _ = fs::rename(temporary, &self.history_path);
+        if let Ok(file) = fs::File::create(&temporary)
+            && serde_json::to_writer(file, &history).is_ok()
+        {
+            let _ = fs::remove_file(&self.history_path);
+            let _ = fs::rename(temporary, &self.history_path);
+        }
+    }
+}
+
+fn validate_create_destination(inputs: &[PathBuf], output: &Path) -> Result<(), ArchiveError> {
+    if inputs.is_empty() {
+        return Err(ArchiveError::invalid_option(
+            "inputs",
+            "at least one input is required",
+        ));
+    }
+    if output.exists() {
+        return Err(ArchiveError::new(
+            ArchiveErrorCode::ConflictRequiresDecision,
+            "目标压缩包已存在，请选择其他文件名",
+        ));
+    }
+    let parent = output
+        .parent()
+        .ok_or_else(|| ArchiveError::new(ArchiveErrorCode::InvalidRequest, "压缩包保存位置无效"))?;
+    fs::create_dir_all(parent).map_err(|_| {
+        ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法创建压缩包保存目录")
+    })?;
+    let canonical_parent = parent.canonicalize().map_err(|_| {
+        ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法访问压缩包保存目录")
+    })?;
+    let target =
+        canonical_parent.join(output.file_name().ok_or_else(|| {
+            ArchiveError::new(ArchiveErrorCode::InvalidRequest, "压缩包文件名无效")
+        })?);
+    for input in inputs {
+        let metadata = fs::metadata(input).map_err(|_| {
+            ArchiveError::new(ArchiveErrorCode::FileNotFound, "待压缩的文件或目录不存在")
+        })?;
+        if metadata.is_dir() {
+            let canonical_input = input.canonicalize().map_err(|_| {
+                ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法访问待压缩目录")
+            })?;
+            if target.starts_with(canonical_input) {
+                return Err(ArchiveError::new(
+                    ArchiveErrorCode::InvalidRequest,
+                    "压缩包不能保存到待压缩目录内部",
+                ));
             }
         }
     }
+    Ok(())
+}
+
+fn temporary_archive_path(output: &Path) -> Result<PathBuf, ArchiveError> {
+    let parent = output
+        .parent()
+        .ok_or_else(|| ArchiveError::new(ArchiveErrorCode::InvalidRequest, "压缩包保存位置无效"))?;
+    let name = output
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| ArchiveError::new(ArchiveErrorCode::InvalidRequest, "压缩包文件名无效"))?;
+    Ok(parent.join(format!(".qzip-{}-{name}", Uuid::new_v4())))
+}
+
+fn commit_created_archive(temporary: &Path, output: &Path) -> Result<(), ArchiveError> {
+    if !temporary.is_file() {
+        return Err(ArchiveError::new(
+            ArchiveErrorCode::CleanupFailed,
+            "压缩任务未生成可提交的临时文件",
+        ));
+    }
+    if output.exists() {
+        let _ = fs::remove_file(temporary);
+        return Err(ArchiveError::new(
+            ArchiveErrorCode::ConflictRequiresDecision,
+            "目标压缩包已存在，未覆盖原文件",
+        ));
+    }
+    fs::rename(temporary, output)
+        .map_err(|_| ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法提交新建压缩包"))
+}
+
+fn prepare_extraction_staging(output: &Path) -> Result<PathBuf, ArchiveError> {
+    let parent = output
+        .parent()
+        .ok_or_else(|| ArchiveError::new(ArchiveErrorCode::InvalidRequest, "解压目标位置无效"))?;
+    fs::create_dir_all(parent).map_err(|_| {
+        ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法创建解压目标目录")
+    })?;
+    let parent = parent.canonicalize().map_err(|_| {
+        ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法访问解压目标目录")
+    })?;
+    let staging = parent.join(format!(".qzip-extract-{}", Uuid::new_v4()));
+    fs::create_dir(&staging).map_err(|_| {
+        ArchiveError::new(
+            ArchiveErrorCode::PermissionDenied,
+            "无法创建安全解压暂存目录",
+        )
+    })?;
+    Ok(staging)
+}
+
+fn cleanup_staging(staging: &Path) {
+    if staging
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.starts_with(".qzip-extract-"))
+    {
+        let _ = fs::remove_dir_all(staging);
+    }
+}
+
+fn commit_extraction(
+    staging: &Path,
+    output: &Path,
+    policy: ConflictPolicy,
+) -> Result<(), ArchiveError> {
+    if !staging.is_dir() {
+        return Err(ArchiveError::new(
+            ArchiveErrorCode::CleanupFailed,
+            "解压暂存目录已丢失",
+        ));
+    }
+    if !output.exists() {
+        fs::rename(staging, output).map_err(|_| {
+            ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法提交解压结果")
+        })?;
+        return Ok(());
+    }
+    if !output.is_dir() || path_is_link_or_reparse(output)? {
+        return Err(ArchiveError::new(
+            ArchiveErrorCode::UnsafePath,
+            "解压目标不是安全目录",
+        ));
+    }
+    merge_directory(staging, output, policy)?;
+    cleanup_staging(staging);
+    Ok(())
+}
+
+fn merge_directory(
+    source: &Path,
+    target: &Path,
+    policy: ConflictPolicy,
+) -> Result<(), ArchiveError> {
+    for entry in fs::read_dir(source).map_err(|_| {
+        ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法读取解压暂存目录")
+    })? {
+        let entry = entry.map_err(|_| {
+            ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法读取解压暂存条目")
+        })?;
+        let source_path = entry.path();
+        if path_is_link_or_reparse(&source_path)? {
+            return Err(ArchiveError::new(
+                ArchiveErrorCode::UnsafePath,
+                "解压结果包含不安全链接",
+            ));
+        }
+        let is_directory = entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false);
+        let mut target_path = target.join(entry.file_name());
+        if target_path.exists() {
+            if path_is_link_or_reparse(&target_path)? {
+                return Err(ArchiveError::new(
+                    ArchiveErrorCode::UnsafePath,
+                    "解压目标包含不安全链接",
+                ));
+            }
+            if is_directory && target_path.is_dir() {
+                merge_directory(&source_path, &target_path, policy)?;
+                continue;
+            }
+            match policy {
+                ConflictPolicy::Rename => target_path = renamed_path(&target_path),
+                ConflictPolicy::Overwrite => {
+                    if target_path.is_dir() {
+                        return Err(ArchiveError::new(
+                            ArchiveErrorCode::ConflictRequiresDecision,
+                            "文件与目录同名，无法安全覆盖",
+                        ));
+                    }
+                    fs::remove_file(&target_path).map_err(|_| {
+                        ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法覆盖现有文件")
+                    })?;
+                }
+                ConflictPolicy::Skip => continue,
+                ConflictPolicy::Ask => {
+                    return Err(ArchiveError::new(
+                        ArchiveErrorCode::ConflictRequiresDecision,
+                        "需要选择冲突文件处理方式",
+                    ));
+                }
+            }
+        }
+        if is_directory {
+            fs::create_dir(&target_path).map_err(|_| {
+                ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法创建解压目录")
+            })?;
+            merge_directory(&source_path, &target_path, policy)?;
+        } else {
+            fs::rename(&source_path, &target_path).map_err(|_| {
+                ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法写入解压文件")
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn renamed_path(path: &Path) -> PathBuf {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("文件");
+    let extension = path.extension().and_then(|value| value.to_str());
+    for index in 1..10_000 {
+        let name = match extension {
+            Some(extension) => format!("{stem} ({index}).{extension}"),
+            None => format!("{stem} ({index})"),
+        };
+        let candidate = parent.join(name);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    parent.join(format!("{stem} ({})", Uuid::new_v4()))
+}
+
+fn path_is_link_or_reparse(path: &Path) -> Result<bool, ArchiveError> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法检查输出路径"))?;
+    if metadata.file_type().is_symlink() {
+        return Ok(true);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::fs::MetadataExt;
+        Ok(metadata.file_attributes() & 0x400 != 0)
+    }
+    #[cfg(not(target_os = "windows"))]
+    Ok(false)
 }
 struct RuntimeReporter {
     manager: Arc<TaskManager>,
@@ -546,4 +819,61 @@ fn now() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_directory(label: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!("qzip-runtime-{label}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn refuses_an_archive_inside_an_input_directory() {
+        let root = test_directory("recursive-output");
+        let input = root.join("input");
+        fs::create_dir(&input).unwrap();
+        let error =
+            validate_create_destination(std::slice::from_ref(&input), &input.join("result.7z"))
+                .unwrap_err();
+        assert_eq!(error.code, ArchiveErrorCode::InvalidRequest);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn never_overwrites_an_existing_archive_on_commit() {
+        let root = test_directory("existing-output");
+        let temporary = root.join(".qzip-temporary.7z");
+        let output = root.join("result.7z");
+        fs::write(&temporary, "new").unwrap();
+        fs::write(&output, "old").unwrap();
+        let error = commit_created_archive(&temporary, &output).unwrap_err();
+        assert_eq!(error.code, ArchiveErrorCode::ConflictRequiresDecision);
+        assert_eq!(fs::read_to_string(&output).unwrap(), "old");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn extraction_rename_keeps_an_existing_file() {
+        let root = test_directory("extract-rename");
+        let staging = root.join(".qzip-extract-test");
+        let output = root.join("output");
+        fs::create_dir(&staging).unwrap();
+        fs::create_dir(&output).unwrap();
+        fs::write(staging.join("report.txt"), "new").unwrap();
+        fs::write(output.join("report.txt"), "old").unwrap();
+        commit_extraction(&staging, &output, ConflictPolicy::Rename).unwrap();
+        assert_eq!(
+            fs::read_to_string(output.join("report.txt")).unwrap(),
+            "old"
+        );
+        assert_eq!(
+            fs::read_to_string(output.join("report (1).txt")).unwrap(),
+            "new"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
 }

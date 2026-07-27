@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "policy": "Synthetic and redistributable content only. Passwords are held in the private release test runbook, never in this repository.",
+  "cases": [
+    { "producer": "7-Zip", "format": "7z", "file": "7zip-7z.7z", "producerVersion": "26.02", "sha256": "" },
+    { "producer": "7-Zip", "format": "zip", "file": "7zip-zip.zip", "producerVersion": "26.02", "sha256": "" },
+    { "producer": "WinRAR", "format": "rar", "file": "winrar-rar.rar", "producerVersion": "", "sha256": "" },
+    { "producer": "Bandizip", "format": "zip", "file": "bandizip-zip.zip", "producerVersion": "", "sha256": "" },
+    { "producer": "PeaZip", "format": "7z", "file": "peazip-7z.7z", "producerVersion": "", "sha256": "" },
+    { "producer": "Keka", "format": "tar.gz", "file": "keka-targz.tar.gz", "producerVersion": "", "sha256": "" },
+    { "producer": "Windows Explorer", "format": "zip", "file": "windows-zip.zip", "producerVersion": "Windows 11", "sha256": "" },
+    { "producer": "GNU tar", "format": "tar.xz", "file": "gnu-tar-xz.tar.xz", "producerVersion": "", "sha256": "" }
+  ]
+}

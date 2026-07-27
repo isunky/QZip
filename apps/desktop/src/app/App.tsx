@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AccentTheme, ThemeMode } from "@qzip/ui";
 import { Header } from "../components/Header";
 import { Toast } from "../components/Toast";
@@ -29,14 +29,14 @@ export function App() {
   const settingsRef = useRef(settings);
   const resolvedMode = resolveThemeMode(mode, systemDark);
 
-  function applySettings(next: AppSettings) {
+  const applySettings = useCallback((next: AppSettings) => {
     settingsRef.current = next;
     setSettings(next);
     setMode(next.themeMode as ThemeMode);
     setAccent(next.accentTheme as AccentTheme);
-  }
+  }, [setAccent, setMode]);
 
-  useEffect(() => { void settingsClient.get().then(applySettings).catch(() => setToast("无法加载本机设置，已使用默认值。")); }, []);
+  useEffect(() => { void settingsClient.get().then(applySettings).catch(() => setToast("无法加载本机设置，已使用默认值。")); }, [applySettings]);
   useEffect(() => {
     if (!window.matchMedia) return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");

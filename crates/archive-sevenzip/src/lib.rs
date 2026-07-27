@@ -5,6 +5,7 @@
 
 use std::{
     fs,
+    io::Read,
     path::{Path, PathBuf},
     process::Stdio,
     sync::Arc,
@@ -20,6 +21,7 @@ use archive_core::{
 use archive_security::safe_relative_path;
 use async_trait::async_trait;
 use secrecy::ExposeSecret;
+use sha2::{Digest, Sha256};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::Command,
@@ -30,6 +32,10 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 const EXPECTED_VERSION: &str = "26.02";
+const EXPECTED_EXECUTABLE_SHA256: &str =
+    "83967f1b02b43c4efeda302795722c809e0e81b8307de73558d10484d5676a7d";
+const EXPECTED_LIBRARY_SHA256: &str =
+    "69fd4df057985c40e510e2fac182881c7f85e90aa13ec703f763a8fdb2ce61f8";
 const MAX_DIAGNOSTIC_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug)]
@@ -45,6 +51,12 @@ impl SevenZipCliBackend {
         &self.executable
     }
 
+    fn verify_runtime_files(&self) -> Result<(), ArchiveError> {
+        verify_sha256(&self.executable, EXPECTED_EXECUTABLE_SHA256)?;
+        let library = self.executable.with_file_name("7z.dll");
+        verify_sha256(&library, EXPECTED_LIBRARY_SHA256)
+    }
+
     async fn invoke(
         &self,
         operation: ArchiveOperation,
@@ -55,6 +67,18 @@ impl SevenZipCliBackend {
         if !self.executable.is_file() {
             return Err(ArchiveError::unavailable("7-Zip sidecar was not found"));
         }
+        self.verify_runtime_files()?;
+        self.invoke_process(operation, args, progress, cancellation)
+            .await
+    }
+
+    async fn invoke_process(
+        &self,
+        operation: ArchiveOperation,
+        args: Vec<String>,
+        progress: Arc<dyn ProgressReporter>,
+        cancellation: CancellationToken,
+    ) -> Result<InvocationOutput, ArchiveError> {
         let mut child = Command::new(&self.executable)
             .args(&args)
             .stdin(Stdio::null())
@@ -215,6 +239,29 @@ impl SevenZipCliBackend {
                 .collect(),
         })
     }
+}
+
+fn verify_sha256(path: &Path, expected: &str) -> Result<(), ArchiveError> {
+    let mut file = fs::File::open(path)
+        .map_err(|_| ArchiveError::unavailable("7-Zip sidecar was not found"))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer).map_err(|_| {
+            ArchiveError::unavailable("could not read the 7-Zip sidecar for verification")
+        })?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let actual = format!("{:x}", hasher.finalize());
+    if actual != expected {
+        return Err(ArchiveError::unavailable(
+            "7-Zip sidecar integrity verification failed",
+        ));
+    }
+    Ok(())
 }
 
 #[async_trait]
@@ -744,7 +791,7 @@ mod tests {
             trigger.cancel();
         });
         let result = backend
-            .invoke(
+            .invoke_process(
                 ArchiveOperation::Test,
                 vec!["-n".into(), "20".into(), "127.0.0.1".into()],
                 Arc::new(archive_core::NoopProgressReporter),

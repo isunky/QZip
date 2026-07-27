@@ -49,7 +49,7 @@ function RiskNotice({ risks, accepted, onAccepted }: { risks: ArchiveRisk[]; acc
 }
 
 export function CreatePage({ onBack, onCreated, defaultFormat = "sevenZip", defaultProfile = "balanced", defaultTestAfterCreate = true, initialInputs = [] }: { onBack: () => void; onCreated: (task: TaskSnapshot) => void; defaultFormat?: ArchiveFormat; defaultProfile?: CompressionProfile; defaultTestAfterCreate?: boolean; initialInputs?: string[] }) {
-  const [inputs, setInputs] = useState<string[]>([]);
+  const [inputs, setInputs] = useState<string[]>(() => [...new Set(initialInputs)]);
   const [format, setFormat] = useState<ArchiveFormat>(defaultFormat);
   const [profile, setProfile] = useState<CompressionProfile>(defaultProfile);
   const [output, setOutput] = useState("D:\\QZip\\新建压缩包.7z");
@@ -57,7 +57,6 @@ export function CreatePage({ onBack, onCreated, defaultFormat = "sevenZip", defa
   const [testing, setTesting] = useState(defaultTestAfterCreate);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { if (initialInputs.length) setInputs((current) => [...new Set([...current, ...initialInputs])]); }, [initialInputs]);
   const addFiles = async () => {
     if (!archiveClient.isTauri) { setInputs(["D:\\示例文件夹", "D:\\报价单.xlsx"]); return; }
     const picked = await archiveClient.pickInputPaths(false);
@@ -109,8 +108,16 @@ export function BrowserPage({ archive, session, onBack, onExtract }: { archive: 
     }
   }, [session.sessionId]);
   const shown = useMemo(() => entries.filter((entry) => entry.displayName.toLowerCase().includes(search.toLowerCase())), [entries, search]);
+  function toggleSelected(path: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
   return <Workspace title={archive.split("\\").pop() ?? "压缩包内容"} subtitle={`${session.entryCount} 项内容 · 浏览不解压`} onBack={onBack}>
-    <Card className="qzip-browser-card"><div className="qzip-browser-toolbar"><div className="qzip-breadcrumb"><Archive size={17} /> 压缩包 <ChevronRight size={15} /> 根目录</div><Input aria-label="搜索压缩包内容" placeholder="搜索文件名" value={search} onChange={(event) => setSearch(event.target.value)} trailing={<Search size={17} />} /><Button variant="secondary" icon={<PackageOpen size={18} />} onClick={onExtract}>解压所选{selected.size ? ` (${selected.size})` : ""}</Button></div><div className="qzip-entry-table" role="table"><div className="qzip-entry-table__head" role="row"><span>名称</span><span>大小</span><span>压缩后</span><span>修改时间</span></div>{loading ? <Empty icon={<RefreshCw className="qzip-spin" />} text="正在读取压缩包目录…" /> : shown.map((entry) => <button className="qzip-entry-row" key={entry.path} role="row" onClick={() => setSelected((current) => { const next = new Set(current); next.has(entry.path) ? next.delete(entry.path) : next.add(entry.path); return next; })} data-selected={selected.has(entry.path)}><span>{entry.isDirectory ? <FolderOpen size={18} /> : <FileArchive size={18} />}{entry.displayName}{entry.encrypted ? <LockKeyhole size={14} /> : null}</span><span>{entry.isDirectory ? "—" : formatBytes(entry.size)}</span><span>{entry.isDirectory ? "—" : formatBytes(entry.compressedSize ?? 0)}</span><span>{entry.modifiedAt?.slice(0, 10) ?? "—"}</span></button>)}{!shown.length && !loading ? <Empty icon={<Search />} text="没有匹配的文件" /> : null}</div></Card>
+    <Card className="qzip-browser-card"><div className="qzip-browser-toolbar"><div className="qzip-breadcrumb"><Archive size={17} /> 压缩包 <ChevronRight size={15} /> 根目录</div><Input aria-label="搜索压缩包内容" placeholder="搜索文件名" value={search} onChange={(event) => setSearch(event.target.value)} trailing={<Search size={17} />} /><Button variant="secondary" icon={<PackageOpen size={18} />} onClick={onExtract}>解压所选{selected.size ? ` (${selected.size})` : ""}</Button></div><div className="qzip-entry-table" role="table"><div className="qzip-entry-table__head" role="row"><span>名称</span><span>大小</span><span>压缩后</span><span>修改时间</span></div>{loading ? <Empty icon={<RefreshCw className="qzip-spin" />} text="正在读取压缩包目录…" /> : shown.map((entry) => <button className="qzip-entry-row" key={entry.path} role="row" onClick={() => toggleSelected(entry.path)} data-selected={selected.has(entry.path)}><span>{entry.isDirectory ? <FolderOpen size={18} /> : <FileArchive size={18} />}{entry.displayName}{entry.encrypted ? <LockKeyhole size={14} /> : null}</span><span>{entry.isDirectory ? "—" : formatBytes(entry.size)}</span><span>{entry.isDirectory ? "—" : formatBytes(entry.compressedSize ?? 0)}</span><span>{entry.modifiedAt?.slice(0, 10) ?? "—"}</span></button>)}{!shown.length && !loading ? <Empty icon={<Search />} text="没有匹配的文件" /> : null}</div></Card>
   </Workspace>;
 }
 

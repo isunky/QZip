@@ -1,0 +1,91 @@
+name: RC release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v-prefixed release tag to publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  attestations: write
+  id-token: write
+
+jobs:
+  windows-rc:
+    runs-on: windows-latest
+    env:
+      WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+      WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
+      QZIP_WINDOWS_PUBLISHER: ${{ vars.QZIP_WINDOWS_PUBLISHER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+          components: clippy,rustfmt
+      - name: Require release signing configuration
+        shell: pwsh
+        run: |
+          $required = @('WINDOWS_PFX_BASE64', 'WINDOWS_PFX_PASSWORD', 'QZIP_WINDOWS_PUBLISHER')
+          $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
+          if ($missing) { throw "Public RC publishing is disabled until these values are configured: $($missing -join ', ')." }
+          [System.IO.File]::WriteAllBytes("$env:RUNNER_TEMP\qzip-signing.pfx", [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm sidecar:verify
+      - name: Build Windows artifacts
+        shell: pwsh
+        run: pnpm tauri:bundle:windows
+      - name: Sign published Windows binaries
+        shell: pwsh
+        run: |
+          $pfx = "$env:RUNNER_TEMP\qzip-signing.pfx"
+          $targets = @(
+            'target\release\qzip-desktop.exe',
+            (Get-ChildItem 'target\release\bundle\nsis' -Filter '*.exe' -File).FullName,
+            (Get-ChildItem 'target\release\bundle\msi' -Filter '*.msi' -File).FullName
+          )
+          $signTool = (Get-Command signtool.exe -ErrorAction Stop).Source
+          foreach ($target in $targets) {
+            & $signTool sign /fd SHA256 /f $pfx /p $env:WINDOWS_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $target
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $signature = Get-AuthenticodeSignature -LiteralPath $target
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike "*$env:QZIP_WINDOWS_PUBLISHER*") {
+              throw "Trusted publisher signature validation failed for $target."
+            }
+          }
+      - name: Assemble and verify RC assets
+        shell: pwsh
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}' } else { '${{ github.ref_name }}' }
+          powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version $tag -SkipBundle
+          powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $tag -RequireTrustedSignature
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/release/**
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qzip-rc-assets
+          path: artifacts/release/**
+          if-no-files-found: error
+      - name: Publish GitHub prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}' } else { '${{ github.ref_name }}' }
+          gh release create $tag artifacts/release/*/* --prerelease --generate-notes --title "QZip $tag"

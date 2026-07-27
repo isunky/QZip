@@ -1,6 +1,6 @@
 {
   "name": "qzip-desktop",
-  "version": "0.1.0",
+  "version": "1.0.0-rc.1",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.9.0",
@@ -24,8 +24,10 @@
     "sidecar:verify": "powershell -ExecutionPolicy Bypass -File scripts/fetch-sevenzip.ps1 -VerifyOnly",
     "sidecar:test": "powershell -ExecutionPolicy Bypass -File scripts/test-sevenzip.ps1",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build:web && pnpm run rust:check",
-    "tauri:build:debug": "pnpm --filter @qzip/desktop tauri build --debug --no-bundle"
-    ,"tauri:bundle:windows": "powershell -ExecutionPolicy Bypass -File scripts/bundle-windows.ps1"
+    "tauri:build:debug": "pnpm --filter @qzip/desktop tauri build --debug --no-bundle",
+    "tauri:bundle:windows": "powershell -ExecutionPolicy Bypass -File scripts/bundle-windows.ps1",
+    "release:prepare:windows": "powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version 1.0.0-rc.1",
+    "release:verify": "powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version 1.0.0-rc.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

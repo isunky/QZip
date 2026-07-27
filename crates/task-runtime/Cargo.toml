@@ -11,6 +11,7 @@ path = "src/lib.rs"
 [dependencies]
 archive-core = { path = "../archive-core" }
 archive-security = { path = "../archive-security" }
+fs2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 secrecy.workspace = true
