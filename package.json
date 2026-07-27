@@ -1,0 +1,34 @@
+{
+  "name": "qzip-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": "11.9.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @qzip/desktop dev",
+    "dev:web": "pnpm --filter @qzip/desktop dev:web",
+    "build": "pnpm --filter @qzip/desktop build",
+    "build:web": "pnpm --filter @qzip/desktop build:web",
+    "lint": "eslint .",
+    "typecheck": "pnpm --filter @qzip/ui typecheck && pnpm --filter @qzip/desktop typecheck",
+    "test": "pnpm --filter @qzip/desktop test",
+    "rust:fmt": "cargo fmt --all -- --check",
+    "rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings",
+    "rust:test": "cargo test --workspace",
+    "rust:check": "pnpm run rust:fmt && pnpm run rust:clippy && pnpm run rust:test",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build:web && pnpm run rust:check",
+    "tauri:build:debug": "pnpm --filter @qzip/desktop tauri build --debug --no-bundle"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.65.0"
+  }
+}

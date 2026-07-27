@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+  "apps/desktop/src-tauri",
+  "crates/archive-core",
+  "crates/archive-sevenzip",
+  "crates/archive-security",
+  "crates/task-runtime",
+  "crates/platform-integration"
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "Apache-2.0"
+authors = ["QZip Contributors"]
+repository = "https://github.com/isunky/QZip"

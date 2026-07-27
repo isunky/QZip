@@ -1,0 +1,136 @@
+:root {
+  --qzip-color-bg-app: #f5f6f4;
+  --qzip-color-bg-surface: #fbfcfa;
+  --qzip-color-bg-elevated: #ffffff;
+  --qzip-color-bg-subtle: #f1f3f0;
+  --qzip-color-text-primary: #262a28;
+  --qzip-color-text-secondary: #626a66;
+  --qzip-color-text-tertiary: #8a918d;
+  --qzip-color-text-disabled: #b4bab6;
+  --qzip-color-border-default: #e1e5e2;
+  --qzip-color-border-strong: #cdd3cf;
+  --qzip-color-divider: #e8ebe9;
+  --qzip-color-accent: #42b883;
+  --qzip-color-accent-hover: #329c6d;
+  --qzip-color-accent-soft: #effaf5;
+  --qzip-color-accent-strong: #2fa36b;
+  --qzip-color-success: #2fa36b;
+  --qzip-color-warning: #d78c22;
+  --qzip-color-danger: #d94e4e;
+  --qzip-color-info: #3e7fc4;
+  --qzip-font-sans: "Segoe UI Variable", "Segoe UI", "PingFang SC",
+    "Microsoft YaHei UI", "Noto Sans CJK SC", system-ui, sans-serif;
+  --qzip-radius-xs: 4px;
+  --qzip-radius-sm: 6px;
+  --qzip-radius-md: 8px;
+  --qzip-radius-lg: 12px;
+  --qzip-radius-xl: 16px;
+  --qzip-shadow-sm: 0 1px 2px rgb(28 36 31 / 6%);
+  --qzip-shadow-md: 0 6px 18px rgb(28 36 31 / 8%);
+  --qzip-shadow-lg: 0 16px 40px rgb(28 36 31 / 12%);
+  --qzip-motion-fast: 120ms;
+  --qzip-motion-base: 200ms;
+  --qzip-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+[data-mode="dark"] {
+  --qzip-color-bg-app: #171a19;
+  --qzip-color-bg-surface: #1d211f;
+  --qzip-color-bg-elevated: #252a27;
+  --qzip-color-bg-subtle: #202522;
+  --qzip-color-text-primary: #f1f4f2;
+  --qzip-color-text-secondary: #b7beb9;
+  --qzip-color-text-tertiary: #89918c;
+  --qzip-color-text-disabled: #626a65;
+  --qzip-color-border-default: #343a36;
+  --qzip-color-border-strong: #454d48;
+  --qzip-color-divider: #2b302d;
+  --qzip-color-accent: #55d19a;
+  --qzip-color-accent-hover: #6bdaa9;
+  --qzip-color-accent-soft: #17352a;
+  --qzip-color-accent-strong: #4bc889;
+  --qzip-color-success: #4bc889;
+  --qzip-color-warning: #e7a84b;
+  --qzip-color-danger: #f16b6b;
+  --qzip-color-info: #69a5e4;
+  --qzip-shadow-sm: none;
+  --qzip-shadow-md: none;
+  --qzip-shadow-lg: none;
+}
+
+[data-accent="ocean"] {
+  --qzip-color-accent: #3b8ed0;
+  --qzip-color-accent-hover: #2f76b0;
+  --qzip-color-accent-soft: #eef6fd;
+  --qzip-color-accent-strong: #2772ae;
+}
+
+[data-mode="dark"][data-accent="ocean"] {
+  --qzip-color-accent: #5aaae5;
+  --qzip-color-accent-hover: #75baeA;
+  --qzip-color-accent-soft: #162c3c;
+  --qzip-color-accent-strong: #4295d0;
+}
+
+[data-accent="lavender"] {
+  --qzip-color-accent: #9366c7;
+  --qzip-color-accent-hover: #7b50ab;
+  --qzip-color-accent-soft: #f7f2fc;
+  --qzip-color-accent-strong: #7747aa;
+}
+
+[data-mode="dark"][data-accent="lavender"] {
+  --qzip-color-accent: #b58ae0;
+  --qzip-color-accent-hover: #c5a0e8;
+  --qzip-color-accent-soft: #30233b;
+  --qzip-color-accent-strong: #a272ce;
+}
+
+[data-accent="amber"] {
+  --qzip-color-accent: #dfa536;
+  --qzip-color-accent-hover: #bf8526;
+  --qzip-color-accent-soft: #fff7e8;
+  --qzip-color-accent-strong: #b77f1e;
+}
+
+[data-mode="dark"][data-accent="amber"] {
+  --qzip-color-accent: #edb84f;
+  --qzip-color-accent-hover: #f3c86c;
+  --qzip-color-accent-soft: #3a2b16;
+  --qzip-color-accent-strong: #da9d2f;
+}
+
+[data-accent="coral"] {
+  --qzip-color-accent: #dd6f61;
+  --qzip-color-accent-hover: #c3594d;
+  --qzip-color-accent-soft: #fff1ef;
+  --qzip-color-accent-strong: #bd5044;
+}
+
+[data-mode="dark"][data-accent="coral"] {
+  --qzip-color-accent: #ef8a7c;
+  --qzip-color-accent-hover: #f3a195;
+  --qzip-color-accent-soft: #3b2321;
+  --qzip-color-accent-strong: #dd7467;
+}
+
+[data-accent="cyan-slate"] {
+  --qzip-color-accent: #4d9d9a;
+  --qzip-color-accent-hover: #3d817f;
+  --qzip-color-accent-soft: #eff7f7;
+  --qzip-color-accent-strong: #367a78;
+}
+
+[data-mode="dark"][data-accent="cyan-slate"] {
+  --qzip-color-accent: #63bab6;
+  --qzip-color-accent-hover: #7bc8c4;
+  --qzip-color-accent-soft: #183130;
+  --qzip-color-accent-strong: #4aa6a2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --qzip-motion-fast: 0ms;
+    --qzip-motion-base: 0ms;
+  }
+}
