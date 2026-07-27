@@ -15,9 +15,15 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 archive-core = { path = "../../../crates/archive-core" }
+archive-security = { path = "../../../crates/archive-security" }
 archive-sevenzip = { path = "../../../crates/archive-sevenzip" }
+task-runtime = { path = "../../../crates/task-runtime" }
 serde.workspace = true
 serde_json.workspace = true
+secrecy.workspace = true
 tauri = { version = "2", features = [] }
 thiserror.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
+uuid.workspace = true
+rfd = "0.16.0"

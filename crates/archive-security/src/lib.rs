@@ -1,12 +1,64 @@
 #![forbid(unsafe_code)]
 
-//! Minimal extraction-path guard for M1. Link handling and archive-bomb limits
-//! are deliberately postponed to M3.
+//! Path, link and archive-bomb guards used before anything is extracted.
 
 use std::path::{Component, Path, PathBuf};
 
+use archive_core::ArchiveEntry;
 use thiserror::Error;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExtractionLimits {
+    pub max_entries: u64,
+    pub max_total_size: u64,
+    pub max_single_file_size: u64,
+    pub max_directory_depth: usize,
+    pub max_compression_ratio: u64,
+}
+impl Default for ExtractionLimits {
+    fn default() -> Self {
+        Self {
+            max_entries: 100_000,
+            max_total_size: 256 * 1024 * 1024 * 1024,
+            max_single_file_size: 64 * 1024 * 1024 * 1024,
+            max_directory_depth: 64,
+            max_compression_ratio: 1_000,
+        }
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExtractionSecurityPolicy {
+    pub allow_symlinks: bool,
+    pub allow_hardlinks: bool,
+    pub limits: ExtractionLimits,
+}
+impl Default for ExtractionSecurityPolicy {
+    fn default() -> Self {
+        Self {
+            allow_symlinks: false,
+            allow_hardlinks: false,
+            limits: ExtractionLimits::default(),
+        }
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ArchiveRisk {
+    pub code: ArchiveRiskCode,
+    pub message: String,
+    pub overridable: bool,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArchiveRiskCode {
+    EntryCount,
+    TotalSize,
+    SingleFileSize,
+    Depth,
+    CompressionRatio,
+    InsufficientDisk,
+    Symlink,
+    Hardlink,
+    UnsafePath,
+}
 #[derive(Debug, Error, Eq, PartialEq)]
 pub enum PathSafetyError {
     #[error("archive entry path is empty")]
@@ -21,7 +73,6 @@ pub enum PathSafetyError {
     ReservedName,
 }
 
-/// Validates an entry name and returns its safe, relative Windows path.
 pub fn safe_relative_path(entry: &str) -> Result<PathBuf, PathSafetyError> {
     if entry.is_empty() {
         return Err(PathSafetyError::Empty);
@@ -33,7 +84,6 @@ pub fn safe_relative_path(entry: &str) -> Result<PathBuf, PathSafetyError> {
     if normalized.len() >= 2 && normalized.as_bytes()[1] == b':' {
         return Err(PathSafetyError::DrivePrefix);
     }
-
     let mut safe = PathBuf::new();
     for segment in normalized.split('/') {
         if segment.is_empty() || segment == "." {
@@ -83,27 +133,120 @@ pub fn safe_relative_path(entry: &str) -> Result<PathBuf, PathSafetyError> {
     }
     Ok(safe)
 }
-
-/// Joins a validated entry beneath `output` and verifies the component boundary.
 pub fn output_path(output: &Path, entry: &str) -> Result<PathBuf, PathSafetyError> {
     let candidate = output.join(safe_relative_path(entry)?);
-    if !candidate.starts_with(output) {
-        return Err(PathSafetyError::Traversal);
-    }
-    // This catches platform-specific absolute components if a future parser hands
-    // us an already-normalized PathBuf instead of a string.
-    if candidate
-        .components()
-        .any(|component| matches!(component, Component::ParentDir))
+    if !candidate.starts_with(output)
+        || candidate
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
     {
         return Err(PathSafetyError::Traversal);
     }
     Ok(candidate)
 }
 
+pub fn assess_entries(
+    entries: &[ArchiveEntry],
+    archive_size: u64,
+    available_bytes: Option<u64>,
+    policy: &ExtractionSecurityPolicy,
+) -> Vec<ArchiveRisk> {
+    let mut risks = Vec::new();
+    let total = entries.iter().map(|entry| entry.size).sum::<u64>();
+    if entries.len() as u64 > policy.limits.max_entries {
+        risks.push(risk(
+            ArchiveRiskCode::EntryCount,
+            "条目数量超过安全限制",
+            true,
+        ));
+    }
+    if total > policy.limits.max_total_size {
+        risks.push(risk(
+            ArchiveRiskCode::TotalSize,
+            "预计解压大小超过安全限制",
+            true,
+        ));
+    }
+    if archive_size > 0 && total / archive_size.max(1) > policy.limits.max_compression_ratio {
+        risks.push(risk(
+            ArchiveRiskCode::CompressionRatio,
+            "压缩比异常，可能存在压缩炸弹风险",
+            true,
+        ));
+    }
+    if let Some(free) = available_bytes {
+        let reserve = (512 * 1024 * 1024u64).max(total / 20);
+        if free < total.saturating_add(reserve) {
+            risks.push(risk(
+                ArchiveRiskCode::InsufficientDisk,
+                "磁盘可用空间不足",
+                false,
+            ));
+        }
+    }
+    for entry in entries {
+        if entry.size > policy.limits.max_single_file_size {
+            risks.push(risk(
+                ArchiveRiskCode::SingleFileSize,
+                format!("条目 {} 超过单文件安全限制", entry.display_name),
+                true,
+            ));
+        }
+        if entry
+            .path
+            .split('/')
+            .filter(|part| !part.is_empty())
+            .count()
+            > policy.limits.max_directory_depth
+        {
+            risks.push(risk(
+                ArchiveRiskCode::Depth,
+                format!("条目 {} 目录层级过深", entry.display_name),
+                true,
+            ));
+        }
+        if safe_relative_path(&entry.path).is_err() {
+            risks.push(risk(
+                ArchiveRiskCode::UnsafePath,
+                "压缩包包含不安全路径",
+                false,
+            ));
+        }
+        if entry.is_symlink && !policy.allow_symlinks {
+            risks.push(risk(ArchiveRiskCode::Symlink, "压缩包包含符号链接", false));
+        }
+        if entry.is_hardlink && !policy.allow_hardlinks {
+            risks.push(risk(ArchiveRiskCode::Hardlink, "压缩包包含硬链接", false));
+        }
+    }
+    risks
+}
+fn risk(code: ArchiveRiskCode, message: impl Into<String>, overridable: bool) -> ArchiveRisk {
+    ArchiveRisk {
+        code,
+        message: message.into(),
+        overridable,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn entry(path: &str) -> ArchiveEntry {
+        ArchiveEntry {
+            path: path.into(),
+            display_name: path.into(),
+            size: 1,
+            compressed_size: Some(1),
+            is_directory: false,
+            modified_at: None,
+            crc: None,
+            attributes: None,
+            encrypted: false,
+            is_symlink: false,
+            is_hardlink: false,
+        }
+    }
     #[test]
     fn accepts_unicode_relative_entry() {
         assert_eq!(
@@ -118,7 +261,17 @@ mod tests {
         }
     }
     #[test]
-    fn keeps_output_boundary() {
-        assert!(output_path(Path::new("out"), "../x").is_err());
+    fn reports_non_overridable_path_risk() {
+        let risks = assess_entries(
+            &[entry("../bad")],
+            1,
+            None,
+            &ExtractionSecurityPolicy::default(),
+        );
+        assert!(
+            risks
+                .iter()
+                .any(|risk| risk.code == ArchiveRiskCode::UnsafePath && !risk.overridable)
+        );
     }
 }

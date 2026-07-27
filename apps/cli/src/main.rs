@@ -160,6 +160,7 @@ async fn run_create(
                 profile: args.profile,
                 password,
                 encrypt_headers: args.encrypt_headers,
+                test_after_create: false,
             },
             Arc::new(JsonProgress),
             cancellation.child_token(),
@@ -209,6 +210,7 @@ async fn run_extract(
             ExtractArchiveRequest {
                 archive: args.archive,
                 output: args.output,
+                selected_entries: None,
                 conflict_policy: args.conflict,
                 password,
             },

@@ -9,4 +9,5 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+archive-core = { path = "../archive-core" }
 thiserror.workspace = true

@@ -8,10 +8,14 @@ import { Button, Card } from "@qzip/ui";
 import archiveHero from "../../assets/archive-hero.png";
 
 interface HomePageProps {
-  onUnavailable: () => void;
+  onCreate?: () => void;
+  onOpenArchive?: () => void;
+  onUnavailable?: () => void;
 }
 
-export function HomePage({ onUnavailable }: HomePageProps) {
+export function HomePage({ onCreate, onOpenArchive, onUnavailable }: HomePageProps) {
+  const openCreate = onCreate ?? onUnavailable ?? (() => undefined);
+  const openArchive = onOpenArchive ?? onUnavailable ?? (() => undefined);
   function onDragOver(event: React.DragEvent<HTMLElement>) {
     event.preventDefault();
     event.currentTarget.dataset.dragging = "true";
@@ -24,7 +28,7 @@ export function HomePage({ onUnavailable }: HomePageProps) {
   function onDrop(event: React.DragEvent<HTMLElement>) {
     event.preventDefault();
     event.currentTarget.dataset.dragging = "false";
-    onUnavailable();
+    openArchive();
   }
 
   return (
@@ -49,7 +53,7 @@ export function HomePage({ onUnavailable }: HomePageProps) {
         <Button
           className="qzip-home-card__action"
           icon={<FileArchive size={28} />}
-          onClick={onUnavailable}
+          onClick={openCreate}
         >
           压缩文件
         </Button>
@@ -57,7 +61,7 @@ export function HomePage({ onUnavailable }: HomePageProps) {
           className="qzip-home-card__action"
           variant="secondary"
           icon={<FolderOpen size={29} />}
-          onClick={onUnavailable}
+          onClick={openArchive}
         >
           打开压缩包
         </Button>

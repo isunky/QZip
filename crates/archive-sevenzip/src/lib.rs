@@ -4,6 +4,7 @@
 //! neither archive names nor user paths are ever interpolated into a shell.
 
 use std::{
+    fs,
     path::{Path, PathBuf},
     process::Stdio,
     sync::Arc,
@@ -14,7 +15,7 @@ use archive_core::{
     ArchiveBackend, ArchiveEntry, ArchiveError, ArchiveErrorCode, ArchiveFormat, ArchiveOperation,
     ArchiveResult, BackendCapabilities, CompressionProfile, ConflictPolicy, CreateArchiveRequest,
     ExtractArchiveRequest, ListArchiveRequest, ProgressReporter, TaskProgress, TestArchiveRequest,
-    TestResult,
+    TestResult, UpdateArchiveRequest,
 };
 use archive_security::safe_relative_path;
 use async_trait::async_trait;
@@ -26,6 +27,7 @@ use tokio::{
     time::Instant,
 };
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 const EXPECTED_VERSION: &str = "26.02";
 const MAX_DIAGNOSTIC_BYTES: usize = 64 * 1024;
@@ -133,6 +135,86 @@ impl SevenZipCliBackend {
         }
         Ok(version.to_owned())
     }
+
+    async fn create_tar_compressed(
+        &self,
+        request: CreateArchiveRequest,
+        progress: Arc<dyn ProgressReporter>,
+        cancellation: CancellationToken,
+    ) -> Result<ArchiveResult, ArchiveError> {
+        let compression = match request.format {
+            ArchiveFormat::TarGz => "gzip",
+            ArchiveFormat::TarXz => "xz",
+            _ => unreachable!("only TAR wrappers use this path"),
+        };
+        let stem = request
+            .output
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| {
+                name.strip_suffix(".tar.gz")
+                    .or_else(|| name.strip_suffix(".tar.xz"))
+            })
+            .filter(|name| !name.is_empty())
+            .unwrap_or("archive");
+        let temporary_dir = std::env::temp_dir().join(format!("qzip-{}", Uuid::new_v4()));
+        fs::create_dir_all(&temporary_dir).map_err(|error| {
+            ArchiveError::new(
+                ArchiveErrorCode::PermissionDenied,
+                format!("无法创建临时压缩目录: {error}"),
+            )
+        })?;
+        let temporary_tar = temporary_dir.join(format!("{stem}.tar"));
+        let tar_args = vec![
+            "a".into(),
+            "-ttar".into(),
+            temporary_tar.to_string_lossy().into_owned(),
+        ]
+        .into_iter()
+        .chain(
+            request
+                .inputs
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned()),
+        )
+        .collect();
+        let tar_result = self
+            .invoke(
+                ArchiveOperation::Create,
+                tar_args,
+                Arc::clone(&progress),
+                cancellation.child_token(),
+            )
+            .await;
+        if let Err(error) = tar_result {
+            let _ = fs::remove_dir_all(&temporary_dir);
+            return Err(error);
+        }
+        let wrapper_result = self
+            .invoke(
+                ArchiveOperation::Create,
+                vec![
+                    "a".into(),
+                    format!("-t{compression}"),
+                    request.output.to_string_lossy().into_owned(),
+                    temporary_tar.to_string_lossy().into_owned(),
+                ],
+                progress,
+                cancellation,
+            )
+            .await;
+        let _ = fs::remove_dir_all(&temporary_dir);
+        let wrapper = wrapper_result?;
+        Ok(ArchiveResult {
+            output: Some(request.output),
+            entries: vec![],
+            warnings: wrapper
+                .warning
+                .then(|| "7-Zip reported a warning".into())
+                .into_iter()
+                .collect(),
+        })
+    }
 }
 
 #[async_trait]
@@ -145,14 +227,31 @@ impl ArchiveBackend for SevenZipCliBackend {
         Ok(BackendCapabilities {
             backend_id: self.id().into(),
             version,
-            writable_formats: vec![ArchiveFormat::SevenZip, ArchiveFormat::Zip],
+            writable_formats: vec![
+                ArchiveFormat::SevenZip,
+                ArchiveFormat::Zip,
+                ArchiveFormat::Tar,
+                ArchiveFormat::TarGz,
+                ArchiveFormat::TarXz,
+            ],
             readable_formats: vec![
                 ArchiveFormat::SevenZip,
                 ArchiveFormat::Zip,
                 ArchiveFormat::Rar,
+                ArchiveFormat::Tar,
+                ArchiveFormat::TarGz,
+                ArchiveFormat::TarXz,
+                ArchiveFormat::Gz,
+                ArchiveFormat::Xz,
+                ArchiveFormat::Bz2,
+                ArchiveFormat::Iso,
+                ArchiveFormat::Cab,
+                ArchiveFormat::Wim,
             ],
             supports_password: true,
             supports_header_encryption: true,
+            supports_partial_extract: true,
+            supports_update: true,
             supports_progress: true,
             supports_cancellation: true,
         })
@@ -169,11 +268,34 @@ impl ArchiveBackend for SevenZipCliBackend {
                 "at least one input is required",
             ));
         }
-        if !matches!(request.format, ArchiveFormat::SevenZip | ArchiveFormat::Zip) {
+        if !matches!(
+            request.format,
+            ArchiveFormat::SevenZip
+                | ArchiveFormat::Zip
+                | ArchiveFormat::Tar
+                | ArchiveFormat::TarGz
+                | ArchiveFormat::TarXz
+        ) {
             return Err(ArchiveError::new(
                 ArchiveErrorCode::UnsupportedOption,
-                "M1 can only create 7z and zip archives",
+                "this backend cannot create the requested archive format",
             ));
+        }
+        if request.password.is_some()
+            && matches!(
+                request.format,
+                ArchiveFormat::Tar | ArchiveFormat::TarGz | ArchiveFormat::TarXz
+            )
+        {
+            return Err(ArchiveError::new(
+                ArchiveErrorCode::UnsupportedOption,
+                "TAR 格式不支持密码保护，请改用 7Z 或 ZIP",
+            ));
+        }
+        if matches!(request.format, ArchiveFormat::TarGz | ArchiveFormat::TarXz) {
+            return self
+                .create_tar_compressed(request, progress, cancellation)
+                .await;
         }
         let args = SevenZipArgumentMapper::create(&request);
         let result = self
@@ -275,6 +397,36 @@ impl ArchiveBackend for SevenZipCliBackend {
                 .collect(),
         })
     }
+    async fn update(
+        &self,
+        request: UpdateArchiveRequest,
+        progress: Arc<dyn ProgressReporter>,
+        cancellation: CancellationToken,
+    ) -> Result<ArchiveResult, ArchiveError> {
+        if request.inputs.is_empty() {
+            return Err(ArchiveError::invalid_option(
+                "inputs",
+                "at least one input is required",
+            ));
+        }
+        let result = self
+            .invoke(
+                ArchiveOperation::Update,
+                SevenZipArgumentMapper::update(&request),
+                progress,
+                cancellation,
+            )
+            .await?;
+        Ok(ArchiveResult {
+            output: Some(request.archive),
+            entries: vec![],
+            warnings: result
+                .warning
+                .then(|| "7-Zip reported a warning".to_owned())
+                .into_iter()
+                .collect(),
+        })
+    }
 }
 
 pub struct SevenZipArgumentMapper;
@@ -284,9 +436,11 @@ impl SevenZipArgumentMapper {
             "a".into(),
             format!("-t{}", request.format.extension()),
             match request.profile {
+                CompressionProfile::Store => "-mx=0",
                 CompressionProfile::Fast => "-mx=1",
                 CompressionProfile::Balanced => "-mx=5",
                 CompressionProfile::Small => "-mx=9",
+                CompressionProfile::Maximum => "-mx=9",
             }
             .into(),
         ];
@@ -321,6 +475,9 @@ impl SevenZipArgumentMapper {
         if let Some(password) = &request.password {
             args.push(format!("-p{}", password.expose_secret()));
         }
+        if let Some(entries) = &request.selected_entries {
+            args.extend(entries.iter().cloned());
+        }
         args
     }
     pub fn list(request: &ListArchiveRequest) -> Vec<String> {
@@ -341,43 +498,76 @@ impl SevenZipArgumentMapper {
         }
         args
     }
+    pub fn update(request: &UpdateArchiveRequest) -> Vec<String> {
+        let mut args = vec!["a".into(), request.archive.to_string_lossy().into_owned()];
+        if let Some(password) = &request.password {
+            args.push(format!("-p{}", password.expose_secret()));
+        }
+        args.extend(
+            request
+                .inputs
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned()),
+        );
+        args
+    }
 }
 
 pub struct SevenZipListParser;
 impl SevenZipListParser {
     pub fn parse(output: &str) -> Vec<ArchiveEntry> {
-        let mut entries = Vec::new();
-        let mut path = None;
-        let mut size = None;
-        let mut packed = None;
-        let mut attributes = None;
-        let mut flush = |path: &mut Option<String>,
-                         size: &mut Option<u64>,
-                         packed: &mut Option<u64>,
-                         attributes: &mut Option<String>| {
-            if let (Some(path), Some(size)) = (path.take(), size.take()) {
+        #[derive(Default)]
+        struct Pending {
+            path: Option<String>,
+            size: Option<u64>,
+            packed: Option<u64>,
+            attributes: Option<String>,
+            modified: Option<String>,
+            crc: Option<String>,
+            encrypted: bool,
+            symlink: bool,
+            hardlink: bool,
+        }
+        fn flush(entries: &mut Vec<ArchiveEntry>, pending: &mut Pending) {
+            if let (Some(path), Some(size)) = (pending.path.take(), pending.size.take()) {
+                let display_name = path.rsplit('/').next().unwrap_or(&path).to_owned();
                 entries.push(ArchiveEntry {
-                    is_directory: attributes
+                    display_name,
+                    is_directory: pending
+                        .attributes
                         .as_deref()
                         .is_some_and(|value| value.contains('D')),
                     path,
                     size,
-                    compressed_size: packed.take(),
+                    compressed_size: pending.packed.take(),
+                    modified_at: pending.modified.take(),
+                    crc: pending.crc.take(),
+                    attributes: pending.attributes.take(),
+                    encrypted: pending.encrypted,
+                    is_symlink: pending.symlink,
+                    is_hardlink: pending.hardlink,
                 });
             }
-            *attributes = None;
-        };
+            *pending = Pending::default();
+        }
+        let mut entries = Vec::new();
+        let mut pending = Pending::default();
         for line in output.lines().chain(std::iter::once("")) {
             if line.trim().is_empty() {
-                flush(&mut path, &mut size, &mut packed, &mut attributes);
+                flush(&mut entries, &mut pending);
                 continue;
             }
             if let Some((key, value)) = line.split_once(" = ") {
                 match key {
-                    "Path" => path = Some(value.into()),
-                    "Size" => size = value.parse().ok(),
-                    "Packed Size" => packed = value.parse().ok(),
-                    "Attributes" => attributes = Some(value.into()),
+                    "Path" => pending.path = Some(value.into()),
+                    "Size" => pending.size = value.parse().ok(),
+                    "Packed Size" => pending.packed = value.parse().ok(),
+                    "Attributes" => pending.attributes = Some(value.into()),
+                    "Modified" => pending.modified = Some(value.into()),
+                    "CRC" => pending.crc = Some(value.into()),
+                    "Encrypted" => pending.encrypted = value == "+",
+                    "Symbolic Link" => pending.symlink = true,
+                    "Hard Link" => pending.hardlink = true,
                     _ => {}
                 }
             }
@@ -469,6 +659,7 @@ mod tests {
             profile: CompressionProfile::Balanced,
             password: None,
             encrypt_headers: false,
+            test_after_create: false,
         };
         let args = SevenZipArgumentMapper::create(&request);
         assert_eq!(args[3], "out name.7z");
@@ -481,9 +672,16 @@ mod tests {
             SevenZipListParser::parse(text),
             vec![ArchiveEntry {
                 path: "a/b.txt".into(),
+                display_name: "b.txt".into(),
                 size: 12,
                 compressed_size: Some(9),
-                is_directory: false
+                is_directory: false,
+                modified_at: None,
+                crc: None,
+                attributes: Some("A".into()),
+                encrypted: false,
+                is_symlink: false,
+                is_hardlink: false,
             }]
         );
     }
