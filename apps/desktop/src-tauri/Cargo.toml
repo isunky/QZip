@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [lib]
-name = "qzip_desktop"
+name = "qzip_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 path = "src/lib.rs"
 
@@ -14,4 +14,10 @@ path = "src/lib.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+archive-core = { path = "../../../crates/archive-core" }
+archive-sevenzip = { path = "../../../crates/archive-sevenzip" }
+serde.workspace = true
+serde_json.workspace = true
 tauri = { version = "2", features = [] }
+thiserror.workspace = true
+tokio.workspace = true

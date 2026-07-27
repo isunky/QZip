@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "../../../third_party/7zip/bin/win-x64/7z.exe": "7zip/7z.exe",
+      "../../../third_party/7zip/bin/win-x64/7z.dll": "7zip/7z.dll"
+    }
+  }
+}

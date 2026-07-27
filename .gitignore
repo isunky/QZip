@@ -16,3 +16,5 @@ Thumbs.db
 .idea/
 .vscode/
 apps/desktop/src/assets/archive-hero-source.png
+third_party/7zip/bin/
+third_party/7zip/source/

@@ -1,12 +1,11 @@
 # Third-party licenses
 
-## M0 status
-
-This milestone contains only source dependencies resolved through pnpm and
-Cargo. Their exact versions and license records are locked after installation.
+This milestone contains source dependencies resolved through pnpm and Cargo.
+Their exact versions and license records are locked after installation.
 
 ## 7-Zip
 
-No 7-Zip binary is bundled in M0. Before M1 introduces a Sidecar, record its
-version, source URL, license text, source availability, and modification status
-under third_party/7zip.
+QZip uses the unmodified official 7-Zip 26.02 Windows x64 runtime. Its MSI,
+source archive, SHA-256 values, licence, source availability and modification
+status are recorded in `third_party/7zip/manifest.json`. The binary is fetched
+locally and is intentionally not tracked in this repository.

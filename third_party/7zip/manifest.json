@@ -1,0 +1,19 @@
+{
+  "name": "7-Zip",
+  "version": "26.02",
+  "released": "2026-06-25",
+  "platform": "windows-x64",
+  "runtime": {
+    "url": "https://www.7-zip.org/a/7z2602-x64.msi",
+    "sha256": "db407a4f6d4999e5c7bc00ce8a882be94717b56e7fa68140fe3f12605d91643e",
+    "archive": "7z2602-x64.msi",
+    "files": ["7z.exe", "7z.dll"]
+  },
+  "source": {
+    "url": "https://www.7-zip.org/a/7z2602-src.tar.xz",
+    "sha256": "cf967c98bca02a4b8b16375f441825a8e141362f14be1969bbec8e1ca0bff9dd",
+    "archive": "7z2602-src.tar.xz"
+  },
+  "license": "GNU LGPL-2.1-or-later with unRAR restriction",
+  "modified": false
+}

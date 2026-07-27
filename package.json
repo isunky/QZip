@@ -20,8 +20,12 @@
     "rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings",
     "rust:test": "cargo test --workspace",
     "rust:check": "pnpm run rust:fmt && pnpm run rust:clippy && pnpm run rust:test",
+    "sidecar:fetch": "powershell -ExecutionPolicy Bypass -File scripts/fetch-sevenzip.ps1",
+    "sidecar:verify": "powershell -ExecutionPolicy Bypass -File scripts/fetch-sevenzip.ps1 -VerifyOnly",
+    "sidecar:test": "powershell -ExecutionPolicy Bypass -File scripts/test-sevenzip.ps1",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build:web && pnpm run rust:check",
     "tauri:build:debug": "pnpm --filter @qzip/desktop tauri build --debug --no-bundle"
+    ,"tauri:bundle:windows": "powershell -ExecutionPolicy Bypass -File scripts/bundle-windows.ps1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

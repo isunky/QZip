@@ -1,3 +1,3 @@
 fn main() {
-    qzip_desktop::run();
+    qzip_desktop_lib::run();
 }

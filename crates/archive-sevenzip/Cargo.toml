@@ -7,3 +7,12 @@ license.workspace = true
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+archive-core = { path = "../archive-core" }
+archive-security = { path = "../archive-security" }
+async-trait.workspace = true
+secrecy.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true

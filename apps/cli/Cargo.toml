@@ -1,0 +1,20 @@
+[package]
+name = "qzip-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "qzip-cli"
+path = "src/main.rs"
+
+[dependencies]
+archive-core = { path = "../../crates/archive-core" }
+archive-sevenzip = { path = "../../crates/archive-sevenzip" }
+clap.workspace = true
+rpassword = "7.4.0"
+secrecy.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true

@@ -8,8 +8,8 @@ on:
 
 jobs:
   quality:
-    name: quality-\${{ matrix.os }}
-    runs-on: \${{ matrix.os }}
+    name: quality-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -36,3 +36,25 @@ jobs:
         run: pnpm check
       - name: Verify Tauri debug build
         run: pnpm tauri:build:debug
+
+  windows-sidecar:
+    name: windows-sidecar
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Fetch and verify official 7-Zip sidecar
+        run: pnpm sidecar:fetch
+      - name: Exercise 7-Zip backend with Unicode paths
+        run: pnpm sidecar:test
