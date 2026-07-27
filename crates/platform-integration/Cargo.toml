@@ -7,3 +7,9 @@ license.workspace = true
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+archive-core = { path = "../archive-core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

@@ -10,12 +10,12 @@ describe("App appearance controls", () => {
     document.documentElement.dataset.accent = "mint";
   });
 
-  it("updates the document theme from the settings popover", async () => {
+  it("updates the document theme from the full settings page", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "设置" }));
     fireEvent.click(screen.getByRole("radio", { name: "暗夜" }));
-    fireEvent.click(screen.getByRole("radio", { name: "海洋蓝" }));
+    fireEvent.click(screen.getByRole("radio", { name: "海洋" }));
 
     await waitFor(() => {
       expect(document.documentElement.dataset.mode).toBe("dark");

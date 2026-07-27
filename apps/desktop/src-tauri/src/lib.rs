@@ -13,10 +13,14 @@ use archive_core::{
 };
 use archive_security::{ExtractionSecurityPolicy, assess_entries};
 use archive_sevenzip::SevenZipCliBackend;
+use platform_integration::{
+    AppSettings, AppSettingsPatch, IntegrationStatus, LaunchKind, LaunchRequest,
+};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use task_runtime::{TaskManager, TaskSnapshot, TaskSpec};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_store::StoreExt;
 use uuid::Uuid;
 
 struct ArchiveSession {
@@ -28,7 +32,12 @@ struct AppState {
     backend: Arc<SevenZipCliBackend>,
     tasks: Arc<TaskManager>,
     sessions: Mutex<HashMap<String, ArchiveSession>>,
+    settings: Mutex<AppSettings>,
+    initial_launch_request: Mutex<Option<LaunchRequest>>,
 }
+
+const SETTINGS_STORE: &str = "settings.json";
+const SETTINGS_KEY: &str = "appSettings";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,6 +130,109 @@ struct EntryPage {
     entries: Vec<ArchiveEntry>,
     total: usize,
     next_offset: Option<usize>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateCheckResult {
+    configured: bool,
+    status: &'static str,
+}
+
+#[derive(Deserialize)]
+struct ShellRequestFile {
+    action: String,
+    paths: Vec<PathBuf>,
+}
+
+fn launch_kind(value: &str) -> Option<LaunchKind> {
+    match value {
+        "open" => Some(LaunchKind::Open),
+        "compress-sevenzip" => Some(LaunchKind::CompressSevenZip),
+        "compress-zip" => Some(LaunchKind::CompressZip),
+        "extract-here" => Some(LaunchKind::ExtractHere),
+        "extract-named" => Some(LaunchKind::ExtractNamed),
+        "more-options" => Some(LaunchKind::MoreOptions),
+        _ => None,
+    }
+}
+
+fn shell_request_root() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA")
+        .map(|base| PathBuf::from(base).join("QZip").join("ShellRequests"))
+}
+
+fn consume_shell_request(token: &str) -> Option<LaunchRequest> {
+    let token = Uuid::parse_str(token).ok()?;
+    let root = shell_request_root()?;
+    let path = root.join(format!("{token}.json"));
+    let canonical_root = root.canonicalize().ok()?;
+    let canonical_path = path.canonicalize().ok()?;
+    if !canonical_path.starts_with(&canonical_root)
+        || canonical_path.extension().and_then(|value| value.to_str()) != Some("json")
+    {
+        return None;
+    }
+    let metadata = std::fs::metadata(&canonical_path).ok()?;
+    if metadata.len() > 4 * 1024 * 1024 {
+        return None;
+    }
+    let request: ShellRequestFile =
+        serde_json::from_slice(&std::fs::read(&canonical_path).ok()?).ok()?;
+    let _ = std::fs::remove_file(&canonical_path);
+    let paths = request
+        .paths
+        .into_iter()
+        .filter(|path| path.exists())
+        .take(1_000)
+        .collect::<Vec<_>>();
+    let kind = launch_kind(&request.action)?;
+    (!paths.is_empty()).then(|| LaunchRequest {
+        kind,
+        paths,
+        source: "shell".to_owned(),
+    })
+}
+
+fn launch_request_from_args(args: &[String]) -> Option<LaunchRequest> {
+    if let Some(index) = args.iter().position(|arg| arg == "--shell-request") {
+        return args
+            .get(index + 1)
+            .and_then(|token| consume_shell_request(token));
+    }
+    let paths = args
+        .iter()
+        .skip(1)
+        .map(PathBuf::from)
+        .filter(|path| path.is_file())
+        .take(1_000)
+        .collect::<Vec<_>>();
+    (!paths.is_empty()).then(|| LaunchRequest {
+        kind: LaunchKind::Open,
+        paths,
+        source: "fileAssociation".to_owned(),
+    })
+}
+
+fn load_settings(app: &AppHandle) -> AppSettings {
+    let loaded = app
+        .store(SETTINGS_STORE)
+        .ok()
+        .and_then(|store| store.get(SETTINGS_KEY));
+    let settings = loaded.map(AppSettings::migrated).unwrap_or_default();
+    let _ = save_settings(app, &settings);
+    settings
+}
+
+fn save_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|error| error.to_string())?;
+    store.set(
+        SETTINGS_KEY,
+        serde_json::to_value(settings).map_err(|error| error.to_string())?,
+    );
+    store.save().map_err(|error| error.to_string())
 }
 
 fn sidecar_path(app: &AppHandle) -> PathBuf {
@@ -430,6 +542,83 @@ fn clear_completed_tasks(state: State<'_, AppState>) {
     state.tasks.clear_completed();
 }
 #[tauri::command]
+fn get_app_settings(state: State<'_, AppState>) -> AppSettings {
+    state.settings.lock().expect("settings lock").clone()
+}
+#[tauri::command]
+fn update_app_settings(
+    patch: AppSettingsPatch,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<AppSettings, String> {
+    let mut settings = state.settings.lock().expect("settings lock");
+    settings.apply(patch).map_err(|error| error.to_string())?;
+    save_settings(&app, &settings)?;
+    Ok(settings.clone())
+}
+#[tauri::command]
+fn reset_app_settings(state: State<'_, AppState>, app: AppHandle) -> Result<AppSettings, String> {
+    let mut settings = state.settings.lock().expect("settings lock");
+    *settings = AppSettings::default();
+    save_settings(&app, &settings)?;
+    Ok(settings.clone())
+}
+#[tauri::command]
+fn get_integration_status() -> IntegrationStatus {
+    IntegrationStatus {
+        platform: std::env::consts::OS.to_owned(),
+        file_associations_declared: cfg!(target_os = "windows"),
+        // The signed sparse-package installer is intentionally opt-in. This
+        // status prevents the UI from claiming shell integration is active.
+        modern_context_menu_available: cfg!(target_os = "windows"),
+        modern_context_menu_registered: false,
+        updater_configured: cfg!(feature = "official-updater"),
+        distribution: if cfg!(feature = "official-updater") {
+            "official-release".to_owned()
+        } else {
+            "local-or-store-unconfigured".to_owned()
+        },
+        app_version: env!("CARGO_PKG_VERSION").to_owned(),
+    }
+}
+#[tauri::command]
+fn open_default_apps_settings() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer.exe")
+            .arg("ms-settings:defaultapps")
+            .spawn()
+            .map(|_| ())
+            .map_err(|_| "无法打开 Windows 默认应用设置".to_owned())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("当前平台暂不支持打开系统默认应用设置".to_owned())
+    }
+}
+#[tauri::command]
+fn check_for_updates() -> UpdateCheckResult {
+    if cfg!(feature = "official-updater") {
+        UpdateCheckResult {
+            configured: true,
+            status: "ready",
+        }
+    } else {
+        UpdateCheckResult {
+            configured: false,
+            status: "unconfigured",
+        }
+    }
+}
+#[tauri::command]
+fn take_initial_launch_request(state: State<'_, AppState>) -> Option<LaunchRequest> {
+    state
+        .initial_launch_request
+        .lock()
+        .expect("launch request lock")
+        .take()
+}
+#[tauri::command]
 fn open_path(path: PathBuf) -> Result<(), CommandErrorDto> {
     Command::new("explorer.exe")
         .arg(&path)
@@ -457,6 +646,13 @@ fn reveal_in_file_manager(path: PathBuf) -> Result<(), CommandErrorDto> {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if let Some(request) = launch_request_from_args(&args) {
+                let _ = app.emit("qzip://launch-request", request);
+            }
+        }))
         .setup(|app| {
             let backend = Arc::new(SevenZipCliBackend::new(sidecar_path(app.handle())));
             let history = app.path().app_data_dir()?.join("task-history-v1.json");
@@ -469,10 +665,15 @@ pub fn run() {
                     let _ = handle.emit("qzip://task-event", event);
                 }
             });
+            let settings = load_settings(app.handle());
+            let initial_launch_request =
+                launch_request_from_args(&std::env::args().collect::<Vec<_>>());
             app.manage(AppState {
                 backend,
                 tasks,
                 sessions: Mutex::new(HashMap::new()),
+                settings: Mutex::new(settings),
+                initial_launch_request: Mutex::new(initial_launch_request),
             });
             Ok(())
         })
@@ -491,6 +692,13 @@ pub fn run() {
             retry_task,
             get_tasks,
             clear_completed_tasks,
+            get_app_settings,
+            update_app_settings,
+            reset_app_settings,
+            get_integration_status,
+            open_default_apps_settings,
+            check_for_updates,
+            take_initial_launch_request,
             open_path,
             reveal_in_file_manager
         ])

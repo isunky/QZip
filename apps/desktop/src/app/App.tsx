@@ -1,133 +1,121 @@
-import { useEffect, useState } from "react";
-import {
-  type AccentTheme,
-  type ThemeMode
-} from "@qzip/ui";
+import { useEffect, useRef, useState } from "react";
+import type { AccentTheme, ThemeMode } from "@qzip/ui";
 import { Header } from "../components/Header";
-import { ThemePopover } from "../components/ThemePopover";
 import { Toast } from "../components/Toast";
 import { HomePage } from "../features/home/HomePage";
 import { BrowserPage, CreatePage, ExtractPage, TaskCenter, type Page } from "../features/archive/ArchivePages";
+import { SettingsPage } from "../features/settings/SettingsPage";
 import type { ArchiveSession, TaskSnapshot } from "../contracts/archive";
+import { defaultAppSettings, type AppSettings, uiScaleFactor } from "../contracts/settings";
 import { archiveClient } from "../lib/archiveClient";
-import {
-  resolveThemeMode,
-  useAppearanceStore
-} from "../stores/appearance";
+import { settingsClient } from "../lib/settingsClient";
+import { resolveThemeMode, useAppearanceStore } from "../stores/appearance";
 
-type Popover = "theme" | null;
+type AppPage = Page | "settings";
+const demoSession: ArchiveSession = { sessionId: "demo-session", format: "zip", compressedSize: 2_189_122, estimatedUncompressedSize: 4_383_462, entryCount: 5, encrypted: false, risks: [] };
 
-const demoSession: ArchiveSession = {
-  sessionId: "demo-session", format: "zip", compressedSize: 2_189_122,
-  estimatedUncompressedSize: 4_383_462, entryCount: 5, encrypted: false, risks: []
-};
-
-function getSystemDark(): boolean {
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
-}
+function getSystemDark(): boolean { return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false; }
 
 export function App() {
   const { mode, accent, setMode, setAccent } = useAppearanceStore();
   const [systemDark, setSystemDark] = useState(getSystemDark);
-  const [popover, setPopover] = useState<Popover>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [page, setPage] = useState<Page>("home");
+  const [page, setPage] = useState<AppPage>("home");
   const [tasks, setTasks] = useState<TaskSnapshot[]>([]);
-  const [archive, setArchive] = useState<string>("D:\\QZip\\示例压缩包.zip");
+  const [archive, setArchive] = useState("D:\\QZip\\示例压缩包.zip");
   const [session, setSession] = useState<ArchiveSession>(demoSession);
+  const [settings, setSettings] = useState<AppSettings>(defaultAppSettings);
+  const [createInputs, setCreateInputs] = useState<string[]>([]);
+  const settingsRef = useRef(settings);
   const resolvedMode = resolveThemeMode(mode, systemDark);
 
-  useEffect(() => {
-    if (!window.matchMedia) {
-      return;
-    }
+  function applySettings(next: AppSettings) {
+    settingsRef.current = next;
+    setSettings(next);
+    setMode(next.themeMode as ThemeMode);
+    setAccent(next.accentTheme as AccentTheme);
+  }
 
+  useEffect(() => { void settingsClient.get().then(applySettings).catch(() => setToast("无法加载本机设置，已使用默认值。")); }, []);
+  useEffect(() => {
+    if (!window.matchMedia) return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => setSystemDark(media.matches);
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
   }, []);
-
   useEffect(() => {
     document.documentElement.dataset.mode = resolvedMode;
     document.documentElement.dataset.accent = accent;
-  }, [accent, resolvedMode]);
-
-  useEffect(() => {
-    if (!toast) {
-      return;
+    document.documentElement.dataset.density = settings.listDensity;
+    document.documentElement.dataset.reduceMotion = String(settings.reduceMotion);
+    if (settingsClient.isTauri) {
+      void import("@tauri-apps/api/webview").then(({ getCurrentWebview }) => getCurrentWebview().setZoom(uiScaleFactor[settings.uiScale])).catch(() => undefined);
     }
-
+  }, [accent, resolvedMode, settings.listDensity, settings.reduceMotion, settings.uiScale]);
+  useEffect(() => {
+    if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 2800);
     return () => window.clearTimeout(timer);
   }, [toast]);
-
   useEffect(() => {
-    if (!archiveClient.isTauri) {
-      return;
-    }
+    if (!archiveClient.isTauri) return;
     void archiveClient.tasks().then(setTasks).catch((reason) => setToast(String(reason)));
-    let stopped = false;
-    let unlisten: (() => void) | undefined;
+    let stopped = false; let unlisten: (() => void) | undefined;
     void archiveClient.onTaskEvent((event) => {
       if (stopped) return;
-      setTasks((current) => {
-        const rest = current.filter((task) => task.taskId !== event.task.taskId);
-        return [event.task, ...rest].sort((left, right) => right.updatedAt - left.updatedAt);
-      });
+      setTasks((current) => [event.task, ...current.filter((task) => task.taskId !== event.task.taskId)].sort((left, right) => right.updatedAt - left.updatedAt));
+      const currentSettings = settingsRef.current;
+      const terminal = event.task.status === "completed" || event.task.status === "failed";
+      const shouldNotify = terminal && currentSettings.taskNotificationsEnabled && (event.task.status === "completed" ? currentSettings.notifyOnSuccess : currentSettings.notifyOnFailure);
+      if (shouldNotify) {
+        void import("@tauri-apps/api/window").then(async ({ getCurrentWindow }) => {
+          if (!(await getCurrentWindow().isFocused())) {
+            const { sendNotification } = await import("@tauri-apps/plugin-notification");
+            sendNotification({ title: event.task.status === "completed" ? "QZip 任务已完成" : "QZip 任务失败", body: event.task.status === "completed" ? "可在任务中心查看结果。" : "请在任务中心查看错误信息。" });
+          }
+        }).catch(() => undefined);
+      }
     }).then((next) => { unlisten = next; });
     return () => { stopped = true; unlisten?.(); };
   }, []);
-
-  function togglePopover(next: Exclude<Popover, null>) {
-    setPopover((current) => (current === next ? null : next));
-  }
+  useEffect(() => {
+    if (!archiveClient.isTauri) return;
+    let unlisten: (() => void) | undefined;
+    const handleLaunchRequest = (request: { kind: string; paths: string[]; source: string }) => {
+      const target = request.paths[0];
+      if (!target) return;
+      if (request.kind === "open") {
+        void archiveClient.prepare(target).then((next) => { setArchive(target); setSession(next); setPage("extract"); }).catch((reason) => setToast(String(reason)));
+      } else if (request.kind === "compressSevenZip" || request.kind === "compressZip" || request.kind === "moreOptions") {
+        setCreateInputs(request.paths);
+        setPage("create");
+      } else if (request.kind === "extractHere" || request.kind === "extractNamed") {
+        void archiveClient.prepare(target).then((next) => { setArchive(target); setSession(next); setPage("extract"); }).catch((reason) => setToast(String(reason)));
+      }
+    };
+    void archiveClient.onLaunchRequest(handleLaunchRequest).then((next) => { unlisten = next; });
+    void archiveClient.takeInitialLaunchRequest().then((request) => { if (request) handleLaunchRequest(request); }).catch(() => undefined);
+    return () => unlisten?.();
+  }, []);
 
   async function openArchive() {
     try {
       const selected = archiveClient.isTauri ? await archiveClient.pickInputPaths(true) : [archive];
       if (!selected[0]) return;
-      const target = selected[0];
-      setArchive(target);
-      setSession(archiveClient.isTauri ? await archiveClient.prepare(target) : demoSession);
-      setPage("extract");
+      const target = selected[0]; setArchive(target);
+      setSession(archiveClient.isTauri ? await archiveClient.prepare(target) : demoSession); setPage("extract");
     } catch (reason) { setToast(String(reason)); }
   }
-
-  function addTask(task: TaskSnapshot) {
-    setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
-    setToast("任务已加入队列，可在任务中心查看进度。");
-  }
-
+  function addTask(task: TaskSnapshot) { setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]); setToast("任务已加入队列，可在任务中心查看进度。"); }
   function goHome() { setPage("home"); }
-
   function currentPage() {
-    if (page === "create") return <CreatePage onBack={goHome} onCreated={addTask} />;
-    if (page === "extract") return <ExtractPage archive={archive} session={session} onBack={goHome} onBrowse={() => setPage("browser")} onCreated={addTask} />;
+    if (page === "settings") return <SettingsPage settings={settings} onBack={goHome} onChanged={applySettings} onToast={setToast} />;
+    if (page === "create") return <CreatePage onBack={goHome} onCreated={addTask} defaultFormat={settings.defaultFormat} defaultProfile={settings.compressionProfile} defaultTestAfterCreate={settings.testAfterCreate} initialInputs={createInputs} />;
+    if (page === "extract") return <ExtractPage archive={archive} session={session} onBack={goHome} onBrowse={() => setPage("browser")} onCreated={addTask} defaultConflictPolicy={settings.conflictPolicy} />;
     if (page === "browser") return <BrowserPage archive={archive} session={session} onBack={() => setPage("extract")} onExtract={() => setPage("extract")} />;
     if (page === "tasks") return <TaskCenter tasks={tasks} onBack={goHome} onClear={() => { if (archiveClient.isTauri) void archiveClient.clearCompleted().then(() => setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)))); else setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status))); }} onCancel={(taskId) => { if (archiveClient.isTauri) void archiveClient.cancel(taskId); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "cancelled", updatedAt: Date.now() } : task)); }} onRetry={(taskId) => { if (archiveClient.isTauri) void archiveClient.retry(taskId).then(addTask); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "queued", updatedAt: Date.now(), error: undefined } : task)); }} />;
-    return <HomePage onCreate={() => setPage("create")} onOpenArchive={() => void openArchive()} />;
+    return <HomePage onCreate={() => { setCreateInputs([]); setPage("create"); }} onOpenArchive={() => void openArchive()} />;
   }
-
-  return (
-    <main className="qzip-app-shell">
-      <Header
-        onTasksClick={() => setPage("tasks")}
-        onSettingsClick={() => togglePopover("theme")}
-      />
-      <section className="qzip-app-content">
-        {currentPage()}
-      </section>
-      {popover === "theme" ? (
-        <ThemePopover
-          mode={mode}
-          accent={accent}
-          onModeChange={(nextMode: ThemeMode) => setMode(nextMode)}
-          onAccentChange={(nextAccent: AccentTheme) => setAccent(nextAccent)}
-          onClose={() => setPopover(null)}
-        />
-      ) : null}
-      {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
-    </main>
-  );
+  return <main className="qzip-app-shell"><Header onTasksClick={() => setPage("tasks")} onSettingsClick={() => setPage("settings")} /><section className="qzip-app-content">{currentPage()}</section>{toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}</main>;
 }

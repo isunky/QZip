@@ -48,15 +48,16 @@ function RiskNotice({ risks, accepted, onAccepted }: { risks: ArchiveRisk[]; acc
   </aside>;
 }
 
-export function CreatePage({ onBack, onCreated }: { onBack: () => void; onCreated: (task: TaskSnapshot) => void }) {
+export function CreatePage({ onBack, onCreated, defaultFormat = "sevenZip", defaultProfile = "balanced", defaultTestAfterCreate = true, initialInputs = [] }: { onBack: () => void; onCreated: (task: TaskSnapshot) => void; defaultFormat?: ArchiveFormat; defaultProfile?: CompressionProfile; defaultTestAfterCreate?: boolean; initialInputs?: string[] }) {
   const [inputs, setInputs] = useState<string[]>([]);
-  const [format, setFormat] = useState<ArchiveFormat>("sevenZip");
-  const [profile, setProfile] = useState<CompressionProfile>("balanced");
+  const [format, setFormat] = useState<ArchiveFormat>(defaultFormat);
+  const [profile, setProfile] = useState<CompressionProfile>(defaultProfile);
   const [output, setOutput] = useState("D:\\QZip\\新建压缩包.7z");
   const [password, setPassword] = useState("");
-  const [testing, setTesting] = useState(true);
+  const [testing, setTesting] = useState(defaultTestAfterCreate);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => { if (initialInputs.length) setInputs((current) => [...new Set([...current, ...initialInputs])]); }, [initialInputs]);
   const addFiles = async () => {
     if (!archiveClient.isTauri) { setInputs(["D:\\示例文件夹", "D:\\报价单.xlsx"]); return; }
     const picked = await archiveClient.pickInputPaths(false);
@@ -87,9 +88,9 @@ export function CreatePage({ onBack, onCreated }: { onBack: () => void; onCreate
   </Workspace>;
 }
 
-export function ExtractPage({ archive, session, onBack, onBrowse, onCreated }: { archive: string; session: ArchiveSession; onBack: () => void; onBrowse: () => void; onCreated: (task: TaskSnapshot) => void }) {
+export function ExtractPage({ archive, session, onBack, onBrowse, onCreated, defaultConflictPolicy = "rename" }: { archive: string; session: ArchiveSession; onBack: () => void; onBrowse: () => void; onCreated: (task: TaskSnapshot) => void; defaultConflictPolicy?: ConflictPolicy }) {
   const [output, setOutput] = useState("D:\\QZip\\解压结果");
-  const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("rename");
+  const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>(defaultConflictPolicy);
   const [password, setPassword] = useState(""); const [accepted, setAccepted] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const start = async () => { setBusy(true); setError(null); try { const request = { archive, output, conflictPolicy, password: password || undefined, acceptRisk: accepted }; if (!archiveClient.isTauri) onCreated({ taskId: crypto.randomUUID(), operation: "extract", status: "queued", displayName: archive.split("\\").pop() ?? "示例压缩包.zip", output, createdAt: Date.now(), updatedAt: Date.now(), warnings: [], retryable: true }); else onCreated(await archiveClient.extract(request)); onBack(); } catch (reason) { setError(String(reason)); } finally { setBusy(false); } };
   const hasBlocking = session.risks.some((risk) => !risk.overridable);

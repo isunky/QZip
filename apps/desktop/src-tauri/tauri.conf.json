@@ -30,6 +30,12 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico"],
+    "fileAssociations": [
+      { "ext": ["7z"], "name": "7-Zip Archive", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["zip"], "name": "ZIP Archive", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["rar"], "name": "RAR Archive", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["tar", "gz", "xz", "bz2"], "name": "Compressed Archive", "role": "Viewer", "rank": "Alternate" }
+    ]
   }
 }

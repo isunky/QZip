@@ -18,6 +18,7 @@ archive-core = { path = "../../../crates/archive-core" }
 archive-security = { path = "../../../crates/archive-security" }
 archive-sevenzip = { path = "../../../crates/archive-sevenzip" }
 task-runtime = { path = "../../../crates/task-runtime" }
+platform-integration = { path = "../../../crates/platform-integration" }
 serde.workspace = true
 serde_json.workspace = true
 secrecy.workspace = true
@@ -27,3 +28,11 @@ tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
 rfd = "0.16.0"
+tauri-plugin-notification = "2.3.3"
+tauri-plugin-single-instance = "2.4.3"
+tauri-plugin-store = "2.4.4"
+tauri-plugin-updater = { version = "2.10.1", optional = true }
+
+[features]
+default = []
+official-updater = ["dep:tauri-plugin-updater"]
