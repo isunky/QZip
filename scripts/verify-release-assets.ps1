@@ -3,7 +3,8 @@ param(
   [Parameter(Mandatory)]
   [ValidatePattern('^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$')]
   [string]$Version,
-  [switch]$RequireTrustedSignature
+  [switch]$RequireTrustedSignature,
+  [string]$ExpectedPublisher
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,6 +35,7 @@ try {
     if ($actual -ne $sidecarManifest.runtime.fileHashes.$file) { throw "Portable Sidecar checksum mismatch: $file" }
   }
   if ($RequireTrustedSignature) {
+    if ([string]::IsNullOrWhiteSpace($ExpectedPublisher)) { throw 'ExpectedPublisher is required when trusted signatures are required.' }
     foreach ($file in @(
       (Join-Path $releaseRoot "QZip-$releaseVersion-windows-x64-setup.exe"),
       (Join-Path $releaseRoot "QZip-$releaseVersion-windows-x64.msi"),
@@ -41,6 +43,7 @@ try {
     )) {
       $signature = Get-AuthenticodeSignature -LiteralPath $file
       if ($signature.Status -ne 'Valid') { throw "A trusted Authenticode signature is required: $file ($($signature.Status))" }
+      if ($signature.SignerCertificate.Subject -notlike "*$ExpectedPublisher*") { throw "Unexpected Authenticode publisher: $file" }
     }
   }
 }

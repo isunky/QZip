@@ -43,37 +43,22 @@ jobs:
           $required = @('WINDOWS_PFX_BASE64', 'WINDOWS_PFX_PASSWORD', 'QZIP_WINDOWS_PUBLISHER')
           $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
           if ($missing) { throw "Public RC publishing is disabled until these values are configured: $($missing -join ', ')." }
-          [System.IO.File]::WriteAllBytes("$env:RUNNER_TEMP\qzip-signing.pfx", [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+          $pfx = "$env:RUNNER_TEMP\qzip-signing.pfx"
+          [System.IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+          "QZIP_WINDOWS_PFX_PATH=$pfx" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm sidecar:verify
       - name: Build Windows artifacts
         shell: pwsh
-        run: pnpm tauri:bundle:windows
-      - name: Sign published Windows binaries
-        shell: pwsh
         run: |
-          $pfx = "$env:RUNNER_TEMP\qzip-signing.pfx"
-          $targets = @(
-            'target\release\qzip-desktop.exe',
-            (Get-ChildItem 'target\release\bundle\nsis' -Filter '*.exe' -File).FullName,
-            (Get-ChildItem 'target\release\bundle\msi' -Filter '*.msi' -File).FullName
-          )
-          $signTool = (Get-Command signtool.exe -ErrorAction Stop).Source
-          foreach ($target in $targets) {
-            & $signTool sign /fd SHA256 /f $pfx /p $env:WINDOWS_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $target
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            $signature = Get-AuthenticodeSignature -LiteralPath $target
-            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike "*$env:QZIP_WINDOWS_PUBLISHER*") {
-              throw "Trusted publisher signature validation failed for $target."
-            }
-          }
+          powershell -ExecutionPolicy Bypass -File scripts/bundle-windows.ps1 -Release
       - name: Assemble and verify RC assets
         shell: pwsh
         run: |
           $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}' } else { '${{ github.ref_name }}' }
           powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version $tag -SkipBundle
-          powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $tag -RequireTrustedSignature
+          powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $tag -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: artifacts/release/**

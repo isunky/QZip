@@ -44,7 +44,7 @@ if ($InstallDevCertificate) {
  $signTool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } | Sort-Object FullName -Descending | Select-Object -First 1
 if (-not $signTool) { throw 'Windows SDK x64 signtool.exe was not found.' }
 if ($Release) {
-  & $signTool.FullName sign /fd SHA256 /f $env:QZIP_WINDOWS_PFX_PATH /p $env:QZIP_WINDOWS_PFX_PASSWORD $dll
+  & $signTool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $env:QZIP_WINDOWS_PFX_PATH /p $env:QZIP_WINDOWS_PFX_PASSWORD $dll
   if ($LASTEXITCODE -ne 0) { throw 'Shell DLL release signing failed.' }
 } else {
   $certificate = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq 'CN=QZip Development' } | Select-Object -First 1
@@ -68,7 +68,15 @@ if (-not $makeAppx) { throw 'Windows SDK x64 makeappx.exe was not found.' }
 $msix = Join-Path $shellOutput 'QZip.Shell.msix'
 & $makeAppx.FullName pack /o /d $packageRoot /nv /p $msix
 if ($LASTEXITCODE -ne 0) { throw 'Sparse MSIX packaging failed.' }
-if ($Release) { & $signTool.FullName sign /fd SHA256 /f $env:QZIP_WINDOWS_PFX_PATH /p $env:QZIP_WINDOWS_PFX_PASSWORD $msix }
+if ($Release) { & $signTool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $env:QZIP_WINDOWS_PFX_PATH /p $env:QZIP_WINDOWS_PFX_PASSWORD $msix }
 else { & $signTool.FullName sign /fd SHA256 /sha1 $certificate.Thumbprint $msix }
 if ($LASTEXITCODE -ne 0) { throw 'Sparse MSIX signing failed.' }
+if ($Release) {
+  foreach ($target in @($dll, $msix)) {
+    $signature = Get-AuthenticodeSignature -LiteralPath $target
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike "*$env:QZIP_WINDOWS_PUBLISHER*") {
+      throw "Trusted publisher signature validation failed for $target."
+    }
+  }
+}
 Write-Host "Shell DLL and sparse MSIX built: $shellOutput"
