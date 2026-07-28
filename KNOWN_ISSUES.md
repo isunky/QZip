@@ -5,7 +5,7 @@
 - 分卷、Solid、排除规则和删除源文件确认将在 RC2 提供。
 - 压缩包浏览尚未提供完整目录导航、属性查看、虚拟列表和将选择项传入部分解压。
 - 拖拽入口目前仅提供基础交互，完整的路径分类流程将在 RC2 完成。
-- macOS DMG、Finder Quick Action、Linux AppImage、MIME/Desktop Entry 将在 RC2 提供。
+- macOS DMG、Finder Quick Action、Linux AppImage、MIME/Desktop Entry 不属于 Windows V1.0 范围，计划在 V1.1 提供。
 - 自动更新在 RC 阶段默认关闭。
 
 安全问题请不要公开披露密码、压缩包或可复现的敏感数据；请在仓库维护者确认的私密渠道联系。

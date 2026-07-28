@@ -1,6 +1,6 @@
 # 轻压 · QZip
 
-QZip 是一款开源、跨平台、轻量化的桌面压缩工具。当前仓库处于 RC1 实施阶段：Windows x64 的安全写入、安装包和发布验证正在收敛；macOS/Linux 与部分高级功能计划在 RC2 完成。
+QZip 是一款开源、Windows 优先、具备跨平台路线图的轻量化桌面压缩工具。当前仓库处于 `v1.0.0-rc.1` 封版阶段：Windows x64 的安全写入、安装包和发布验证正在收敛；RC2 补齐 Windows V1.0 功能缺口，macOS/Linux 计划在 V1.1 提供。
 
 开发环境：Node.js 24、pnpm 11.9、Rust 1.96（MSVC 工具链）。
 
@@ -16,4 +16,4 @@ Windows 打包需要先拉取 Sidecar，再执行 `pnpm tauri:bundle:windows`；
 
 发布相关说明见 [隐私说明](PRIVACY.md)、[卸载说明](UNINSTALL.md)、[已知问题](KNOWN_ISSUES.md) 与 [变更记录](CHANGELOG.md)。RC 标签由 GitHub Actions 构建；没有可信签名凭据时，工作流会失败且不会创建公开 Release。
 
-产品需求见 [QZip_PRD_Requirements_V2.1.md](QZip_PRD_Requirements_V2.1.md)，实施清单见 [QZip_TODO_V2.1.md](QZip_TODO_V2.1.md)。原始开发基线保留在 `QZip_PRD_V2.1.md`。
+产品需求与验收的唯一权威来源为 [QZip_PRD_V2.1.md](QZip_PRD_V2.1.md)，实施顺序和完成状态见 [QZip_TODO_V2.1.md](QZip_TODO_V2.1.md)。
