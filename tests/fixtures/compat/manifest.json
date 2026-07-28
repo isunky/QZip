@@ -1,14 +1,87 @@
-{
-  "schemaVersion": 1,
-  "policy": "Synthetic and redistributable content only. Passwords are held in the private release test runbook, never in this repository.",
-  "cases": [
-    { "producer": "7-Zip", "format": "7z", "file": "7zip-7z.7z", "producerVersion": "26.02", "sha256": "" },
-    { "producer": "7-Zip", "format": "zip", "file": "7zip-zip.zip", "producerVersion": "26.02", "sha256": "" },
-    { "producer": "WinRAR", "format": "rar", "file": "winrar-rar.rar", "producerVersion": "", "sha256": "" },
-    { "producer": "Bandizip", "format": "zip", "file": "bandizip-zip.zip", "producerVersion": "", "sha256": "" },
-    { "producer": "PeaZip", "format": "7z", "file": "peazip-7z.7z", "producerVersion": "", "sha256": "" },
-    { "producer": "Keka", "format": "tar.gz", "file": "keka-targz.tar.gz", "producerVersion": "", "sha256": "" },
-    { "producer": "Windows Explorer", "format": "zip", "file": "windows-zip.zip", "producerVersion": "Windows 11", "sha256": "" },
-    { "producer": "GNU tar", "format": "tar.xz", "file": "gnu-tar-xz.tar.xz", "producerVersion": "", "sha256": "" }
-  ]
+﻿{
+    "schemaVersion":  2,
+    "policy":  "Synthetic and redistributable content only. Passwords are held in the private release test runbook, never in this repository.",
+    "cases":  [
+                  {
+                      "producer":  "7-Zip",
+                      "format":  "7z",
+                      "file":  "7zip-7z.7z",
+                      "producerVersion":  "QZip bundled 7-Zip",
+                      "sha256":  "c0fbe1a99b4ab053f48c028f0196ce37d03f25c679de8bf02575f1bf3d4417fa",
+                      "status":  "ready",
+                      "blocker":  ""
+                  },
+                  {
+                      "producer":  "7-Zip",
+                      "format":  "zip",
+                      "file":  "7zip-zip.zip",
+                      "producerVersion":  "QZip bundled 7-Zip",
+                      "sha256":  "bd88e52a303fa68b9ea6a77386623f14b2a09e73320b0dbeb95862def77eab1f",
+                      "status":  "ready",
+                      "blocker":  ""
+                  },
+                  {
+                      "producer":  "WinRAR",
+                      "format":  "rar",
+                      "file":  "winrar-rar.rar",
+                      "producerVersion":  "",
+                      "sha256":  "",
+                      "status":  "blocked",
+                      "blocker":  "Producer unavailable on this machine."
+                  },
+                  {
+                      "producer":  "Bandizip",
+                      "format":  "zip",
+                      "file":  "bandizip-zip.zip",
+                      "producerVersion":  "Bandizip local console",
+                      "sha256":  "a38d59bca03e29405288bf4d1c647723d9ba7af3a4bd41425e14e97c5e226b0c",
+                      "status":  "ready",
+                      "blocker":  ""
+                  },
+                  {
+                      "producer":  "PeaZip",
+                      "format":  "7z",
+                      "file":  "peazip-7z.7z",
+                      "producerVersion":  "",
+                      "sha256":  "",
+                      "status":  "blocked",
+                      "blocker":  "Producer unavailable on this machine."
+                  },
+                  {
+                      "producer":  "Keka",
+                      "format":  "tar.gz",
+                      "file":  "keka-targz.tar.gz",
+                      "producerVersion":  "",
+                      "sha256":  "",
+                      "status":  "blocked",
+                      "blocker":  "Producer unavailable on this machine."
+                  },
+                  {
+                      "producer":  "Windows Explorer",
+                      "format":  "zip",
+                      "file":  "windows-zip.zip",
+                      "producerVersion":  "Windows 11 Shell.Application",
+                      "sha256":  "fa199c60fb01a8f18f97dde31b86f117c4f8f4ea5d09aa553a8e90a7265471df",
+                      "status":  "ready",
+                      "blocker":  ""
+                  },
+                  {
+                      "producer":  "GNU tar",
+                      "format":  "tar.xz",
+                      "file":  "gnu-tar-xz.tar.xz",
+                      "producerVersion":  "",
+                      "sha256":  "",
+                      "status":  "blocked",
+                      "blocker":  "Producer unavailable on this machine."
+                  },
+                  {
+                      "producer":  "Windows bsdtar",
+                      "format":  "tar.xz",
+                      "file":  "windows-bsdtar-xz.tar.xz",
+                      "producerVersion":  "Windows 11 libarchive",
+                      "sha256":  "6d56f3e5243250badd30b94392a2fa050434ef3065e2826195dd64b0eb4c612c",
+                      "status":  "ready",
+                      "blocker":  ""
+                  }
+              ]
 }

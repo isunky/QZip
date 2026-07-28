@@ -14,6 +14,9 @@ $build = Join-Path $OutputDirectory 'build'
 if ($Release -and (-not $env:QZIP_WINDOWS_PFX_PATH -or -not $env:QZIP_WINDOWS_PFX_PASSWORD -or -not $env:QZIP_WINDOWS_PUBLISHER)) {
   throw 'Release builds require QZIP_WINDOWS_PFX_PATH, QZIP_WINDOWS_PFX_PASSWORD, and QZIP_WINDOWS_PUBLISHER. No self-signed fallback is allowed.'
 }
+if ((-not $Release) -and (-not $InstallDevCertificate)) {
+  throw 'Local sparse MSIX builds require -InstallDevCertificate. This explicitly creates/trusts the development certificate for the current user.'
+}
 
 $cmake = (Get-Command cmake -ErrorAction SilentlyContinue | Select-Object -First 1).Source
 if (-not $cmake) {
@@ -31,19 +34,41 @@ if (-not (Test-Path -LiteralPath $dll)) { throw "Shell DLL was not produced: $dl
 if ($InstallDevCertificate) {
   $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq 'CN=QZip Development' -and $_.NotAfter -gt (Get-Date).AddDays(30) } | Select-Object -First 1
   if (-not $cert) { $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=QZip Development' -CertStoreLocation 'Cert:\CurrentUser\My' -KeyExportPolicy Exportable -KeyAlgorithm RSA -KeyLength 3072 -HashAlgorithm SHA256 }
-  $store = [System.Security.Cryptography.X509Certificates.X509Store]::new('TrustedPeople', 'CurrentUser'); $store.Open('ReadWrite'); $store.Add($cert); $store.Close()
-  Write-Host "Installed a QZip development certificate for the current user: $($cert.Thumbprint)"
+  foreach ($storeName in @('TrustedPeople', 'Root')) {
+    $store = [System.Security.Cryptography.X509Certificates.X509Store]::new($storeName, 'CurrentUser'); $store.Open('ReadWrite'); $store.Add($cert); $store.Close()
+  }
+  Export-Certificate -Cert $cert -FilePath (Join-Path $OutputDirectory 'QZip.Development.cer') -Force | Out-Null
+  Write-Host "Installed the QZip development certificate for the current user and exported $OutputDirectory\QZip.Development.cer. Machine-wide MSIX testing also requires scripts\install-qzip-development-certificate.ps1 from an elevated PowerShell window."
 }
 
+ $signTool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } | Sort-Object FullName -Descending | Select-Object -First 1
+if (-not $signTool) { throw 'Windows SDK x64 signtool.exe was not found.' }
 if ($Release) {
-  $signTool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1
-  if (-not $signTool) { throw 'Windows SDK signtool.exe was not found.' }
   & $signTool.FullName sign /fd SHA256 /f $env:QZIP_WINDOWS_PFX_PATH /p $env:QZIP_WINDOWS_PFX_PASSWORD $dll
   if ($LASTEXITCODE -ne 0) { throw 'Shell DLL release signing failed.' }
-} elseif ($InstallDevCertificate) {
+} else {
   $certificate = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq 'CN=QZip Development' } | Select-Object -First 1
-  Set-AuthenticodeSignature -FilePath $dll -Certificate $certificate | Out-Null
+  & $signTool.FullName sign /fd SHA256 /sha1 $certificate.Thumbprint $dll
+  if ($LASTEXITCODE -ne 0) { throw 'Shell DLL development signing failed.' }
 }
 
-Write-Host "Shell DLL built: $dll"
-Write-Host 'Sparse MSIX signing and registration are explicit deployment steps; this script does not change package registration by default.'
+$shellOutput = Join-Path $OutputDirectory 'qzip-shell'
+$packageRoot = Join-Path $build 'sparse-package'
+New-Item -ItemType Directory -Force -Path $shellOutput, (Join-Path $packageRoot 'Assets') | Out-Null
+Copy-Item -LiteralPath $dll -Destination (Join-Path $shellOutput 'qzip-shell.dll') -Force
+$publisher = if ($Release) { $env:QZIP_WINDOWS_PUBLISHER } else { 'CN=QZip Development' }
+$manifest = (Get-Content -Raw (Join-Path $source 'AppxManifest.xml.in')).Replace('@PUBLISHER@', $publisher)
+Set-Content -LiteralPath (Join-Path $packageRoot 'AppxManifest.xml') -Value $manifest -Encoding utf8
+Add-Type -AssemblyName System.Drawing
+$bitmap = [System.Drawing.Bitmap]::new(150, 150)
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.Clear([System.Drawing.Color]::FromArgb(35, 101, 255)); $graphics.Dispose()
+$bitmap.Save((Join-Path $packageRoot 'Assets\Logo.png'), [System.Drawing.Imaging.ImageFormat]::Png); $bitmap.Dispose()
+$makeAppx = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter makeappx.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\makeappx\.exe$' } | Sort-Object FullName -Descending | Select-Object -First 1
+if (-not $makeAppx) { throw 'Windows SDK x64 makeappx.exe was not found.' }
+$msix = Join-Path $shellOutput 'QZip.Shell.msix'
+& $makeAppx.FullName pack /o /d $packageRoot /nv /p $msix
+if ($LASTEXITCODE -ne 0) { throw 'Sparse MSIX packaging failed.' }
+if ($Release) { & $signTool.FullName sign /fd SHA256 /f $env:QZIP_WINDOWS_PFX_PATH /p $env:QZIP_WINDOWS_PFX_PASSWORD $msix }
+else { & $signTool.FullName sign /fd SHA256 /sha1 $certificate.Thumbprint $msix }
+if ($LASTEXITCODE -ne 0) { throw 'Sparse MSIX signing failed.' }
+Write-Host "Shell DLL and sparse MSIX built: $shellOutput"

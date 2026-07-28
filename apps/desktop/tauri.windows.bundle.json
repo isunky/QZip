@@ -4,6 +4,10 @@
     "resources": {
       "../../../third_party/7zip/bin/win-x64/7z.exe": "7zip/7z.exe",
       "../../../third_party/7zip/bin/win-x64/7z.dll": "7zip/7z.dll"
+      ,"../../../artifacts/windows-shell/qzip-shell/qzip-shell.dll": "qzip-shell/qzip-shell.dll"
+      ,"../../../artifacts/windows-shell/qzip-shell/QZip.Shell.msix": "qzip-shell/QZip.Shell.msix"
+      ,"../../../native/windows/qzip-shell/Register-QZipShell.ps1": "qzip-shell/Register-QZipShell.ps1"
+      ,"../../../native/windows/qzip-shell/Unregister-QZipShell.ps1": "qzip-shell/Unregister-QZipShell.ps1"
     }
   }
 }

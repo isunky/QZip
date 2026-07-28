@@ -310,7 +310,7 @@ impl TaskManager {
                             output: temporary_output.clone(),
                             format: *format,
                             profile: *profile,
-                            password,
+                            password: password.clone(),
                             encrypt_headers: *encrypt_headers,
                             test_after_create: *test_after_create,
                         },
@@ -331,7 +331,7 @@ impl TaskManager {
                         .test(
                             TestArchiveRequest {
                                 archive: temporary_output.clone(),
-                                password: None,
+                                password: password.clone(),
                             },
                             cancellation.child_token(),
                         )

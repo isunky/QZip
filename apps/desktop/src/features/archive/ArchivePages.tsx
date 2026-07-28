@@ -52,7 +52,7 @@ export function CreatePage({ onBack, onCreated, defaultFormat = "sevenZip", defa
   const [inputs, setInputs] = useState<string[]>(() => [...new Set(initialInputs)]);
   const [format, setFormat] = useState<ArchiveFormat>(defaultFormat);
   const [profile, setProfile] = useState<CompressionProfile>(defaultProfile);
-  const [output, setOutput] = useState("D:\\QZip\\新建压缩包.7z");
+  const [output, setOutput] = useState(() => archiveClient.isTauri ? "" : "D:\\示例解压结果");
   const [password, setPassword] = useState("");
   const [testing, setTesting] = useState(defaultTestAfterCreate);
   const [busy, setBusy] = useState(false);
@@ -62,6 +62,15 @@ export function CreatePage({ onBack, onCreated, defaultFormat = "sevenZip", defa
     const picked = await archiveClient.pickInputPaths(false);
     setInputs((current) => [...new Set([...current, ...picked])]);
   };
+  const addFolder = async () => {
+    if (!archiveClient.isTauri) { setInputs((current) => [...new Set([...current, "D:\\示例文件夹"])]); return; }
+    const picked = await archiveClient.pickInputFolder();
+    if (picked) setInputs((current) => [...new Set([...current, picked])]);
+  };
+  useEffect(() => {
+    if (!inputs.length || !archiveClient.isTauri) return;
+    void archiveClient.suggestCreateOutput(inputs, format).then(setOutput).catch(() => undefined);
+  }, [format, inputs]);
   const start = async () => {
     setBusy(true); setError(null);
     try {
@@ -73,7 +82,7 @@ export function CreatePage({ onBack, onCreated, defaultFormat = "sevenZip", defa
     } catch (reason) { setError(String(reason)); } finally { setBusy(false); }
   };
   return <Workspace title="新建压缩包" subtitle="选择文件并配置压缩方案" onBack={onBack}>
-    <div className="qzip-form-grid qzip-form-grid--create"><Card className="qzip-work-card"><Section title="要压缩的文件" action={<Button variant="secondary" icon={<FolderOpen size={18} />} onClick={() => void addFiles()}>添加文件</Button>}>
+    <div className="qzip-form-grid qzip-form-grid--create"><Card className="qzip-work-card"><Section title="要压缩的文件" action={<><Button variant="secondary" icon={<FolderOpen size={18} />} onClick={() => void addFiles()}>添加文件</Button><Button variant="secondary" icon={<FolderOpen size={18} />} onClick={() => void addFolder()}>添加文件夹</Button></>}>
       <div className="qzip-path-list">{inputs.length ? inputs.map((path) => <span key={path}><FileInput size={16} />{path}<button onClick={() => setInputs((current) => current.filter((item) => item !== path))}><X size={15} /></button></span>) : <Empty icon={<FileArchive />} text="尚未选择文件或文件夹" />}</div>
     </Section></Card><Card className="qzip-work-card"><Section title="压缩设置">
       <SegmentedControl options={formatOptions} value={format} onValueChange={(value) => setFormat(value as ArchiveFormat)} ariaLabel="压缩格式" />
@@ -88,11 +97,15 @@ export function CreatePage({ onBack, onCreated, defaultFormat = "sevenZip", defa
 }
 
 export function ExtractPage({ archive, session, onBack, onBrowse, onCreated, defaultConflictPolicy = "rename" }: { archive: string; session: ArchiveSession; onBack: () => void; onBrowse: () => void; onCreated: (task: TaskSnapshot) => void; defaultConflictPolicy?: ConflictPolicy }) {
-  const [output, setOutput] = useState("D:\\QZip\\解压结果");
+  const [output, setOutput] = useState("");
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>(defaultConflictPolicy);
   const [password, setPassword] = useState(""); const [accepted, setAccepted] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const start = async () => { setBusy(true); setError(null); try { const request = { archive, output, conflictPolicy, password: password || undefined, acceptRisk: accepted }; if (!archiveClient.isTauri) onCreated({ taskId: crypto.randomUUID(), operation: "extract", status: "queued", displayName: archive.split("\\").pop() ?? "示例压缩包.zip", output, createdAt: Date.now(), updatedAt: Date.now(), warnings: [], retryable: true }); else onCreated(await archiveClient.extract(request)); onBack(); } catch (reason) { setError(String(reason)); } finally { setBusy(false); } };
   const hasBlocking = session.risks.some((risk) => !risk.overridable);
+  useEffect(() => {
+    if (!archiveClient.isTauri) return;
+    void archiveClient.suggestExtractOutput(archive, true).then(setOutput).catch(() => undefined);
+  }, [archive]);
   return <Workspace title="快速解压" subtitle="先完成安全预检，再开始解压" onBack={onBack}>
     <div className="qzip-form-grid"><Card className="qzip-work-card"><Section title="待解压文件"><div className="qzip-archive-summary"><PackageOpen size={34} /><div><strong>{archive.split("\\").pop()}</strong><span>{session.entryCount} 项 · 预计 {formatBytes(session.estimatedUncompressedSize)}</span></div></div><Button variant="tertiary" onClick={onBrowse}>浏览内容并选择文件</Button></Section></Card>
       <Card className="qzip-work-card"><Section title="解压设置"><Input label="解压到" value={output} onChange={(event) => setOutput(event.target.value)} /><Input label="密码（如需要）" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /><SegmentedControl options={[{ value: "rename", label: "自动重命名" }, { value: "overwrite", label: "覆盖" }, { value: "skip", label: "跳过" }]} value={conflictPolicy} onValueChange={(value) => setConflictPolicy(value as ConflictPolicy)} ariaLabel="文件冲突处理" /><RiskNotice risks={session.risks} accepted={accepted} onAccepted={setAccepted} />{error ? <p className="qzip-form-error">{error}</p> : null}<Button className="qzip-primary-action" loading={busy} disabled={hasBlocking || (session.risks.length > 0 && !accepted)} icon={<Play size={18} />} onClick={() => void start()}>开始解压</Button></Section></Card>
@@ -121,7 +134,7 @@ export function BrowserPage({ archive, session, onBack, onExtract }: { archive: 
   </Workspace>;
 }
 
-export function TaskCenter({ tasks, onBack, onClear, onCancel, onRetry }: { tasks: TaskSnapshot[]; onBack: () => void; onClear: () => void; onCancel: (id: string) => void; onRetry: (id: string) => void }) {
+export function TaskCenter({ tasks, onBack, onClear, onCancel, onRetry }: { tasks: TaskSnapshot[]; onBack: () => void; onClear: () => void; onCancel: (id: string) => void; onRetry: (id: string, password?: string) => void }) {
   const [tab, setTab] = useState<"all" | "active" | "finished">("all");
   const shown = tasks.filter((task) => tab === "all" || tab === "active" ? !["completed", "failed", "cancelled"].includes(task.status) : ["completed", "failed", "cancelled"].includes(task.status));
   return <Workspace title="任务中心" subtitle="同时最多执行 2 个任务；保留最近 100 条本地记录" onBack={onBack} action={<Button variant="tertiary" icon={<Trash2 size={17} />} onClick={onClear}>清除已完成</Button>}>
@@ -129,7 +142,12 @@ export function TaskCenter({ tasks, onBack, onClear, onCancel, onRetry }: { task
   </Workspace>;
 }
 
-function TaskCard({ task, onCancel, onRetry }: { task: TaskSnapshot; onCancel: (id: string) => void; onRetry: (id: string) => void }) { const active = ["queued", "scanning", "running", "cancelling"].includes(task.status); return <Card className="qzip-task-card"><div className="qzip-task-card__icon"><FileArchive size={24} /></div><div className="qzip-task-card__body"><div><strong>{task.displayName}</strong><span className={`qzip-status qzip-status--${task.status}`}>{task.status === "completed" ? "已完成" : task.status === "failed" ? "失败" : task.status === "queued" ? "等待中" : "处理中"}</span></div><p>{task.progress?.currentEntry ?? task.progress?.phase ?? (task.error?.message || "准备处理")}</p>{active ? <Progress value={task.progress?.percent ?? 8} /> : null}</div><div className="qzip-task-card__actions">{active ? <Button variant="tertiary" title="暂停将在 7-Zip 支持安全挂起后开放" disabled>暂停</Button> : null}{active ? <Button variant="tertiary" onClick={() => onCancel(task.taskId)}>取消</Button> : null}{task.status === "failed" && task.retryable ? <Button variant="secondary" onClick={() => onRetry(task.taskId)}>重试</Button> : null}<Button variant="icon" aria-label="更多任务操作" icon={<MoreHorizontal size={19} />} /></div></Card>; }
+function TaskCard({ task, onCancel, onRetry }: { task: TaskSnapshot; onCancel: (id: string) => void; onRetry: (id: string, password?: string) => void }) {
+  const active = ["queued", "scanning", "running", "cancelling"].includes(task.status);
+  const [password, setPassword] = useState("");
+  const needsPassword = task.error?.code === "WRONG_PASSWORD";
+  return <Card className="qzip-task-card"><div className="qzip-task-card__icon"><FileArchive size={24} /></div><div className="qzip-task-card__body"><div><strong>{task.displayName}</strong><span className={`qzip-status qzip-status--${task.status}`}>{task.status === "completed" ? "已完成" : task.status === "failed" ? "失败" : task.status === "queued" ? "等待中" : "处理中"}</span></div><p>{task.progress?.currentEntry ?? task.progress?.phase ?? (task.error?.message || "准备处理")}</p>{needsPassword ? <Input aria-label="重试密码" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="请输入正确密码" /> : null}{active ? <Progress value={task.progress?.percent ?? 8} /> : null}</div><div className="qzip-task-card__actions">{active ? <Button variant="tertiary" onClick={() => onCancel(task.taskId)}>取消</Button> : null}{task.status === "failed" && task.retryable ? <Button variant="secondary" disabled={needsPassword && !password} onClick={() => onRetry(task.taskId, password || undefined)}>重试</Button> : null}{task.status === "completed" && task.output ? <Button variant="tertiary" onClick={() => void archiveClient.open(task.output!)}>打开结果</Button> : null}{task.output ? <Button variant="tertiary" onClick={() => void archiveClient.reveal(task.output!)}>打开位置</Button> : null}<Button variant="icon" aria-label="更多任务操作" icon={<MoreHorizontal size={19} />} /></div></Card>;
+}
 
 function Workspace({ title, subtitle, onBack, action, children }: { title: string; subtitle: string; onBack: () => void; action?: React.ReactNode; children: React.ReactNode }) { return <section className="qzip-workspace"><div className="qzip-workspace__header"><button className="qzip-back" onClick={onBack}>← 返回首页</button><div><h1>{title}</h1><p>{subtitle}</p></div>{action}</div>{children}</section>; }
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) { return <section className="qzip-form-section"><header><h2>{title}</h2>{action}</header>{children}</section>; }

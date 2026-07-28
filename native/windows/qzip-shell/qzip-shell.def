@@ -1,0 +1,5 @@
+LIBRARY "qzip-shell"
+
+EXPORTS
+    DllCanUnloadNow PRIVATE
+    DllGetClassObject PRIVATE

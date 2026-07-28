@@ -26,6 +26,7 @@ export function App() {
   const [session, setSession] = useState<ArchiveSession>(demoSession);
   const [settings, setSettings] = useState<AppSettings>(defaultAppSettings);
   const [createInputs, setCreateInputs] = useState<string[]>([]);
+  const [createFormat, setCreateFormat] = useState<"sevenZip" | "zip" | undefined>();
   const settingsRef = useRef(settings);
   const resolvedMode = resolveThemeMode(mode, systemDark);
 
@@ -86,9 +87,10 @@ export function App() {
       const target = request.paths[0];
       if (!target) return;
       if (request.kind === "open") {
-        void archiveClient.prepare(target).then((next) => { setArchive(target); setSession(next); setPage("extract"); }).catch((reason) => setToast(String(reason)));
+        void archiveClient.prepare(target).then((next) => { setArchive(target); setSession(next); setPage("browser"); }).catch((reason) => setToast(String(reason)));
       } else if (request.kind === "compressSevenZip" || request.kind === "compressZip" || request.kind === "moreOptions") {
         setCreateInputs(request.paths);
+        setCreateFormat(request.kind === "compressZip" ? "zip" : request.kind === "compressSevenZip" ? "sevenZip" : undefined);
         setPage("create");
       } else if (request.kind === "extractHere" || request.kind === "extractNamed") {
         void archiveClient.prepare(target).then((next) => { setArchive(target); setSession(next); setPage("extract"); }).catch((reason) => setToast(String(reason)));
@@ -104,18 +106,18 @@ export function App() {
       const selected = archiveClient.isTauri ? await archiveClient.pickInputPaths(true) : [archive];
       if (!selected[0]) return;
       const target = selected[0]; setArchive(target);
-      setSession(archiveClient.isTauri ? await archiveClient.prepare(target) : demoSession); setPage("extract");
+      setSession(archiveClient.isTauri ? await archiveClient.prepare(target) : demoSession); setPage("browser");
     } catch (reason) { setToast(String(reason)); }
   }
   function addTask(task: TaskSnapshot) { setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]); setToast("任务已加入队列，可在任务中心查看进度。"); }
   function goHome() { setPage("home"); }
   function currentPage() {
     if (page === "settings") return <SettingsPage settings={settings} onBack={goHome} onChanged={applySettings} onToast={setToast} />;
-    if (page === "create") return <CreatePage onBack={goHome} onCreated={addTask} defaultFormat={settings.defaultFormat} defaultProfile={settings.compressionProfile} defaultTestAfterCreate={settings.testAfterCreate} initialInputs={createInputs} />;
+    if (page === "create") return <CreatePage onBack={goHome} onCreated={addTask} defaultFormat={createFormat ?? settings.defaultFormat} defaultProfile={settings.compressionProfile} defaultTestAfterCreate={settings.testAfterCreate} initialInputs={createInputs} />;
     if (page === "extract") return <ExtractPage archive={archive} session={session} onBack={goHome} onBrowse={() => setPage("browser")} onCreated={addTask} defaultConflictPolicy={settings.conflictPolicy} />;
     if (page === "browser") return <BrowserPage archive={archive} session={session} onBack={() => setPage("extract")} onExtract={() => setPage("extract")} />;
-    if (page === "tasks") return <TaskCenter tasks={tasks} onBack={goHome} onClear={() => { if (archiveClient.isTauri) void archiveClient.clearCompleted().then(() => setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)))); else setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status))); }} onCancel={(taskId) => { if (archiveClient.isTauri) void archiveClient.cancel(taskId); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "cancelled", updatedAt: Date.now() } : task)); }} onRetry={(taskId) => { if (archiveClient.isTauri) void archiveClient.retry(taskId).then(addTask); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "queued", updatedAt: Date.now(), error: undefined } : task)); }} />;
-    return <HomePage onCreate={() => { setCreateInputs([]); setPage("create"); }} onOpenArchive={() => void openArchive()} />;
+    if (page === "tasks") return <TaskCenter tasks={tasks} onBack={goHome} onClear={() => { if (archiveClient.isTauri) void archiveClient.clearCompleted().then(() => setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)))); else setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status))); }} onCancel={(taskId) => { if (archiveClient.isTauri) void archiveClient.cancel(taskId); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "cancelled", updatedAt: Date.now() } : task)); }} onRetry={(taskId, password) => { if (archiveClient.isTauri) void archiveClient.retry(taskId, password).then(addTask); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "queued", updatedAt: Date.now(), error: undefined } : task)); }} />;
+    return <HomePage onCreate={() => { setCreateInputs([]); setCreateFormat(undefined); setPage("create"); }} onOpenArchive={() => void openArchive()} />;
   }
   return <main className="qzip-app-shell"><Header onTasksClick={() => setPage("tasks")} onSettingsClick={() => setPage("settings")} /><section className="qzip-app-content">{currentPage()}</section>{toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}</main>;
 }

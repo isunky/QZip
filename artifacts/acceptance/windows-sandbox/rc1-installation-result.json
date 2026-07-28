@@ -1,0 +1,20 @@
+﻿{
+    "startedAt":  "2026-07-28T05:24:17.0352460Z",
+    "setup":  "C:\\QZip\\target\\release\\bundle\\nsis\\QZip_1.0.0_x64-setup.exe",
+    "install":  {
+                    "exitCode":  2
+                },
+    "shellPackage":  {
+                         "fullName":  null,
+                         "registered":  false
+                     },
+    "appLaunch":  {
+                      "reason":  "installed executable not found",
+                      "started":  false
+                  },
+    "uninstall":  null,
+    "errors":  [
+
+               ],
+    "finishedAt":  "2026-07-28T05:24:19.8141647Z"
+}

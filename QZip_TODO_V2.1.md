@@ -11,8 +11,8 @@
 - [x] **M0** 仓库、设计系统与静态首页已完成并通过 `pnpm check`、Tauri Debug 构建和设计 QA。
 - [x] **M1** 后端技术验证已实现并通过 7Z/ZIP/RAR、Unicode、密码、损坏包、取消和打包验证。
 - [~] **M2–M5** 已实施第一版：创建、快速解压与安全预检、压缩包浏览、任务队列和任务中心已接入桌面端；剩余功能和完整验收必须在 RC2/V1.0 稳定版前关闭。
-- [~] **M6** 已完成设置核心、设置页、单实例路由及 Windows Shell 集成代码；Windows 安装注册与卸载验证待完成。
-- [~] **M7** 已实施 RC1 的安全写入、Sidecar 完整性、Windows 发布物组装与严格签名门禁；兼容性样本、性能基线和真实安装验证仍未完成。
+- [~] **M6** 已完成设置核心、设置页、单实例路由，以及 NSIS 可注册/卸载的 Windows 11 稀疏 MSIX Shell 集成；本机 Windows 11 安装及真实 Explorer 一级菜单已验收，干净 Windows 环境的升级、卸载、关联与 DPI 证据待完成。
+- [~] **M7** 已实施 RC1 的安全写入、Sidecar 完整性、Windows 发布物组装、开发签名 Shell 包与严格签名门禁；兼容性生产样本、性能基线和干净安装验证仍未完成。
 
 ### 版本边界
 
@@ -26,8 +26,10 @@
 - [x] 已通过 `pnpm check`、`pnpm sidecar:test`、`pnpm tauri:build:debug` 与 Windows x64 NSIS/MSI 打包。
 - [x] 已在本地组装 `1.0.0-rc.1` 的 NSIS、MSI、便携 ZIP、SHA-256 清单和 Sidecar 复核清单；发布物组装脚本已验证通过。
 - [x] 已验证未签名的本地资产会被 `-RequireTrustedSignature` 严格拒绝，不能绕过公开发布门禁。
+- [x] 已修复 NSIS Shell 资源路径、稀疏 MSIX 外部内容/`desktop5` 清单和 COM DLL 导出；本机注册包 `app.qzip.desktop.shell 1.0.0.2` 状态为 `Ok`。
+- [x] 已在本机 Windows 11 Explorer 的文件及文件夹真实右键菜单中确认一级“QZip”入口，并在文件菜单中确认打开、压缩为 7Z/ZIP、解压到当前目录/同名目录和更多选项六个子命令；修复后 NSIS 安装包已重新构建。
 - [~] GitHub 仓库尚未配置受信任证书机密，且未创建 `v1.0.0-rc.1` 标签或 GitHub prerelease。
-- [ ] `verify-compat-fixtures.ps1` 预期仍会因缺少第三方兼容样本而失败；性能与干净安装环境验收尚未执行。
+- [~] 已生成并校验本机可生产的 7-Zip、Bandizip、Windows Explorer 和 bsdtar 样本；其余第三方生产样本、性能与干净安装环境验收尚未完成。
 
 ## M0：仓库和设计系统（完成）
 
@@ -111,21 +113,21 @@
 - [x] M6-02 完成所有设置页：常规、压缩、解压、外观、隐私安全、更新、关于。
 - [x] M6-03 持久化主题、缩放、密度、减少动态与压缩/解压偏好。
 - [~] M6-04 实现单实例、文件关联声明、双击打开路由和系统通知；待安装环境实测关联注册。
-- [~] M6-05 实现 Windows 右键高频操作 DLL 和受限 token 交接；稀疏 MSIX 注册仍待完成，不作为 NSIS/MSI RC1 的发布前置条件。
-- [ ] M6-06 验证 Windows 安装、升级、卸载、关联注册/清理、右键菜单和路径行为。
+- [x] M6-05 已实现 Windows 右键高频操作 DLL、受限 token 交接、`desktop5` 稀疏 MSIX 清单、标准 COM 导出和 NSIS 注册/卸载钩子；已在真实 Windows 11 Explorer 验收文件及文件夹的一级 QZip 菜单，并在文件菜单中确认六个子命令可见。MSI 仍不提供现代右键菜单，作为 RC1 已知问题披露。
+- [~] M6-06 已通过本机 NSIS 安装、Shell 包注册和真实 Explorer 右键菜单验收；干净 Windows 环境的升级、卸载、文件关联注册/清理、长路径及 100%/150%/200% DPI 验收待完成。
 
 ## M7：发布候选
 
-- [~] M7-01 已建立合规兼容样本清单与 SHA-256 校验脚本；7-Zip、WinRAR、Bandizip、PeaZip、Keka、系统 ZIP、tar/gzip/xz 的实际可分发样本及生产工具版本仍待补齐。
+- [~] M7-01 已生成并校验合成的 7-Zip 7Z/ZIP、Bandizip ZIP、Windows Explorer ZIP 与 Windows bsdtar TAR.XZ 样本；WinRAR、PeaZip、Keka 与 GNU tar 样本仍因本机生产工具缺失而阻塞。
 - [ ] M7-02 完成性能基线：启动、首页交互、空闲内存、大列表、进度事件和异常恢复。
-- [~] M7-03 已增加每次 Sidecar 调用的双文件 SHA-256 验证、暂存提交、重解析点/磁盘空间防护与对应单元测试；完整恶意样本、密码日志与临时文件矩阵待补。
-- [~] M7-04 已本地生成并校验 Windows x64 RC 的 NSIS、MSI、便携 ZIP、校验和和 portable Sidecar；可信 Authenticode 签名门禁已验证。尚未接入真实签名凭据或生成正式公开资产；SBOM 属于后续发布增强项。
+- [~] M7-03 已增加每次 Sidecar 调用的双文件 SHA-256 验证、暂存提交、重解析点/磁盘空间防护与对应单元测试；加密创建后的完整性测试现会复用仅在内存中的密码。完整恶意样本、密码日志与临时文件矩阵待补。
+- [~] M7-04 已本地生成并校验 Windows x64 RC 的 NSIS、MSI、便携 ZIP、校验和和 portable Sidecar；已在 Shell 修复后重新构建 NSIS/MSI，可信 Authenticode 签名门禁已验证。尚未接入真实签名凭据或生成正式公开资产；SBOM 属于后续发布增强项。
 - [~] M7-05 已完成 README、隐私说明、卸载说明、已知问题、变更记录、RC 验收记录和标签触发的 GitHub prerelease 工作流；必须配置受信任签名秘密后才会创建公开 Release。
 - [~] M7-06 已建立 RC1 验收记录与已知问题边界；尚未执行完整 V1.0 总验收。
 
 ### RC1 发布前剩余动作（按优先级）
 
-- [ ] R1-01 在干净 Windows 11 x64 账户完成 NSIS/MSI 安装、升级、卸载、关联、右键菜单和 DPI 100%/150%/200% 验收，保存截图或录屏。
+- [~] R1-01 已提供 Windows Sandbox 隔离验收配置、自动安装/卸载记录脚本和结果目录，并已在本机 Windows 11 完成 NSIS 安装、Shell 包注册及真实 Explorer 菜单可见性验收；仍须在干净 Sandbox 环境执行安装、升级、卸载、文件关联清理和 DPI 100%/150%/200% 验收。
 - [ ] R1-02 完成创建、解压、取消、错误密码、路径、链接、炸弹、磁盘不足、文件占用和临时文件清理的安全回归。
 - [ ] R1-03 补齐兼容样本、生产工具版本和 SHA-256，通过 `scripts/verify-compat-fixtures.ps1`，并记录性能基线及原始数据。
 - [ ] R1-04 在 GitHub 仓库配置 `WINDOWS_PFX_BASE64`、`WINDOWS_PFX_PASSWORD` 和 `QZIP_WINDOWS_PUBLISHER`，验证受信任签名及失败关闭的发布工作流。

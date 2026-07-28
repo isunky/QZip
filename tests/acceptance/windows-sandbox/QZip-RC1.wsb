@@ -1,0 +1,19 @@
+<Configuration>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>D:\AICode\QZip</HostFolder>
+      <SandboxFolder>C:\QZip</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>D:\AICode\QZip\artifacts\acceptance\windows-sandbox</HostFolder>
+      <SandboxFolder>C:\QZipResults</SandboxFolder>
+      <ReadOnly>false</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\QZip\tests\acceptance\windows-sandbox\run-rc1-sandbox-acceptance.ps1</Command>
+  </LogonCommand>
+  <Networking>Disable</Networking>
+  <ClipboardRedirection>Enable</ClipboardRedirection>
+</Configuration>

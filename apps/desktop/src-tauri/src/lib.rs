@@ -279,6 +279,38 @@ fn detect(path: &Path) -> ArchiveFormat {
     }
     ArchiveFormat::Unknown
 }
+fn format_extension(format: ArchiveFormat) -> &'static str {
+    match format {
+        ArchiveFormat::SevenZip => "7z",
+        ArchiveFormat::Zip => "zip",
+        ArchiveFormat::Tar => "tar",
+        ArchiveFormat::TarGz => "tar.gz",
+        ArchiveFormat::TarXz => "tar.xz",
+        _ => "7z",
+    }
+}
+fn unique_path(parent: &Path, stem: &str, extension: &str) -> PathBuf {
+    let candidate = parent.join(format!("{stem}.{extension}"));
+    if !candidate.exists() {
+        return candidate;
+    }
+    for index in 1..10_000 {
+        let candidate = parent.join(format!("{stem} ({index}).{extension}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    parent.join(format!("{stem}-{}.{}", Uuid::new_v4(), extension))
+}
+fn input_parent(path: &Path) -> PathBuf {
+    if path.is_dir() {
+        path.parent().unwrap_or(path).to_path_buf()
+    } else {
+        path.parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf()
+    }
+}
 fn archive_fingerprint(path: &Path) -> String {
     std::fs::metadata(path)
         .map(|metadata| {
@@ -313,6 +345,56 @@ fn pick_input_paths(archives_only: bool) -> Vec<PathBuf> {
         dialog = dialog.add_filter("压缩包", &["7z", "zip", "rar", "tar", "gz", "xz", "bz2"]);
     }
     dialog.pick_files().unwrap_or_default()
+}
+#[tauri::command]
+fn pick_input_folder() -> Option<PathBuf> {
+    rfd::FileDialog::new().pick_folder()
+}
+#[tauri::command]
+fn suggest_create_output(
+    inputs: Vec<PathBuf>,
+    format: ArchiveFormat,
+) -> Result<PathBuf, CommandErrorDto> {
+    let first = inputs.first().ok_or_else(|| {
+        CommandErrorDto::from(ArchiveError::invalid_option(
+            "inputs",
+            "请先选择要压缩的文件或文件夹",
+        ))
+    })?;
+    let parent = input_parent(first);
+    let stem = if inputs.len() == 1 {
+        first
+            .file_stem()
+            .or_else(|| first.file_name())
+            .and_then(|v| v.to_str())
+            .unwrap_or("新建压缩包")
+    } else {
+        "压缩文件"
+    };
+    Ok(unique_path(&parent, stem, format_extension(format)))
+}
+#[tauri::command]
+fn suggest_extract_output(archive: PathBuf, named: bool) -> Result<PathBuf, CommandErrorDto> {
+    let parent = archive.parent().ok_or_else(|| {
+        CommandErrorDto::from(ArchiveError::new(
+            ArchiveErrorCode::InvalidRequest,
+            "压缩包路径无效",
+        ))
+    })?;
+    if !named {
+        return Ok(parent.to_path_buf());
+    }
+    let file_name = archive
+        .file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or("解压结果");
+    let stem = [
+        ".tar.gz", ".tar.xz", ".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2",
+    ]
+    .iter()
+    .find_map(|suffix| file_name.strip_suffix(suffix))
+    .unwrap_or(file_name);
+    Ok(parent.join(stem))
 }
 #[tauri::command]
 async fn scan_input_paths(paths: Vec<PathBuf>) -> Result<ScanResult, CommandErrorDto> {
@@ -565,13 +647,17 @@ fn reset_app_settings(state: State<'_, AppState>, app: AppHandle) -> Result<AppS
 }
 #[tauri::command]
 fn get_integration_status() -> IntegrationStatus {
+    #[cfg(target_os = "windows")]
+    let registered = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", "if (Get-AppxPackage -Name 'app.qzip.desktop.shell' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"])
+        .status().is_ok_and(|status| status.success());
+    #[cfg(not(target_os = "windows"))]
+    let registered = false;
     IntegrationStatus {
         platform: std::env::consts::OS.to_owned(),
         file_associations_declared: cfg!(target_os = "windows"),
-        // The signed sparse-package installer is intentionally opt-in. This
-        // status prevents the UI from claiming shell integration is active.
         modern_context_menu_available: cfg!(target_os = "windows"),
-        modern_context_menu_registered: false,
+        modern_context_menu_registered: registered,
         updater_configured: cfg!(feature = "official-updater"),
         distribution: if cfg!(feature = "official-updater") {
             "official-release".to_owned()
@@ -680,6 +766,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_backend_capabilities,
             pick_input_paths,
+            pick_input_folder,
+            suggest_create_output,
+            suggest_extract_output,
             scan_input_paths,
             prepare_archive_session,
             list_archive_entries,

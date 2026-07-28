@@ -1,0 +1,18 @@
+﻿{
+    "schemaVersion":  1,
+    "recordedAt":  "2026-07-28T04:16:08.1345050Z",
+    "executable":  "D:\\AICode\\QZip\\target\\release\\qzip-desktop.exe",
+    "machine":  {
+                    "name":  "WORK",
+                    "os":  "Microsoft Windows 11 Pro",
+                    "memoryBytes":  17063325696
+                },
+    "iterations":  [
+                       {
+                           "launchMilliseconds":  3923,
+                           "workingSetBytes":  34754560
+                       }
+                   ],
+    "medianLaunchMilliseconds":  3923,
+    "medianWorkingSetBytes":  34754560
+}

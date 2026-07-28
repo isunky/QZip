@@ -69,7 +69,10 @@ bool SaveRequest(Action action, IShellItemArray* items, std::wstring* token) {
 }
 bool LaunchQZip(const std::wstring& token) {
   wchar_t module[MAX_PATH]{}; if (!GetModuleFileNameW(g_module, module, MAX_PATH)) return false;
-  std::filesystem::path executable = std::filesystem::path(module).parent_path() / L"QZip.exe";
+  // Tauri installs the resource DLL below the application directory; the
+  // executable name is the Cargo binary name, not the product display name.
+  std::filesystem::path executable = std::filesystem::path(module).parent_path().parent_path() / L"qzip-desktop.exe";
+  if (!std::filesystem::exists(executable)) executable = std::filesystem::path(module).parent_path() / L"qzip-desktop.exe";
   if (!std::filesystem::exists(executable)) return false;
   std::wstring command = L"\"" + executable.wstring() + L"\" --shell-request " + token;
   STARTUPINFOW startup{sizeof(startup)}; PROCESS_INFORMATION process{};

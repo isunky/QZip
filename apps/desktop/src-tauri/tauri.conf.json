@@ -31,6 +31,9 @@
     "active": true,
     "targets": "all",
     "icon": ["icons/icon.ico"],
+    "windows": {
+      "nsis": { "installerHooks": "./windows/qzip-shell-hooks.nsh" }
+    },
     "fileAssociations": [
       { "ext": ["7z"], "name": "7-Zip Archive", "role": "Viewer", "rank": "Alternate" },
       { "ext": ["zip"], "name": "ZIP Archive", "role": "Viewer", "rank": "Alternate" },
