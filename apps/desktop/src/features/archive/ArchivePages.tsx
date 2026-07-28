@@ -110,6 +110,31 @@ function joinOutputPath(directory: string, name: string) {
   return `${directory.replace(/[\\/]+$/, "")}${separator}${name}`;
 }
 
+function createExtension(format: ArchiveFormat) {
+  switch (format) {
+    case "sevenZip": return "7z";
+    case "zip": return "zip";
+    case "tar": return "tar";
+    case "tarGz": return "tar.gz";
+    case "tarXz": return "tar.xz";
+    default: return "7z";
+  }
+}
+
+export function suggestCreateOutputLocally(inputs: string[], format: ArchiveFormat) {
+  const first = inputs[0]?.replace(/[\\/]+$/, "");
+  if (!first) return null;
+  const split = splitOutputPath(first);
+  const leaf = split.name || "新建压缩包";
+  const lastDot = leaf.lastIndexOf(".");
+  const stem = inputs.length > 1
+    ? "压缩文件"
+    : lastDot > 0
+      ? leaf.slice(0, lastDot)
+      : leaf;
+  return joinOutputPath(split.directory, `${stem}.${createExtension(format)}`);
+}
+
 function formatType(entry: ArchiveEntry) {
   if (entry.isDirectory) return "文件夹";
   const extension = entry.displayName.split(".").pop()?.toUpperCase();
@@ -223,7 +248,20 @@ export function CreatePage({
 
   useEffect(() => {
     if (!inputs.length || !archiveClient.isTauri) return;
-    void archiveClient.suggestCreateOutput(inputs, format).then(useSuggestedOutput).catch(() => undefined);
+    const fallback = suggestCreateOutputLocally(inputs, format);
+    if (fallback) useSuggestedOutput(fallback);
+    let cancelled = false;
+    void archiveClient.suggestCreateOutput(inputs, format)
+      .then((path) => {
+        if (!cancelled) useSuggestedOutput(path);
+      })
+      .catch(() => {
+        // The local suggestion keeps the create flow usable if IPC path
+        // suggestion is temporarily unavailable.
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [format, inputs]);
 
   const start = async () => {

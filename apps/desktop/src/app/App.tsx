@@ -104,6 +104,11 @@ export function App() {
     void archiveClient.onTaskEvent((event) => {
       if (stopped) return;
       setTasks((current) => [event.task, ...current.filter((task) => task.taskId !== event.task.taskId)].sort((left, right) => right.updatedAt - left.updatedAt));
+      if (event.task.status === "completed") {
+        setToast(event.task.operation === "create" ? "压缩文件已生成。" : "任务已完成。");
+      } else if (event.task.status === "failed") {
+        setToast(`任务失败：${event.task.error?.message ?? "请在任务中心查看详情"}`);
+      }
       const currentSettings = settingsRef.current;
       const terminal = event.task.status === "completed" || event.task.status === "failed";
       const shouldNotify = terminal && currentSettings.taskNotificationsEnabled && (event.task.status === "completed" ? currentSettings.notifyOnSuccess : currentSettings.notifyOnFailure);
