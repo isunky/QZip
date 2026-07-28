@@ -1,9 +1,8 @@
 import {
-  Archive,
-  FileArchive,
-  FolderOpen,
-  ShieldCheck
-} from "lucide-react";
+  ArchiveRegular,
+  FolderOpenRegular,
+  ShieldCheckmarkRegular
+} from "@fluentui/react-icons";
 import { Button, Card } from "@qzip/ui";
 import archiveHero from "../../assets/archive-hero.png";
 
@@ -52,7 +51,7 @@ export function HomePage({ onCreate, onOpenArchive, onUnavailable }: HomePagePro
       <div className="qzip-home-card__actions">
         <Button
           className="qzip-home-card__action"
-          icon={<FileArchive size={28} />}
+          icon={<ArchiveRegular fontSize={29} />}
           onClick={openCreate}
         >
           压缩文件
@@ -60,18 +59,18 @@ export function HomePage({ onCreate, onOpenArchive, onUnavailable }: HomePagePro
         <Button
           className="qzip-home-card__action"
           variant="secondary"
-          icon={<FolderOpen size={29} />}
+          icon={<FolderOpenRegular fontSize={30} />}
           onClick={openArchive}
         >
           打开压缩包
         </Button>
       </div>
       <p className="qzip-home-card__format-hint">
-        <ShieldCheck size={21} aria-hidden="true" />
+        <ShieldCheckmarkRegular fontSize={22} aria-hidden="true" />
         支持 7Z、ZIP、RAR、TAR 等常用格式
       </p>
       <span className="qzip-home-card__drop-hint" aria-hidden="true">
-        <Archive size={20} />
+        <ArchiveRegular fontSize={20} />
         松开以选择处理方式
       </span>
     </Card>

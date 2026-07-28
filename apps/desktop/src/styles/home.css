@@ -1,29 +1,33 @@
 .qzip-app-shell {
-  background:
-    radial-gradient(circle at 8% 88%, color-mix(in srgb, var(--qzip-color-accent-soft) 58%, transparent) 0 16%, transparent 16.3%),
-    radial-gradient(circle at 98% 84%, color-mix(in srgb, var(--qzip-color-border-default) 52%, transparent) 0 19%, transparent 19.3%),
-    var(--qzip-color-bg-app);
+  background-color: var(--qzip-color-bg-app);
+  background-image: url("../assets/qzip-light-background.png");
+  background-position: center bottom;
+  background-repeat: no-repeat;
+  background-size: cover;
   min-height: 100vh;
   overflow: hidden;
   position: relative;
 }
 
+html[data-mode="dark"] .qzip-app-shell {
+  background-image: none;
+}
+
 .qzip-titlebar {
   align-items: center;
-  background: color-mix(in srgb, var(--qzip-color-bg-elevated) 90%, transparent);
+  background: color-mix(in srgb, var(--qzip-color-bg-elevated) 96%, transparent);
   border-bottom: 1px solid var(--qzip-color-border-default);
   display: flex;
-  height: 56px;
-  justify-content: space-between;
-  padding: 0 20px 0 24px;
+  height: 62px;
+  padding-left: 18px;
   position: relative;
-  z-index: 3;
+  user-select: none;
+  z-index: 30;
 }
 
 .qzip-brand,
 .qzip-titlebar__actions,
 .qzip-titlebar__nav-button,
-.qzip-popover__title,
 .qzip-home-card__format-hint,
 .qzip-toast {
   align-items: center;
@@ -31,20 +35,20 @@
 }
 
 .qzip-brand {
-  gap: 12px;
-}
-
-.qzip-titlebar__drag-region {
-  align-self: stretch;
-  flex: 1;
+  background: transparent;
+  border: 0;
+  color: var(--qzip-color-text-primary);
+  cursor: pointer;
+  gap: 10px;
+  padding: 0;
 }
 
 .qzip-brand__icon {
   align-items: center;
   background: linear-gradient(145deg, var(--qzip-color-accent), var(--qzip-color-accent-strong));
   border-radius: 9px;
-  box-shadow: 0 6px 12px color-mix(in srgb, var(--qzip-color-accent) 22%, transparent);
-  color: white;
+  box-shadow: 0 5px 12px color-mix(in srgb, var(--qzip-color-accent) 22%, transparent);
+  color: #fff;
   display: inline-flex;
   height: 40px;
   justify-content: center;
@@ -52,9 +56,14 @@
 }
 
 .qzip-brand__name {
-  font-size: 23px;
+  font-size: 22px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.035em;
+}
+
+.qzip-titlebar__drag-region {
+  align-self: stretch;
+  flex: 1;
 }
 
 .qzip-titlebar__actions {
@@ -62,50 +71,103 @@
 }
 
 .qzip-titlebar__nav-button {
+  border-radius: 8px;
   color: var(--qzip-color-text-primary);
   font-size: 16px;
   font-weight: 500;
-  min-height: 42px;
+  min-height: 40px;
   padding: 0 12px;
 }
 
-.qzip-titlebar__divider {
+.qzip-titlebar__nav-button[data-active="true"] {
+  background: var(--qzip-color-accent-soft);
+  color: var(--qzip-color-accent-strong);
+}
+
+.qzip-titlebar__separator {
   background: var(--qzip-color-border-default);
   height: 24px;
-  margin: 0 8px;
+  margin: 0 5px 0 8px;
   width: 1px;
+}
+
+.qzip-window-controls {
+  align-self: stretch;
+  display: flex;
+}
+
+.qzip-window-controls button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--qzip-color-text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  transition: background-color var(--qzip-motion-fast) var(--qzip-motion-ease);
+  width: 44px;
+}
+
+.qzip-window-controls button:hover {
+  background: var(--qzip-color-bg-subtle);
+}
+
+.qzip-window-controls__close:hover {
+  background: #c42b1c !important;
+  color: #fff;
 }
 
 .qzip-app-content {
   align-items: flex-start;
   display: flex;
-  height: calc(100vh - 56px);
+  height: calc(100vh - 62px);
   justify-content: flex-start;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: clamp(24px, 4vh, 40px) clamp(28px, 8vw, 120px) 44px;
+  overflow: auto;
+  padding: 24px 44px 28px;
   scrollbar-gutter: stable;
+}
+
+.qzip-app-content[data-page="home"] {
+  align-items: center;
+  padding-inline: clamp(32px, 8vw, 112px);
+}
+
+.qzip-app-content[data-page="create"],
+.qzip-app-content[data-page="extract"] {
+  padding-inline: clamp(30px, 9vw, 108px);
+}
+
+.qzip-app-content[data-page="browser"] {
+  padding: 22px 26px 18px;
+}
+
+.qzip-app-content[data-page="tasks"],
+.qzip-app-content[data-page="settings"] {
+  overflow: hidden;
+  padding: 0;
 }
 
 .qzip-home-card {
   align-items: center;
-  background: color-mix(in srgb, var(--qzip-color-bg-surface) 94%, transparent);
+  align-self: center;
+  background: color-mix(in srgb, var(--qzip-color-bg-surface) 95%, transparent);
+  border-radius: 28px;
+  box-shadow: 0 14px 34px rgb(27 42 34 / 8%);
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  max-height: none;
-  max-width: 1120px;
-  min-height: min(792px, calc(100vh - 190px));
+  justify-content: center;
+  margin: 0 auto;
+  max-width: 940px;
+  height: min(650px, 100%);
+  min-height: min(650px, 100%);
   overflow: hidden;
-  padding: 76px 28px 44px;
+  padding: 24px 28px;
   position: relative;
   text-align: center;
-  transform: translateY(48px);
   transition: border-color var(--qzip-motion-base) var(--qzip-motion-ease),
     background-color var(--qzip-motion-base) var(--qzip-motion-ease);
   width: 100%;
-  border-radius: 40px;
 }
 
 .qzip-home-card[data-dragging="true"] {
@@ -114,62 +176,60 @@
 }
 
 .qzip-home-card__hero {
-  height: clamp(220px, 30vh, 330px);
-  margin-bottom: clamp(10px, 2vh, 20px);
-  position: relative;
-  width: clamp(260px, 32vw, 370px);
-}
-
-.qzip-home-card__hero::before {
-  background: color-mix(in srgb, var(--qzip-color-accent-soft) 68%, transparent);
-  border-radius: 999px;
-  content: "";
-  inset: 12% 8% 2%;
-  position: absolute;
-  z-index: 0;
+  height: clamp(190px, 33vh, 260px);
+  margin-bottom: 6px;
+  width: clamp(250px, 34vw, 350px);
 }
 
 .qzip-home-card__illustration {
   height: 100%;
   object-fit: contain;
-  position: relative;
-  transform: scale(1.24);
+  transform: scale(1.45);
   width: 100%;
-  z-index: 1;
 }
 
 .qzip-home-card h1 {
-  font-size: clamp(38px, 4.5vw, 64px);
-  letter-spacing: 0.03em;
-  line-height: 1.16;
+  font-size: clamp(38px, 4.5vw, 52px);
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  line-height: 1.2;
   margin: 0;
+}
+
+.qzip-home-card__hero,
+.qzip-home-card > h1,
+.qzip-home-card__subtitle,
+.qzip-home-card__actions,
+.qzip-home-card__format-hint {
+  position: relative;
+  top: -14px;
 }
 
 .qzip-home-card__subtitle {
   color: var(--qzip-color-text-secondary);
-  font-size: clamp(18px, 2.1vw, 24px);
+  font-size: clamp(17px, 2vw, 21px);
   line-height: 1.5;
-  margin: 14px 0 30px;
+  margin: 8px 0 22px;
 }
 
 .qzip-home-card__actions {
   display: grid;
-  gap: 28px;
-  grid-template-columns: repeat(2, minmax(230px, 310px));
+  gap: 22px;
+  grid-template-columns: repeat(2, minmax(235px, 300px));
   justify-content: center;
-  width: min(100%, 650px);
+  width: min(100%, 610px);
 }
 
 .qzip-home-card__action {
   font-size: 20px;
-  min-height: 100px;
+  min-height: 72px;
 }
 
 .qzip-home-card__format-hint {
   color: var(--qzip-color-text-secondary);
-  font-size: 16px;
-  gap: 10px;
-  margin: 38px 0 0;
+  font-size: 15px;
+  gap: 9px;
+  margin: 22px 0 0;
 }
 
 .qzip-home-card__format-hint svg {
@@ -180,142 +240,16 @@
   align-items: center;
   color: var(--qzip-color-accent-strong);
   display: none;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   gap: 8px;
-  inset: auto 0 24px;
+  inset: auto 0 14px;
   justify-content: center;
   position: absolute;
 }
 
 .qzip-home-card[data-dragging="true"] .qzip-home-card__drop-hint {
   display: inline-flex;
-}
-
-.qzip-popover {
-  background: var(--qzip-color-bg-elevated);
-  border: 1px solid var(--qzip-color-border-default);
-  border-radius: var(--qzip-radius-lg);
-  box-shadow: var(--qzip-shadow-lg);
-  padding: 16px;
-  position: absolute;
-  right: 24px;
-  top: 68px;
-  width: min(360px, calc(100vw - 48px));
-  z-index: 10;
-}
-
-.qzip-popover__header {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.qzip-popover__title {
-  font-size: 16px;
-  font-weight: 700;
-  gap: 8px;
-}
-
-.qzip-popover__section {
-  border-top: 1px solid var(--qzip-color-divider);
-  display: grid;
-  gap: 11px;
-  padding: 16px 0 4px;
-}
-
-.qzip-popover__label {
-  color: var(--qzip-color-text-secondary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.qzip-mode-icons {
-  color: var(--qzip-color-text-tertiary);
-  display: flex;
-  justify-content: space-around;
-  margin-top: -5px;
-}
-
-.qzip-theme-grid {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.qzip-theme-swatch {
-  align-items: center;
-  background: transparent;
-  border: 1px solid var(--qzip-color-border-default);
-  border-radius: var(--qzip-radius-sm);
-  color: var(--qzip-color-text-secondary);
-  cursor: pointer;
-  display: flex;
-  font: inherit;
-  font-size: 13px;
-  gap: 8px;
-  min-height: 36px;
-  padding: 5px 8px;
-  text-align: left;
-}
-
-.qzip-theme-swatch[aria-checked="true"] {
-  background: var(--qzip-color-accent-soft);
-  border-color: var(--qzip-color-accent);
-  color: var(--qzip-color-text-primary);
-}
-
-.qzip-theme-swatch:focus-visible {
-  outline: 2px solid var(--qzip-color-accent);
-  outline-offset: 2px;
-}
-
-.qzip-theme-swatch__dot {
-  align-items: center;
-  background: var(--qzip-theme-preview);
-  border-radius: 999px;
-  color: white;
-  display: inline-flex;
-  height: 19px;
-  justify-content: center;
-  width: 19px;
-}
-
-.qzip-theme-swatch[data-theme="mint"] { --qzip-theme-preview: #42b883; }
-.qzip-theme-swatch[data-theme="ocean"] { --qzip-theme-preview: #3b8ed0; }
-.qzip-theme-swatch[data-theme="lavender"] { --qzip-theme-preview: #9366c7; }
-.qzip-theme-swatch[data-theme="amber"] { --qzip-theme-preview: #dfa536; }
-.qzip-theme-swatch[data-theme="coral"] { --qzip-theme-preview: #dd6f61; }
-.qzip-theme-swatch[data-theme="cyan-slate"] { --qzip-theme-preview: #4d9d9a; }
-
-.qzip-empty-state {
-  align-items: center;
-  color: var(--qzip-color-text-secondary);
-  display: flex;
-  flex-direction: column;
-  font-size: 13px;
-  gap: 7px;
-  padding: 17px 8px 10px;
-  text-align: center;
-}
-
-.qzip-empty-state p {
-  color: var(--qzip-color-text-primary);
-  font-size: 15px;
-  font-weight: 600;
-  margin: 4px 0 0;
-}
-
-.qzip-empty-state__icon {
-  align-items: center;
-  background: var(--qzip-color-accent-soft);
-  border-radius: 999px;
-  color: var(--qzip-color-accent);
-  display: inline-flex;
-  height: 46px;
-  justify-content: center;
-  width: 46px;
 }
 
 .qzip-toast {
@@ -331,7 +265,7 @@
   padding: 7px 7px 7px 14px;
   position: fixed;
   transform: translateX(-50%);
-  z-index: 20;
+  z-index: 40;
 }
 
 .qzip-toast > svg {
@@ -340,7 +274,7 @@
 
 @media (max-width: 899px) {
   .qzip-titlebar {
-    padding: 0 12px 0 16px;
+    padding-left: 14px;
   }
 
   .qzip-titlebar__nav-button {
@@ -353,98 +287,57 @@
     display: none;
   }
 
-  .qzip-titlebar__divider {
-    margin: 0 2px;
+  .qzip-window-controls button {
+    width: 40px;
   }
 
   .qzip-app-content {
-    padding: 28px 24px 24px;
+    padding: 18px 22px 20px;
   }
 
-  .qzip-home-card {
-    min-height: calc(100vh - 126px);
-    padding: 28px 22px;
-  }
-
-  .qzip-home-card__actions {
-    gap: 16px;
-    grid-template-columns: 1fr;
-    max-width: 360px;
-  }
-
-  .qzip-home-card__format-hint {
-    font-size: 14px;
-    margin-top: 24px;
+  .qzip-app-content[data-page="tasks"],
+  .qzip-app-content[data-page="settings"] {
+    padding: 0;
   }
 }
 
-@media (max-height: 800px) and (min-width: 900px) {
+@media (max-height: 620px) {
   .qzip-app-content {
-    padding-bottom: 24px;
-    padding-top: 24px;
+    padding-block: 14px;
   }
 
   .qzip-home-card {
-    min-height: min(590px, calc(100vh - 118px));
-    padding: 30px 28px;
-    transform: none;
+    padding: 14px 24px;
   }
 
   .qzip-home-card__hero {
-    height: 210px;
-    width: 260px;
-  }
-
-  .qzip-home-card__action {
-    min-height: 64px;
-  }
-}
-
-@media (max-height: 620px) and (min-width: 700px) {
-  .qzip-app-content {
-    padding: 16px 24px 12px;
-  }
-
-  .qzip-home-card {
-    min-height: calc(100vh - 84px);
-    padding: 16px 24px;
-    transform: none;
-  }
-
-  .qzip-home-card__hero {
-    height: 150px;
-    margin-bottom: 8px;
-    width: 205px;
+    height: 120px;
+    margin-bottom: 0;
+    width: 180px;
   }
 
   .qzip-home-card h1 {
-    font-size: 40px;
+    font-size: 34px;
   }
 
   .qzip-home-card__subtitle {
-    font-size: 16px;
-    margin: 6px 0 14px;
+    font-size: 15px;
+    margin: 4px 0 12px;
   }
 
   .qzip-home-card__actions {
     gap: 16px;
-    grid-template-columns: repeat(2, minmax(200px, 260px));
-    max-width: 540px;
+    grid-template-columns: repeat(2, minmax(190px, 250px));
   }
 
   .qzip-home-card__action {
-    font-size: 17px;
-    min-height: 56px;
+    font-size: 16px;
+    min-height: 50px;
   }
 
   .qzip-home-card__format-hint {
     font-size: 12px;
-    margin-top: 14px;
-  }
-
-  .qzip-home-card__format-hint svg {
-    height: 16px;
-    width: 16px;
+    margin-top: 12px;
   }
 }
 

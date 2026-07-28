@@ -13,6 +13,43 @@ import { resolveThemeMode, useAppearanceStore } from "../stores/appearance";
 
 type AppPage = Page | "settings";
 const demoSession: ArchiveSession = { sessionId: "demo-session", format: "zip", compressedSize: 2_189_122, estimatedUncompressedSize: 4_383_462, entryCount: 5, encrypted: false, risks: [] };
+const demoTasks: TaskSnapshot[] = [
+  {
+    taskId: "demo-active",
+    operation: "create",
+    status: "running",
+    displayName: "项目资料.7z",
+    output: "D:\\QZip\\项目资料.7z",
+    createdAt: Date.now() - 86_000,
+    updatedAt: Date.now(),
+    progress: { phase: "正在压缩", percent: 68, currentEntry: "素材\\产品效果图.png", elapsedSeconds: 86 },
+    warnings: [],
+    retryable: false
+  },
+  {
+    taskId: "demo-completed",
+    operation: "extract",
+    status: "completed",
+    displayName: "设计交付.zip",
+    output: "D:\\QZip\\设计交付",
+    createdAt: Date.now() - 420_000,
+    updatedAt: Date.now() - 305_000,
+    progress: { phase: "已完成", percent: 100, elapsedSeconds: 115 },
+    warnings: [],
+    retryable: false
+  },
+  {
+    taskId: "demo-failed",
+    operation: "extract",
+    status: "failed",
+    displayName: "加密备份.7z",
+    createdAt: Date.now() - 610_000,
+    updatedAt: Date.now() - 606_000,
+    error: { code: "WRONG_PASSWORD", message: "密码错误，请重新输入后重试。", recoverable: true },
+    warnings: [],
+    retryable: true
+  }
+];
 
 function getSystemDark(): boolean { return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false; }
 
@@ -21,12 +58,13 @@ export function App() {
   const [systemDark, setSystemDark] = useState(getSystemDark);
   const [toast, setToast] = useState<string | null>(null);
   const [page, setPage] = useState<AppPage>("home");
-  const [tasks, setTasks] = useState<TaskSnapshot[]>([]);
+  const [tasks, setTasks] = useState<TaskSnapshot[]>(() => archiveClient.isTauri ? [] : demoTasks);
   const [archive, setArchive] = useState("D:\\QZip\\示例压缩包.zip");
   const [session, setSession] = useState<ArchiveSession>(demoSession);
   const [settings, setSettings] = useState<AppSettings>(defaultAppSettings);
   const [createInputs, setCreateInputs] = useState<string[]>([]);
   const [createFormat, setCreateFormat] = useState<"sevenZip" | "zip" | undefined>();
+  const [selectedEntries, setSelectedEntries] = useState<string[]>([]);
   const settingsRef = useRef(settings);
   const resolvedMode = resolveThemeMode(mode, systemDark);
 
@@ -106,7 +144,9 @@ export function App() {
       const selected = archiveClient.isTauri ? await archiveClient.pickInputPaths(true) : [archive];
       if (!selected[0]) return;
       const target = selected[0]; setArchive(target);
-      setSession(archiveClient.isTauri ? await archiveClient.prepare(target) : demoSession); setPage("browser");
+      setSession(archiveClient.isTauri ? await archiveClient.prepare(target) : demoSession);
+      setSelectedEntries([]);
+      setPage("extract");
     } catch (reason) { setToast(String(reason)); }
   }
   function addTask(task: TaskSnapshot) { setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]); setToast("任务已加入队列，可在任务中心查看进度。"); }
@@ -114,10 +154,10 @@ export function App() {
   function currentPage() {
     if (page === "settings") return <SettingsPage settings={settings} onBack={goHome} onChanged={applySettings} onToast={setToast} />;
     if (page === "create") return <CreatePage onBack={goHome} onCreated={addTask} defaultFormat={createFormat ?? settings.defaultFormat} defaultProfile={settings.compressionProfile} defaultTestAfterCreate={settings.testAfterCreate} initialInputs={createInputs} />;
-    if (page === "extract") return <ExtractPage archive={archive} session={session} onBack={goHome} onBrowse={() => setPage("browser")} onCreated={addTask} defaultConflictPolicy={settings.conflictPolicy} />;
-    if (page === "browser") return <BrowserPage archive={archive} session={session} onBack={() => setPage("extract")} onExtract={() => setPage("extract")} />;
+    if (page === "extract") return <ExtractPage archive={archive} session={session} selectedEntries={selectedEntries} onBack={goHome} onBrowse={() => setPage("browser")} onCreated={addTask} defaultConflictPolicy={settings.conflictPolicy} />;
+    if (page === "browser") return <BrowserPage archive={archive} session={session} onBack={() => setPage("extract")} onClose={goHome} onExtract={(entries) => { setSelectedEntries(entries ?? []); setPage("extract"); }} onCreated={addTask} />;
     if (page === "tasks") return <TaskCenter tasks={tasks} onBack={goHome} onClear={() => { if (archiveClient.isTauri) void archiveClient.clearCompleted().then(() => setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)))); else setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status))); }} onCancel={(taskId) => { if (archiveClient.isTauri) void archiveClient.cancel(taskId); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "cancelled", updatedAt: Date.now() } : task)); }} onRetry={(taskId, password) => { if (archiveClient.isTauri) void archiveClient.retry(taskId, password).then(addTask); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "queued", updatedAt: Date.now(), error: undefined } : task)); }} />;
     return <HomePage onCreate={() => { setCreateInputs([]); setCreateFormat(undefined); setPage("create"); }} onOpenArchive={() => void openArchive()} />;
   }
-  return <main className="qzip-app-shell"><Header onTasksClick={() => setPage("tasks")} onSettingsClick={() => setPage("settings")} /><section className="qzip-app-content">{currentPage()}</section>{toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}</main>;
+  return <main className="qzip-app-shell"><Header activePage={page} onHomeClick={goHome} onTasksClick={() => setPage("tasks")} onSettingsClick={() => setPage("settings")} /><section className="qzip-app-content" data-page={page}>{currentPage()}</section>{toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}</main>;
 }
