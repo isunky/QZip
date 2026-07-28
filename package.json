@@ -26,6 +26,7 @@
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build:web && pnpm run rust:check",
     "tauri:build:debug": "pnpm --filter @qzip/desktop tauri build --debug --no-bundle",
     "tauri:bundle:windows": "powershell -ExecutionPolicy Bypass -File scripts/bundle-windows.ps1",
+    "tauri:bundle:nsis": "powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1",
     "release:prepare:windows": "powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version 1.0.0-rc.1",
     "release:verify": "powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version 1.0.0-rc.1"
   },

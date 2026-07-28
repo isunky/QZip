@@ -28,8 +28,7 @@
 }
 
 .qzip-button:focus-visible,
-.qzip-input-field__control:focus-within,
-.qzip-segmented-control__option:focus-visible {
+.qzip-input-field__control:focus-within {
   outline: 2px solid var(--qzip-color-accent);
   outline-offset: 2px;
 }
@@ -173,31 +172,37 @@
   border: 1px solid var(--qzip-color-border-default);
   border-radius: var(--qzip-radius-md);
   display: flex;
-  min-height: 40px;
-  overflow: hidden;
+  gap: 3px;
+  min-height: 44px;
+  overflow: visible;
+  padding: 3px;
 }
 
 .qzip-segmented-control__option {
   background: transparent;
-  border: 0;
-  border-right: 1px solid var(--qzip-color-border-default);
+  border: 1px solid transparent;
+  border-radius: calc(var(--qzip-radius-md) - 3px);
   color: var(--qzip-color-text-secondary);
   cursor: pointer;
   flex: 1;
   font: inherit;
   font-size: 14px;
-  min-height: 38px;
+  min-height: 36px;
   padding: 0 12px;
-}
-
-.qzip-segmented-control__option:last-child {
-  border-right: 0;
+  position: relative;
 }
 
 .qzip-segmented-control__option[aria-checked="true"] {
   background: var(--qzip-color-bg-elevated);
-  box-shadow: inset 0 0 0 1px var(--qzip-color-accent);
+  border-color: var(--qzip-color-accent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--qzip-color-accent) 18%, transparent);
   color: var(--qzip-color-accent-strong);
+}
+
+.qzip-segmented-control__option:focus-visible {
+  outline: 2px solid var(--qzip-color-accent-strong);
+  outline-offset: 1px;
+  z-index: 1;
 }
 
 .qzip-segmented-control__option:disabled {

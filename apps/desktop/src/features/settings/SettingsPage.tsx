@@ -103,7 +103,7 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
 
       <main className="qzip-settings__content">
         <header className="qzip-settings__header">
-          <div><h2>偏好设置</h2><p>设置仅保存在本机；QZip 不收集遥测数据。</p></div>
+          <h2>偏好设置</h2>
           <Button variant="tertiary" icon={<ArrowResetRegular fontSize={19} />} onClick={() => void settingsClient.reset().then(onChanged).then(() => onToast("设置已恢复默认值。"))}>恢复默认设置</Button>
         </header>
 

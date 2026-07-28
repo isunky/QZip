@@ -1,58 +1,33 @@
-# QZip M0 Design QA
+# Settings independent-selection design QA
 
-**Comparison target**
+## Comparison target
 
-- Source visual truth: `PIC/ChatGPT Image 2026年7月27日 10_36_35 (1).png`
-- Implementation: `http://localhost:1420/`
-- Implementation screenshot: `tests/e2e/qzip-home-actual.png`
-- Combined evidence: `tests/e2e/qzip-home-comparison.png`
-- Viewport and CSS size: `1448 x 1086`, `deviceScaleFactor: 1`
-- Source and implementation pixels: both `1448 x 1086`; no density normalization was required.
-- State: light mode, mint accent, home screen, no popover or toast open.
+- Source: latest user-reported settings screenshot (`C:/Users/HB-SUN~1/AppData/Local/Temp/codex-clipboard-2ac714f2-d95d-4047-88a8-eaf92afd0d67.png`).
+- Implementation: `http://127.0.0.1:1420/`, Settings > Appearance, light mode and mint accent.
+- Implementation evidence: `artifacts/design-qa/settings-segmented-pill-style.png`.
+- Combined comparison: `artifacts/design-qa/settings-source-vs-pill-style.png`.
+- Comparison crops were normalized to the same visible settings region before visual review.
 
-## Findings
+## Result
 
-No actionable P0, P1, or P2 differences remain in the M0 home screen.
+- P1 fixed: the shared-edge segmented style was replaced with independent inset selection cards.
+- Every selected item now owns a complete one-pixel accent border, a small internal radius, and a subtle elevation shadow.
+- The control group uses visible overflow and a three-pixel inner gap, so first and final selections cannot be clipped by the parent edge.
+- Keyboard focus uses a separate two-pixel outline and does not affect layout dimensions.
 
-- [P3] Illustration micro-detail differs from the source image.
-  - Location: `.qzip-home-card__illustration`.
-  - Evidence: the generated archive asset matches the pastel mint pouch, folder, leaf, transparency, and centered composition of the visual target, but intentionally does not reproduce the target's small sparkle marks and `ZIP` badge verbatim.
-  - Impact: minor decorative difference only; hierarchy, scale, and the soft green visual language remain aligned.
-  - Follow-up: replace with a licensed final brand illustration when one is available.
+## Verification
 
-## Required fidelity surfaces
-
-- **Fonts and typography:** system Chinese UI font stack, bold 64px main heading, secondary text, button copy, and header hierarchy were checked against the source. The main heading and controls remain single-line at the reference viewport.
-- **Spacing and layout rhythm:** the card is `1118 x 792` at the reference viewport and begins at `x=165, y=218`, matching the source composition. Card radius, vertical rhythm, two-button grid, and wide empty breathing space were visually compared.
-- **Colors and visual tokens:** light/mint state uses the shared `@qzip/ui` tokens for neutral surface, mint gradient primary CTA, mint border CTA, divider, and shadow. Dark mode plus ocean accent was also rendered and checked.
-- **Image quality and asset fidelity:** `apps/desktop/src/assets/archive-hero.png` is a transparent raster asset with no opaque background or halo. It was generated for this project to match the reference art direction; standard interface icons use Lucide.
-- **Copy and content:** header, headline, subtitle, CTAs, and supported-format hint match the source wording and intent. M0 actions clearly announce deferred file handling instead of simulating an unavailable workflow.
+- Checked all settings segmented controls: theme, accent, UI scale, density, default archive format, compression level, and conflict policy.
+- Exercised a final-position option (`青灰`) and confirmed a complete `1px solid` active border, visible overflow, and the expected shadow.
+- Restored the default mint accent after the interaction check.
+- UI and desktop TypeScript checks, desktop Vitest (`7/7`), and the production web build pass.
+- Browser console: no errors.
 
 ## Comparison history
 
-1. Initial comparison found P2 visual drift: the main card sat too high, its corners were too tight, and CTA height was materially smaller than the source.
-   - Fix: adjusted the desktop card offset, set the 40px home-card radius, increased the top rhythm, and increased CTA height to 100px.
-   - Post-fix evidence: `tests/e2e/qzip-home-comparison.png` shows aligned card bounds and control proportions at `1448 x 1086`.
-2. Minimum-window check at `760 x 520` found P2 vertical clipping caused by the narrow-layout stacked CTA rule.
-   - Fix: added a short-window compact layout with a smaller illustration, condensed type scale, and two-column actions for the PRD minimum width.
-   - Post-fix evidence: browser check reported `overflowX: false` and `overflowY: false` at `760 x 520`.
-
-## Interaction and runtime evidence
-
-- Primary CTA displays the M0 milestone notice.
-- Task button opens the empty task panel.
-- Settings opens the appearance panel; light/dark/system modes and all six accent swatches are wired. Browser check confirmed `data-mode=dark` and `data-accent=ocean`.
-- Browser console check: no errors.
-
-## Implementation checklist
-
-- [x] Compare the reference and rendered home screen at the same viewport.
-- [x] Correct P0-P2 visual drift found in the comparison loop.
-- [x] Verify theme, task panel, primary CTA feedback, and minimum-window layout.
-- [x] Preserve the final comparison and implementation screenshots.
-
-## Follow-up polish
-
-- [P3] Swap the generated archive illustration for the final licensed/owned brand illustration if one is produced later.
+1. Before: selected borders shared the group edge and visually disappeared at the first item's rounded left edge.
+2. First correction retained the shared-edge visual model and did not fully remove the perceived clipping in the user's environment.
+3. Final correction changes the component model: each selected option is inset from the group surface and renders its own complete border.
+4. After: the combined comparison shows consistent breathing room and an uninterrupted border on all four sides of each selected item.
 
 final result: passed

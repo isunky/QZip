@@ -1,9 +1,12 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
 };
+
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 use archive_core::{
     ArchiveBackend, ArchiveEntry, ArchiveError, ArchiveErrorCode, ArchiveFormat,
@@ -36,6 +39,8 @@ struct AppState {
 
 const SETTINGS_STORE: &str = "settings.json";
 const SETTINGS_KEY: &str = "appSettings";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -648,7 +653,12 @@ fn get_integration_status() -> IntegrationStatus {
     #[cfg(target_os = "windows")]
     let registered = Command::new("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command", "if (Get-AppxPackage -Name 'app.qzip.desktop.shell' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"])
-        .status().is_ok_and(|status| status.success());
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+        .is_ok_and(|status| status.success());
     #[cfg(not(target_os = "windows"))]
     let registered = false;
     IntegrationStatus {

@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
   [switch]$InstallDevCertificate,
-  [switch]$Release
+  [switch]$Release,
+  [ValidateSet('nsis', 'msi')]
+  [string[]]$Bundles = @('nsis', 'msi')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,15 +33,15 @@ if ($Release) {
   }
 }
 
-pnpm --filter @qzip/desktop tauri bundle --config tauri.windows.bundle.json
+pnpm --filter @qzip/desktop tauri bundle --bundles ($Bundles -join ',') --config tauri.windows.bundle.json
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if ($Release) {
   $bundleRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'target\release\bundle'
-  $targets = @(
-    @(Get-ChildItem (Join-Path $bundleRoot 'nsis') -Filter '*.exe' -File)
-    @(Get-ChildItem (Join-Path $bundleRoot 'msi') -Filter '*.msi' -File)
-  )
+  $targets = foreach ($bundle in $Bundles) {
+    $extension = if ($bundle -eq 'nsis') { '*.exe' } else { '*.msi' }
+    Get-ChildItem (Join-Path $bundleRoot $bundle) -Filter $extension -File
+  }
   foreach ($target in $targets) {
     & $signTool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $env:QZIP_WINDOWS_PFX_PATH /p $env:QZIP_WINDOWS_PFX_PASSWORD $target.FullName
     if ($LASTEXITCODE -ne 0) { throw "Release signing failed for $($target.FullName)." }
