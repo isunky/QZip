@@ -189,6 +189,7 @@ function RiskNotice({ risks, accepted, onAccepted }: {
 export function CreatePage({
   onBack,
   onCreated,
+  onOpenTasks,
   defaultFormat = "sevenZip",
   defaultProfile = "balanced",
   defaultTestAfterCreate = true,
@@ -196,6 +197,7 @@ export function CreatePage({
 }: {
   onBack: () => void;
   onCreated: (task: TaskSnapshot) => void;
+  onOpenTasks: () => void;
   defaultFormat?: ArchiveFormat;
   defaultProfile?: CompressionProfile;
   defaultTestAfterCreate?: boolean;
@@ -280,7 +282,7 @@ export function CreatePage({
         deleteSourcesAfterSuccess: deleteSources
       };
       onCreated(archiveClient.isTauri ? await archiveClient.create(request) : makeDemoTask("create", name || "项目资料.7z", output));
-      onBack();
+      onOpenTasks();
     } catch (reason) {
       setError(String(reason));
     } finally {
