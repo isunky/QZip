@@ -16,6 +16,8 @@
     "lint": "eslint .",
     "typecheck": "pnpm --filter @qzip/ui typecheck && pnpm --filter @qzip/desktop typecheck",
     "test": "pnpm --filter @qzip/desktop test",
+    "test:core": "pnpm --filter @qzip/desktop test && cargo test -p task-runtime -p archive-sevenzip",
+    "test:core:windows": "powershell -ExecutionPolicy Bypass -File scripts/test-core-regression.ps1",
     "rust:fmt": "cargo fmt --all -- --check",
     "rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings",
     "rust:test": "cargo test --workspace",

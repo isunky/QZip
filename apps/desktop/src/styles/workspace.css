@@ -258,6 +258,70 @@
   margin: 8px 0 0;
 }
 
+.qzip-password-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(19 32 45 / 38%);
+  backdrop-filter: blur(3px);
+}
+
+.qzip-password-prompt form {
+  width: min(400px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 26px;
+  border: 1px solid var(--qzip-border, #dbe5df);
+  border-radius: 16px;
+  background: var(--qzip-surface, #fff);
+  box-shadow: 0 18px 48px rgb(20 40 30 / 22%);
+}
+
+.qzip-password-prompt h2,
+.qzip-password-prompt p {
+  margin: 0;
+}
+
+.qzip-password-prompt p {
+  color: var(--qzip-text-secondary, #5d6b64);
+  line-height: 1.6;
+}
+
+.qzip-password-prompt input {
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--qzip-border, #cfd9d3);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.qzip-password-prompt form > div {
+  display: flex;
+  justify-content: end;
+  gap: 10px;
+}
+
+.qzip-password-prompt button {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--qzip-border, #cfd9d3);
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.qzip-password-prompt button[type="submit"] {
+  border-color: var(--qzip-primary, #28996b);
+  background: var(--qzip-primary, #28996b);
+  color: #fff;
+}
+
 .qzip-page-note {
   align-items: center;
   color: var(--qzip-color-text-secondary);

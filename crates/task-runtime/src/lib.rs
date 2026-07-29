@@ -155,7 +155,16 @@ impl TaskManager {
         self: &Arc<Self>,
         spec: TaskSpec,
         password: Option<SecretString>,
-    ) -> TaskSnapshot {
+    ) -> Result<TaskSnapshot, ArchiveError> {
+        // Tauri commands may be invoked from a synchronous command handler.  Do
+        // not let `tokio::spawn` panic (and abort the desktop process) when no
+        // runtime is active on that thread.
+        let runtime = tokio::runtime::Handle::try_current().map_err(|_| {
+            ArchiveError::new(
+                ArchiveErrorCode::Unknown,
+                "任务运行环境尚未就绪，请稍后重试",
+            )
+        })?;
         let now = now();
         let task_id = Uuid::new_v4().to_string();
         let snapshot = TaskSnapshot {
@@ -182,10 +191,10 @@ impl TaskManager {
         );
         self.emit("task.created", &task_id);
         let manager = Arc::clone(self);
-        tokio::spawn(async move {
+        runtime.spawn(async move {
             manager.run(task_id, password).await;
         });
-        snapshot
+        Ok(snapshot)
     }
     pub fn cancel(&self, task_id: &str) -> Result<(), ArchiveError> {
         let mut tasks = self.tasks.lock().expect("task lock");
@@ -194,12 +203,18 @@ impl TaskManager {
             .ok_or_else(|| ArchiveError::new(ArchiveErrorCode::InvalidRequest, "任务不存在"))?;
         match record.snapshot.status {
             TaskStatus::Queued | TaskStatus::Scanning | TaskStatus::Running => {
-                record.snapshot.status = if record.snapshot.status == TaskStatus::Queued {
+                let was_queued = record.snapshot.status == TaskStatus::Queued;
+                record.snapshot.status = if was_queued {
                     TaskStatus::Cancelled
                 } else {
                     TaskStatus::Cancelling
                 };
                 record.snapshot.updated_at = now();
+                if was_queued {
+                    record.snapshot.retryable = true;
+                    record.snapshot.error =
+                        Some(ArchiveError::new(ArchiveErrorCode::Cancelled, "任务已取消"));
+                }
                 record.cancellation.cancel();
             }
             _ => {
@@ -210,7 +225,17 @@ impl TaskManager {
             }
         }
         drop(tasks);
-        self.emit("task.updated", task_id);
+        self.emit(
+            if self.status(task_id) == Some(TaskStatus::Cancelled) {
+                "task.cancelled"
+            } else {
+                "task.updated"
+            },
+            task_id,
+        );
+        if self.status(task_id) == Some(TaskStatus::Cancelled) {
+            self.persist_history();
+        }
         Ok(())
     }
     pub fn retry(
@@ -228,9 +253,19 @@ impl TaskManager {
                 "重启后的历史记录不包含源文件位置，请重新选择文件后创建任务",
             ));
         }
+        if !matches!(
+            record.snapshot.status,
+            TaskStatus::Failed | TaskStatus::Cancelled
+        ) || !record.snapshot.retryable
+        {
+            return Err(ArchiveError::new(
+                ArchiveErrorCode::InvalidRequest,
+                "只有失败或已取消的任务可以重试",
+            ));
+        }
         let spec = record.spec.clone();
         drop(tasks);
-        Ok(self.submit(spec, password))
+        self.submit(spec, password)
     }
     pub fn clear_completed(&self) {
         self.tasks.lock().expect("task lock").retain(|_, record| {
@@ -265,6 +300,12 @@ impl TaskManager {
             .execute(&task_id, &spec, password, reporter, cancellation.clone())
             .await;
         match result {
+            Ok(_) if cancellation.is_cancelled() => self.finish(
+                &task_id,
+                TaskStatus::Cancelled,
+                vec![],
+                Some(ArchiveError::new(ArchiveErrorCode::Cancelled, "任务已取消")),
+            ),
             Ok(warnings) => self.finish(&task_id, TaskStatus::Completed, warnings, None),
             Err(error)
                 if error.code == ArchiveErrorCode::Cancelled || cancellation.is_cancelled() =>
@@ -298,10 +339,17 @@ impl TaskManager {
                 profile,
                 encrypt_headers,
                 test_after_create,
-                ..
+                delete_sources_after_success,
             } => {
+                if *delete_sources_after_success {
+                    return Err(ArchiveError::new(
+                        ArchiveErrorCode::UnsupportedOption,
+                        "当前版本尚不支持创建完成后自动删除源文件",
+                    ));
+                }
                 validate_create_destination(inputs, output)?;
-                let temporary_output = temporary_archive_path(output)?;
+                let staging = prepare_create_staging(output)?;
+                let temporary_output = staging.archive.clone();
                 let result = self
                     .backend
                     .create(
@@ -321,7 +369,10 @@ impl TaskManager {
                 let result = match result {
                     Ok(result) => result,
                     Err(error) => {
-                        let _ = fs::remove_file(&temporary_output);
+                        self.record_cleanup_warning(
+                            task_id,
+                            cleanup_create_staging(&staging.directory),
+                        );
                         return Err(error);
                     }
                 };
@@ -337,15 +388,23 @@ impl TaskManager {
                         )
                         .await;
                     if let Err(error) = test {
-                        let _ = fs::remove_file(&temporary_output);
+                        self.record_cleanup_warning(
+                            task_id,
+                            cleanup_create_staging(&staging.directory),
+                        );
                         return Err(error);
                     }
                 }
                 if cancellation.is_cancelled() {
-                    let _ = fs::remove_file(&temporary_output);
+                    self.record_cleanup_warning(
+                        task_id,
+                        cleanup_create_staging(&staging.directory),
+                    );
                     return Err(ArchiveError::new(ArchiveErrorCode::Cancelled, "任务已取消"));
                 }
-                commit_created_archive(&temporary_output, output)?;
+                let committed = commit_created_archive(&temporary_output, output);
+                self.record_cleanup_warning(task_id, cleanup_create_staging(&staging.directory));
+                committed?;
                 Ok(result.warnings)
             }
             TaskSpec::Extract {
@@ -411,18 +470,19 @@ impl TaskManager {
                 let result = match result {
                     Ok(result) if !cancellation.is_cancelled() => result,
                     Ok(_) => {
-                        cleanup_staging(&staging);
+                        self.record_cleanup_warning(task_id, cleanup_staging(&staging));
                         return Err(ArchiveError::new(ArchiveErrorCode::Cancelled, "任务已取消"));
                     }
                     Err(error) => {
-                        cleanup_staging(&staging);
+                        self.record_cleanup_warning(task_id, cleanup_staging(&staging));
                         return Err(error);
                     }
                 };
                 if let Err(error) = commit_extraction(&staging, output, *conflict_policy) {
-                    cleanup_staging(&staging);
+                    self.record_cleanup_warning(task_id, cleanup_staging(&staging));
                     return Err(error);
                 }
+                self.record_cleanup_warning(task_id, cleanup_staging(&staging));
                 Ok(result.warnings)
             }
             TaskSpec::Test { archive } => {
@@ -475,7 +535,9 @@ impl TaskManager {
         if let Some(record) = self.tasks.lock().expect("task lock").get_mut(task_id) {
             record.snapshot.status = status;
             record.snapshot.updated_at = now();
-            record.snapshot.warnings = warnings;
+            let mut existing_warnings = std::mem::take(&mut record.snapshot.warnings);
+            existing_warnings.extend(warnings);
+            record.snapshot.warnings = existing_warnings;
             record.snapshot.retryable =
                 matches!(status, TaskStatus::Failed | TaskStatus::Cancelled);
             record.snapshot.error = error;
@@ -488,6 +550,17 @@ impl TaskManager {
             },
             task_id,
         );
+    }
+    fn add_warning(&self, task_id: &str, warning: String) {
+        if let Some(record) = self.tasks.lock().expect("task lock").get_mut(task_id) {
+            record.snapshot.warnings.push(warning);
+            record.snapshot.updated_at = now();
+        }
+    }
+    fn record_cleanup_warning(&self, task_id: &str, result: Result<(), ArchiveError>) {
+        if let Err(error) = result {
+            self.add_warning(task_id, format!("临时文件清理失败：{}", error.message));
+        }
     }
     fn status(&self, task_id: &str) -> Option<TaskStatus> {
         self.tasks
@@ -512,7 +585,10 @@ impl TaskManager {
             return;
         };
         let mut tasks = self.tasks.lock().expect("task lock");
-        for snapshot in history.into_iter().take(HISTORY_LIMIT) {
+        for mut snapshot in history.into_iter().take(HISTORY_LIMIT) {
+            // A persisted snapshot has no reconstructable task specification or
+            // in-memory password.  Do not expose a retry action that cannot work.
+            snapshot.retryable = false;
             let spec = TaskSpec::Test {
                 archive: PathBuf::new(),
             };
@@ -600,15 +676,50 @@ fn validate_create_destination(inputs: &[PathBuf], output: &Path) -> Result<(), 
     Ok(())
 }
 
-fn temporary_archive_path(output: &Path) -> Result<PathBuf, ArchiveError> {
+struct CreateStaging {
+    directory: PathBuf,
+    archive: PathBuf,
+}
+
+fn prepare_create_staging(output: &Path) -> Result<CreateStaging, ArchiveError> {
     let parent = output
         .parent()
         .ok_or_else(|| ArchiveError::new(ArchiveErrorCode::InvalidRequest, "压缩包保存位置无效"))?;
+    fs::create_dir_all(parent).map_err(|_| {
+        ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法创建压缩包保存目录")
+    })?;
+    let parent = parent.canonicalize().map_err(|_| {
+        ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法访问压缩包保存目录")
+    })?;
     let name = output
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| ArchiveError::new(ArchiveErrorCode::InvalidRequest, "压缩包文件名无效"))?;
-    Ok(parent.join(format!(".qzip-{}-{name}", Uuid::new_v4())))
+    let directory = parent.join(format!(".qzip-create-{}", Uuid::new_v4()));
+    fs::create_dir(&directory).map_err(|_| {
+        ArchiveError::new(
+            ArchiveErrorCode::PermissionDenied,
+            "无法创建安全压缩暂存目录",
+        )
+    })?;
+    Ok(CreateStaging {
+        archive: directory.join(name),
+        directory,
+    })
+}
+
+fn cleanup_create_staging(directory: &Path) -> Result<(), ArchiveError> {
+    if directory
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.starts_with(".qzip-create-"))
+        && directory.exists()
+    {
+        fs::remove_dir_all(directory).map_err(|_| {
+            ArchiveError::new(ArchiveErrorCode::CleanupFailed, "无法清理创建任务临时目录")
+        })?;
+    }
+    Ok(())
 }
 
 fn commit_created_archive(temporary: &Path, output: &Path) -> Result<(), ArchiveError> {
@@ -649,14 +760,18 @@ fn prepare_extraction_staging(output: &Path) -> Result<PathBuf, ArchiveError> {
     Ok(staging)
 }
 
-fn cleanup_staging(staging: &Path) {
+fn cleanup_staging(staging: &Path) -> Result<(), ArchiveError> {
     if staging
         .file_name()
         .and_then(|value| value.to_str())
         .is_some_and(|value| value.starts_with(".qzip-extract-"))
+        && staging.exists()
     {
-        let _ = fs::remove_dir_all(staging);
+        fs::remove_dir_all(staging).map_err(|_| {
+            ArchiveError::new(ArchiveErrorCode::CleanupFailed, "无法清理解压任务临时目录")
+        })?;
     }
+    Ok(())
 }
 
 fn commit_extraction(
@@ -683,7 +798,6 @@ fn commit_extraction(
         ));
     }
     merge_directory(staging, output, policy)?;
-    cleanup_staging(staging);
     Ok(())
 }
 
@@ -727,9 +841,8 @@ fn merge_directory(
                             "文件与目录同名，无法安全覆盖",
                         ));
                     }
-                    fs::remove_file(&target_path).map_err(|_| {
-                        ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法覆盖现有文件")
-                    })?;
+                    fs::remove_file(&target_path)
+                        .map_err(|error| map_file_write_error(error, "无法覆盖现有文件"))?;
                 }
                 ConflictPolicy::Skip => continue,
                 ConflictPolicy::Ask => {
@@ -746,12 +859,21 @@ fn merge_directory(
             })?;
             merge_directory(&source_path, &target_path, policy)?;
         } else {
-            fs::rename(&source_path, &target_path).map_err(|_| {
-                ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法写入解压文件")
-            })?;
+            fs::rename(&source_path, &target_path)
+                .map_err(|error| map_file_write_error(error, "无法写入解压文件"))?;
         }
     }
     Ok(())
+}
+
+fn map_file_write_error(error: std::io::Error, message: &str) -> ArchiveError {
+    #[cfg(target_os = "windows")]
+    if matches!(error.raw_os_error(), Some(32 | 33)) {
+        return ArchiveError::new(ArchiveErrorCode::FileInUse, "目标文件正在被其他程序占用");
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = error;
+    ArchiveError::new(ArchiveErrorCode::PermissionDenied, message)
 }
 
 fn renamed_path(path: &Path) -> PathBuf {
@@ -824,6 +946,237 @@ fn now() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use secrecy::ExposeSecret;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::sync::Notify;
+
+    struct UnusedBackend;
+
+    #[derive(Clone, Copy)]
+    enum BackendMode {
+        BlockTest,
+        CancelCreate,
+        PasswordExtract,
+    }
+
+    struct ScriptedState {
+        mode: BackendMode,
+        started: Notify,
+        release: Notify,
+        active: AtomicUsize,
+        peak: AtomicUsize,
+    }
+
+    struct ScriptedBackend {
+        state: Arc<ScriptedState>,
+    }
+
+    impl ScriptedBackend {
+        fn new(mode: BackendMode) -> (Arc<Self>, Arc<ScriptedState>) {
+            let state = Arc::new(ScriptedState {
+                mode,
+                started: Notify::new(),
+                release: Notify::new(),
+                active: AtomicUsize::new(0),
+                peak: AtomicUsize::new(0),
+            });
+            (
+                Arc::new(Self {
+                    state: state.clone(),
+                }),
+                state,
+            )
+        }
+
+        async fn enter(&self) {
+            let active = self.state.active.fetch_add(1, Ordering::SeqCst) + 1;
+            self.state.peak.fetch_max(active, Ordering::SeqCst);
+            self.state.started.notify_waiters();
+        }
+
+        fn leave(&self) {
+            self.state.active.fetch_sub(1, Ordering::SeqCst);
+        }
+
+        async fn wait_for_release(
+            &self,
+            cancellation: CancellationToken,
+        ) -> Result<(), ArchiveError> {
+            tokio::select! {
+                _ = self.state.release.notified() => Ok(()),
+                _ = cancellation.cancelled() => Err(ArchiveError::new(ArchiveErrorCode::Cancelled, "任务已取消")),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ArchiveBackend for ScriptedBackend {
+        fn id(&self) -> &'static str {
+            "scripted"
+        }
+
+        async fn capabilities(&self) -> Result<archive_core::BackendCapabilities, ArchiveError> {
+            Err(ArchiveError::unavailable("not used by this test"))
+        }
+
+        async fn create(
+            &self,
+            request: CreateArchiveRequest,
+            _: Arc<dyn ProgressReporter>,
+            cancellation: CancellationToken,
+        ) -> Result<ArchiveResult, ArchiveError> {
+            self.enter().await;
+            let result = match self.state.mode {
+                BackendMode::CancelCreate => {
+                    fs::write(&request.output, b"partial archive").unwrap();
+                    self.wait_for_release(cancellation).await
+                }
+                _ => Ok(()),
+            };
+            self.leave();
+            result.map(|_| ArchiveResult {
+                output: Some(request.output),
+                entries: vec![],
+                warnings: vec![],
+            })
+        }
+
+        async fn extract(
+            &self,
+            request: ExtractArchiveRequest,
+            _: Arc<dyn ProgressReporter>,
+            cancellation: CancellationToken,
+        ) -> Result<ArchiveResult, ArchiveError> {
+            self.enter().await;
+            let result = if matches!(self.state.mode, BackendMode::PasswordExtract) {
+                fs::create_dir_all(&request.output).unwrap();
+                fs::write(request.output.join("file.txt"), b"extracted").unwrap();
+                Ok(())
+            } else {
+                self.wait_for_release(cancellation).await
+            };
+            self.leave();
+            result.map(|_| ArchiveResult {
+                output: Some(request.output),
+                entries: vec![],
+                warnings: vec![],
+            })
+        }
+
+        async fn list(
+            &self,
+            request: ListArchiveRequest,
+            _: CancellationToken,
+        ) -> Result<Vec<archive_core::ArchiveEntry>, ArchiveError> {
+            if matches!(self.state.mode, BackendMode::PasswordExtract)
+                && request
+                    .password
+                    .as_ref()
+                    .is_none_or(|password| password.expose_secret() != "correct")
+            {
+                return Err(ArchiveError::new(
+                    ArchiveErrorCode::WrongPassword,
+                    "密码错误",
+                ));
+            }
+            Ok(vec![archive_core::ArchiveEntry {
+                path: "file.txt".into(),
+                display_name: "file.txt".into(),
+                size: 9,
+                compressed_size: None,
+                is_directory: false,
+                modified_at: None,
+                crc: None,
+                attributes: None,
+                encrypted: false,
+                is_symlink: false,
+                is_hardlink: false,
+            }])
+        }
+
+        async fn test(
+            &self,
+            _: TestArchiveRequest,
+            cancellation: CancellationToken,
+        ) -> Result<TestResult, ArchiveError> {
+            self.enter().await;
+            let result = match self.state.mode {
+                BackendMode::BlockTest => self.wait_for_release(cancellation).await,
+                _ => Ok(()),
+            };
+            self.leave();
+            result.map(|_| TestResult {
+                valid: true,
+                warnings: vec![],
+            })
+        }
+    }
+
+    async fn wait_for_terminal(manager: &Arc<TaskManager>, task_id: &str) -> TaskSnapshot {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if let Some(snapshot) = manager
+                    .snapshots()
+                    .into_iter()
+                    .find(|snapshot| snapshot.task_id == task_id)
+                    && matches!(
+                        snapshot.status,
+                        TaskStatus::Completed | TaskStatus::Failed | TaskStatus::Cancelled
+                    )
+                {
+                    return snapshot;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("task did not reach a terminal status")
+    }
+
+    #[async_trait::async_trait]
+    impl ArchiveBackend for UnusedBackend {
+        fn id(&self) -> &'static str {
+            "unused"
+        }
+
+        async fn capabilities(&self) -> Result<archive_core::BackendCapabilities, ArchiveError> {
+            Err(ArchiveError::unavailable("not used by this test"))
+        }
+
+        async fn create(
+            &self,
+            _: CreateArchiveRequest,
+            _: Arc<dyn ProgressReporter>,
+            _: CancellationToken,
+        ) -> Result<ArchiveResult, ArchiveError> {
+            Err(ArchiveError::unavailable("not used by this test"))
+        }
+
+        async fn extract(
+            &self,
+            _: ExtractArchiveRequest,
+            _: Arc<dyn ProgressReporter>,
+            _: CancellationToken,
+        ) -> Result<ArchiveResult, ArchiveError> {
+            Err(ArchiveError::unavailable("not used by this test"))
+        }
+
+        async fn list(
+            &self,
+            _: ListArchiveRequest,
+            _: CancellationToken,
+        ) -> Result<Vec<archive_core::ArchiveEntry>, ArchiveError> {
+            Err(ArchiveError::unavailable("not used by this test"))
+        }
+
+        async fn test(
+            &self,
+            _: TestArchiveRequest,
+            _: CancellationToken,
+        ) -> Result<TestResult, ArchiveError> {
+            Err(ArchiveError::unavailable("not used by this test"))
+        }
+    }
 
     fn test_directory(label: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!("qzip-runtime-{label}-{}", Uuid::new_v4()));
@@ -840,6 +1193,22 @@ mod tests {
             validate_create_destination(std::slice::from_ref(&input), &input.join("result.7z"))
                 .unwrap_err();
         assert_eq!(error.code, ArchiveErrorCode::InvalidRequest);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn submit_without_a_tokio_runtime_returns_an_error_instead_of_panicking() {
+        let root = test_directory("missing-runtime");
+        let manager = TaskManager::new(Arc::new(UnusedBackend), root.join("history.json"));
+        let error = manager
+            .submit(
+                TaskSpec::Test {
+                    archive: root.join("archive.7z"),
+                },
+                None,
+            )
+            .unwrap_err();
+        assert_eq!(error.code, ArchiveErrorCode::Unknown);
         let _ = fs::remove_dir_all(root);
     }
 
@@ -873,6 +1242,243 @@ mod tests {
         assert_eq!(
             fs::read_to_string(output.join("report (1).txt")).unwrap(),
             "new"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn extraction_conflict_policies_are_explicit_and_non_silent() {
+        for policy in [
+            ConflictPolicy::Rename,
+            ConflictPolicy::Overwrite,
+            ConflictPolicy::Skip,
+        ] {
+            let root = test_directory("extract-conflict");
+            let staging = root.join(".qzip-extract-policy");
+            let output = root.join("output");
+            fs::create_dir(&staging).unwrap();
+            fs::create_dir(&output).unwrap();
+            fs::write(staging.join("report.txt"), "new").unwrap();
+            fs::write(output.join("report.txt"), "old").unwrap();
+            commit_extraction(&staging, &output, policy).unwrap();
+            match policy {
+                ConflictPolicy::Rename => assert_eq!(
+                    fs::read_to_string(output.join("report (1).txt")).unwrap(),
+                    "new"
+                ),
+                ConflictPolicy::Overwrite => assert_eq!(
+                    fs::read_to_string(output.join("report.txt")).unwrap(),
+                    "new"
+                ),
+                ConflictPolicy::Skip => assert_eq!(
+                    fs::read_to_string(output.join("report.txt")).unwrap(),
+                    "old"
+                ),
+                ConflictPolicy::Ask => unreachable!(),
+            }
+            cleanup_staging(&staging).unwrap();
+            let _ = fs::remove_dir_all(root);
+        }
+        let root = test_directory("extract-ask");
+        let staging = root.join(".qzip-extract-ask");
+        let output = root.join("output");
+        fs::create_dir(&staging).unwrap();
+        fs::create_dir(&output).unwrap();
+        fs::write(staging.join("report.txt"), "new").unwrap();
+        fs::write(output.join("report.txt"), "old").unwrap();
+        let error = commit_extraction(&staging, &output, ConflictPolicy::Ask).unwrap_err();
+        assert_eq!(error.code, ArchiveErrorCode::ConflictRequiresDecision);
+        assert_eq!(
+            fs::read_to_string(output.join("report.txt")).unwrap(),
+            "old"
+        );
+        cleanup_staging(&staging).unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn locked_file_is_reported_without_overwriting_the_original() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let root = test_directory("file-in-use");
+        let staging = root.join(".qzip-extract-locked");
+        let output = root.join("output");
+        fs::create_dir(&staging).unwrap();
+        fs::create_dir(&output).unwrap();
+        let target = output.join("locked.txt");
+        fs::write(&target, "old").unwrap();
+        fs::write(staging.join("locked.txt"), "new").unwrap();
+        let handle = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&target)
+            .unwrap();
+        let error = commit_extraction(&staging, &output, ConflictPolicy::Overwrite).unwrap_err();
+        assert_eq!(error.code, ArchiveErrorCode::FileInUse);
+        drop(handle);
+        assert_eq!(fs::read_to_string(&target).unwrap(), "old");
+        cleanup_staging(&staging).unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn cancellation_removes_create_staging_and_never_commits_output() {
+        let root = test_directory("cancel-create");
+        let input = root.join("input.txt");
+        let output = root.join("result.7z");
+        fs::write(&input, "source").unwrap();
+        let (backend, state) = ScriptedBackend::new(BackendMode::CancelCreate);
+        let manager = TaskManager::new(backend, root.join("history.json"));
+        let task = manager
+            .submit(
+                TaskSpec::Create {
+                    inputs: vec![input],
+                    output: output.clone(),
+                    format: ArchiveFormat::SevenZip,
+                    profile: CompressionProfile::Balanced,
+                    encrypt_headers: false,
+                    test_after_create: false,
+                    delete_sources_after_success: false,
+                },
+                None,
+            )
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), state.started.notified())
+            .await
+            .unwrap();
+        manager.cancel(&task.task_id).unwrap();
+        let final_task = wait_for_terminal(&manager, &task.task_id).await;
+        assert_eq!(final_task.status, TaskStatus::Cancelled);
+        assert!(!output.exists());
+        assert_eq!(
+            fs::read_dir(&root)
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".qzip-create-"))
+                .count(),
+            0
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn wrong_password_retry_creates_a_new_successful_task_without_persisting_password() {
+        let root = test_directory("password-retry");
+        let archive = root.join("secret.7z");
+        let output = root.join("output");
+        fs::write(&archive, "archive").unwrap();
+        let (backend, _) = ScriptedBackend::new(BackendMode::PasswordExtract);
+        let manager = TaskManager::new(backend, root.join("history.json"));
+        let failed = manager
+            .submit(
+                TaskSpec::Extract {
+                    archive: archive.clone(),
+                    output: output.clone(),
+                    selected_entries: None,
+                    conflict_policy: ConflictPolicy::Rename,
+                    accept_risk: true,
+                },
+                Some(SecretString::new("wrong".into())),
+            )
+            .unwrap();
+        let failed_task = wait_for_terminal(&manager, &failed.task_id).await;
+        assert_eq!(failed_task.status, TaskStatus::Failed);
+        assert_eq!(
+            failed_task.error.as_ref().unwrap().code,
+            ArchiveErrorCode::WrongPassword
+        );
+        assert!(failed_task.retryable);
+        let retried = manager
+            .retry(&failed.task_id, Some(SecretString::new("correct".into())))
+            .unwrap();
+        assert_ne!(failed.task_id, retried.task_id);
+        let completed = wait_for_terminal(&manager, &retried.task_id).await;
+        assert_eq!(completed.status, TaskStatus::Completed);
+        assert_eq!(
+            fs::read_to_string(output.join("file.txt")).unwrap(),
+            "extracted"
+        );
+        let snapshots = serde_json::to_string(&manager.snapshots()).unwrap();
+        assert!(!snapshots.contains("wrong"));
+        assert!(!snapshots.contains("correct"));
+        manager.clear_completed();
+        assert!(manager.snapshots().is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn task_runtime_never_runs_more_than_two_tasks_at_once() {
+        let root = test_directory("concurrency");
+        let (backend, state) = ScriptedBackend::new(BackendMode::BlockTest);
+        let manager = TaskManager::new(backend, root.join("history.json"));
+        let tasks = (0..4)
+            .map(|_| {
+                manager
+                    .submit(
+                        TaskSpec::Test {
+                            archive: root.join("archive.7z"),
+                        },
+                        None,
+                    )
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if state.active.load(Ordering::SeqCst) == 2 {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(state.peak.load(Ordering::SeqCst), 2);
+        for _ in 0..4 {
+            state.release.notify_waiters();
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        for task in tasks {
+            assert_eq!(
+                wait_for_terminal(&manager, &task.task_id).await.status,
+                TaskStatus::Completed
+            );
+        }
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn retry_and_cancel_reject_invalid_task_states() {
+        let root = test_directory("invalid-states");
+        let (backend, state) = ScriptedBackend::new(BackendMode::BlockTest);
+        let manager = TaskManager::new(backend, root.join("history.json"));
+        let running = manager
+            .submit(
+                TaskSpec::Test {
+                    archive: root.join("archive.7z"),
+                },
+                None,
+            )
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), state.started.notified())
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.retry(&running.task_id, None).unwrap_err().code,
+            ArchiveErrorCode::InvalidRequest
+        );
+        manager.cancel(&running.task_id).unwrap();
+        state.release.notify_waiters();
+        let cancelled = wait_for_terminal(&manager, &running.task_id).await;
+        assert_eq!(cancelled.status, TaskStatus::Cancelled);
+        assert!(cancelled.retryable);
+        assert_eq!(
+            manager.cancel(&running.task_id).unwrap_err().code,
+            ArchiveErrorCode::InvalidRequest
         );
         let _ = fs::remove_dir_all(root);
     }

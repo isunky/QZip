@@ -556,59 +556,78 @@ fn close_archive_session(session_id: String, state: State<'_, AppState>) {
         .remove(&session_id);
 }
 #[tauri::command]
-fn create_archive_task(request: CreateTaskDto, state: State<'_, AppState>) -> TaskSnapshot {
-    state.tasks.submit(
-        TaskSpec::Create {
-            inputs: request.inputs,
-            output: request.output,
-            format: request.format,
-            profile: request.profile,
-            encrypt_headers: request.encrypt_headers,
-            test_after_create: request.test_after_create,
-            delete_sources_after_success: request.delete_sources_after_success,
-        },
-        secret(request.password),
-    )
+async fn create_archive_task(
+    request: CreateTaskDto,
+    state: State<'_, AppState>,
+) -> Result<TaskSnapshot, CommandErrorDto> {
+    state
+        .tasks
+        .submit(
+            TaskSpec::Create {
+                inputs: request.inputs,
+                output: request.output,
+                format: request.format,
+                profile: request.profile,
+                encrypt_headers: request.encrypt_headers,
+                test_after_create: request.test_after_create,
+                delete_sources_after_success: request.delete_sources_after_success,
+            },
+            secret(request.password),
+        )
+        .map_err(CommandErrorDto::from)
 }
 #[tauri::command]
-fn extract_archive_task(request: ExtractTaskDto, state: State<'_, AppState>) -> TaskSnapshot {
-    state.tasks.submit(
-        TaskSpec::Extract {
-            archive: request.archive,
-            output: request.output,
-            selected_entries: request.selected_entries,
-            conflict_policy: request.conflict_policy,
-            accept_risk: request.accept_risk,
-        },
-        secret(request.password),
-    )
+async fn extract_archive_task(
+    request: ExtractTaskDto,
+    state: State<'_, AppState>,
+) -> Result<TaskSnapshot, CommandErrorDto> {
+    state
+        .tasks
+        .submit(
+            TaskSpec::Extract {
+                archive: request.archive,
+                output: request.output,
+                selected_entries: request.selected_entries,
+                conflict_policy: request.conflict_policy,
+                accept_risk: request.accept_risk,
+            },
+            secret(request.password),
+        )
+        .map_err(CommandErrorDto::from)
 }
 #[tauri::command]
-fn test_archive_task(
+async fn test_archive_task(
     archive: PathBuf,
     password: Option<String>,
     state: State<'_, AppState>,
-) -> TaskSnapshot {
+) -> Result<TaskSnapshot, CommandErrorDto> {
     state
         .tasks
         .submit(TaskSpec::Test { archive }, secret(password))
+        .map_err(CommandErrorDto::from)
 }
 #[tauri::command]
-fn update_archive_task(request: UpdateTaskDto, state: State<'_, AppState>) -> TaskSnapshot {
-    state.tasks.submit(
-        TaskSpec::Update {
-            archive: request.archive,
-            inputs: request.inputs,
-        },
-        secret(request.password),
-    )
+async fn update_archive_task(
+    request: UpdateTaskDto,
+    state: State<'_, AppState>,
+) -> Result<TaskSnapshot, CommandErrorDto> {
+    state
+        .tasks
+        .submit(
+            TaskSpec::Update {
+                archive: request.archive,
+                inputs: request.inputs,
+            },
+            secret(request.password),
+        )
+        .map_err(CommandErrorDto::from)
 }
 #[tauri::command]
 fn cancel_task(task_id: String, state: State<'_, AppState>) -> Result<(), CommandErrorDto> {
     state.tasks.cancel(&task_id).map_err(CommandErrorDto::from)
 }
 #[tauri::command]
-fn retry_task(
+async fn retry_task(
     task_id: String,
     password: Option<String>,
     state: State<'_, AppState>,

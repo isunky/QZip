@@ -4,6 +4,7 @@ coverage/
 .vite/
 *.tsbuildinfo
 target/
+target-rc1-verify/
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 .env
@@ -20,3 +21,6 @@ third_party/7zip/bin/
 third_party/7zip/source/
 artifacts/windows-shell/
 artifacts/release/
+artifacts/acceptance/installer-payload-*/
+artifacts/acceptance/ui-create-regression-*.7z
+artifacts/acceptance/password-debug/

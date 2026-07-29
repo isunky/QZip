@@ -79,15 +79,17 @@ impl SevenZipCliBackend {
         progress: Arc<dyn ProgressReporter>,
         cancellation: CancellationToken,
     ) -> Result<InvocationOutput, ArchiveError> {
-        let mut child = Command::new(&self.executable)
+        let mut command = Command::new(&self.executable);
+        command
             .args(&args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|error| {
-                ArchiveError::unavailable(format!("could not start 7-Zip: {error}"))
-            })?;
+            .stderr(Stdio::piped());
+        #[cfg(target_os = "windows")]
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        let mut child = command.spawn().map_err(|error| {
+            ArchiveError::unavailable(format!("could not start 7-Zip: {error}"))
+        })?;
         let stdout = child
             .stdout
             .take()
@@ -239,6 +241,146 @@ impl SevenZipCliBackend {
                 .collect(),
         })
     }
+
+    async fn expand_tar_wrapper(
+        &self,
+        archive: &Path,
+        cancellation: CancellationToken,
+    ) -> Result<(PathBuf, PathBuf), ArchiveError> {
+        let directory = std::env::temp_dir().join(format!("qzip-expand-{}", Uuid::new_v4()));
+        fs::create_dir_all(&directory).map_err(|_| {
+            ArchiveError::new(
+                ArchiveErrorCode::PermissionDenied,
+                "无法创建复合压缩包临时目录",
+            )
+        })?;
+        let result = self
+            .invoke(
+                ArchiveOperation::Extract,
+                vec![
+                    "e".into(),
+                    archive.to_string_lossy().into_owned(),
+                    format!("-o{}", directory.to_string_lossy()),
+                    "-y".into(),
+                ],
+                Arc::new(archive_core::NoopProgressReporter),
+                cancellation,
+            )
+            .await;
+        if let Err(error) = result {
+            let _ = fs::remove_dir_all(&directory);
+            return Err(error);
+        }
+        let entries = fs::read_dir(&directory)
+            .map_err(|_| {
+                ArchiveError::new(
+                    ArchiveErrorCode::CleanupFailed,
+                    "无法读取复合压缩包临时目录",
+                )
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| {
+                ArchiveError::new(
+                    ArchiveErrorCode::CleanupFailed,
+                    "无法读取复合压缩包临时目录",
+                )
+            })?;
+        let Some(entry) = entries.first() else {
+            let _ = fs::remove_dir_all(&directory);
+            return Err(ArchiveError::new(
+                ArchiveErrorCode::CorruptArchive,
+                "复合压缩包不包含可读取的 TAR 内容",
+            ));
+        };
+        let is_single_tar = entries.len() == 1
+            && entry
+                .file_type()
+                .map(|kind| kind.is_file() && !kind.is_symlink())
+                .unwrap_or(false)
+            && entry
+                .path()
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("tar"));
+        if !is_single_tar {
+            let _ = fs::remove_dir_all(&directory);
+            return Err(ArchiveError::new(
+                ArchiveErrorCode::CorruptArchive,
+                "复合压缩包不包含唯一且安全的 TAR 内容",
+            ));
+        }
+        Ok((directory, entry.path()))
+    }
+
+    async fn list_plain(
+        &self,
+        request: ListArchiveRequest,
+        cancellation: CancellationToken,
+    ) -> Result<Vec<ArchiveEntry>, ArchiveError> {
+        let supplied_password = request.password.is_some();
+        let output = self
+            .invoke(
+                ArchiveOperation::List,
+                SevenZipArgumentMapper::list(&request),
+                Arc::new(archive_core::NoopProgressReporter),
+                cancellation,
+            )
+            .await
+            .map_err(|error| map_read_failure(error, supplied_password))?;
+        Ok(SevenZipListParser::parse(&output.output))
+    }
+
+    async fn test_plain(
+        &self,
+        request: TestArchiveRequest,
+        cancellation: CancellationToken,
+    ) -> Result<TestResult, ArchiveError> {
+        let supplied_password = request.password.is_some();
+        let result = self
+            .invoke(
+                ArchiveOperation::Test,
+                SevenZipArgumentMapper::test(&request),
+                Arc::new(archive_core::NoopProgressReporter),
+                cancellation,
+            )
+            .await
+            .map_err(|error| map_read_failure(error, supplied_password))?;
+        Ok(TestResult {
+            valid: true,
+            warnings: result
+                .warning
+                .then(|| "7-Zip reported a warning".to_owned())
+                .into_iter()
+                .collect(),
+        })
+    }
+
+    async fn extract_plain(
+        &self,
+        request: ExtractArchiveRequest,
+        progress: Arc<dyn ProgressReporter>,
+        cancellation: CancellationToken,
+    ) -> Result<ArchiveResult, ArchiveError> {
+        let supplied_password = request.password.is_some();
+        let result = self
+            .invoke(
+                ArchiveOperation::Extract,
+                SevenZipArgumentMapper::extract(&request),
+                progress,
+                cancellation,
+            )
+            .await
+            .map_err(|error| map_read_failure(error, supplied_password))?;
+        Ok(ArchiveResult {
+            output: Some(request.output),
+            entries: vec![],
+            warnings: result
+                .warning
+                .then(|| "7-Zip reported a warning".to_owned())
+                .into_iter()
+                .collect(),
+        })
+    }
 }
 
 fn verify_sha256(path: &Path, expected: &str) -> Result<(), ArchiveError> {
@@ -385,64 +527,95 @@ impl ArchiveBackend for SevenZipCliBackend {
                 ArchiveError::new(ArchiveErrorCode::UnsafePath, error.to_string())
             })?;
         }
-        let result = self
-            .invoke(
-                ArchiveOperation::Extract,
-                SevenZipArgumentMapper::extract(&request),
-                progress,
-                cancellation,
-            )
-            .await?;
-        Ok(ArchiveResult {
-            output: Some(request.output),
-            entries: vec![],
-            warnings: result
-                .warning
-                .then(|| "7-Zip reported a warning".to_owned())
-                .into_iter()
-                .collect(),
-        })
+        if is_tar_wrapper(&request.archive) {
+            if request.password.is_some() {
+                return Err(ArchiveError::new(
+                    ArchiveErrorCode::UnsupportedOption,
+                    "TAR.GZ 和 TAR.XZ 不支持密码参数",
+                ));
+            }
+            let (temporary_dir, inner_tar) = self
+                .expand_tar_wrapper(&request.archive, cancellation.child_token())
+                .await?;
+            let inner_request = ExtractArchiveRequest {
+                archive: inner_tar,
+                output: request.output,
+                selected_entries: request.selected_entries,
+                conflict_policy: request.conflict_policy,
+                password: None,
+            };
+            let result = self
+                .extract_plain(inner_request, progress, cancellation)
+                .await;
+            let _ = fs::remove_dir_all(temporary_dir);
+            return result;
+        }
+        self.extract_plain(request, progress, cancellation).await
     }
     async fn list(
         &self,
         request: ListArchiveRequest,
         cancellation: CancellationToken,
     ) -> Result<Vec<ArchiveEntry>, ArchiveError> {
-        let supplied_password = request.password.is_some();
-        let output = self
-            .invoke(
-                ArchiveOperation::List,
-                SevenZipArgumentMapper::list(&request),
-                Arc::new(archive_core::NoopProgressReporter),
-                cancellation,
-            )
-            .await
-            .map_err(|error| map_read_failure(error, supplied_password))?;
-        Ok(SevenZipListParser::parse(&output.output))
+        if is_tar_wrapper(&request.archive) {
+            if request.password.is_some() {
+                return Err(ArchiveError::new(
+                    ArchiveErrorCode::UnsupportedOption,
+                    "TAR.GZ 和 TAR.XZ 不支持密码参数",
+                ));
+            }
+            let (temporary_dir, inner_tar) = self
+                .expand_tar_wrapper(&request.archive, cancellation.child_token())
+                .await?;
+            let result = self
+                .list_plain(
+                    ListArchiveRequest {
+                        archive: inner_tar,
+                        password: None,
+                    },
+                    cancellation,
+                )
+                .await;
+            let _ = fs::remove_dir_all(temporary_dir);
+            return result;
+        }
+        self.list_plain(request, cancellation).await
     }
     async fn test(
         &self,
         request: TestArchiveRequest,
         cancellation: CancellationToken,
     ) -> Result<TestResult, ArchiveError> {
-        let supplied_password = request.password.is_some();
-        let result = self
-            .invoke(
-                ArchiveOperation::Test,
-                SevenZipArgumentMapper::test(&request),
-                Arc::new(archive_core::NoopProgressReporter),
-                cancellation,
-            )
-            .await
-            .map_err(|error| map_read_failure(error, supplied_password))?;
-        Ok(TestResult {
-            valid: true,
-            warnings: result
-                .warning
-                .then(|| "7-Zip reported a warning".to_owned())
-                .into_iter()
-                .collect(),
-        })
+        if is_tar_wrapper(&request.archive) {
+            if request.password.is_some() {
+                return Err(ArchiveError::new(
+                    ArchiveErrorCode::UnsupportedOption,
+                    "TAR.GZ 和 TAR.XZ 不支持密码参数",
+                ));
+            }
+            let outer = self
+                .test_plain(request.clone(), cancellation.child_token())
+                .await?;
+            let (temporary_dir, inner_tar) = self
+                .expand_tar_wrapper(&request.archive, cancellation.child_token())
+                .await?;
+            let inner = self
+                .test_plain(
+                    TestArchiveRequest {
+                        archive: inner_tar,
+                        password: None,
+                    },
+                    cancellation,
+                )
+                .await;
+            let _ = fs::remove_dir_all(temporary_dir);
+            let inner = inner?;
+            return Ok(TestResult {
+                valid: outer.valid && inner.valid,
+                warnings: outer.warnings.into_iter().chain(inner.warnings).collect(),
+            });
+        }
+        self.test_plain(request, cancellation).await
     }
     async fn update(
         &self,
@@ -474,6 +647,15 @@ impl ArchiveBackend for SevenZipCliBackend {
                 .collect(),
         })
     }
+}
+
+fn is_tar_wrapper(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            let name = name.to_ascii_lowercase();
+            name.ends_with(".tar.gz") || name.ends_with(".tar.xz")
+        })
 }
 
 pub struct SevenZipArgumentMapper;
