@@ -2,6 +2,7 @@
 // It never processes archives in Explorer: selections are written to a bounded,
 // one-shot local request file and handed to QZip with a UUID token.
 #include <windows.h>
+#include <appmodel.h>
 #include <shobjidl_core.h>
 #include <shlobj_core.h>
 #include <objbase.h>
@@ -67,7 +68,39 @@ bool SaveRequest(Action action, IShellItemArray* items, std::wstring* token) {
   DWORD written = 0; const bool ok = WriteFile(file, body.data(), static_cast<DWORD>(body.size()), &written, nullptr) && written == body.size(); CloseHandle(file);
   if (!ok) DeleteFileW(request.c_str()); return ok;
 }
+std::wstring CurrentPackageFamilyName() {
+  UINT32 length = 0;
+  if (GetCurrentPackageFamilyName(&length, nullptr) != ERROR_INSUFFICIENT_BUFFER || length == 0) return {};
+  std::wstring value(length, L'\0');
+  if (GetCurrentPackageFamilyName(&length, value.data()) != ERROR_SUCCESS) return {};
+  value.resize(wcslen(value.c_str()));
+  return value;
+}
+std::wstring CurrentPackagePath() {
+  UINT32 length = 0;
+  if (GetCurrentPackagePath(&length, nullptr) != ERROR_INSUFFICIENT_BUFFER || length == 0) return {};
+  std::wstring value(length, L'\0');
+  if (GetCurrentPackagePath(&length, value.data()) != ERROR_SUCCESS) return {};
+  value.resize(wcslen(value.c_str()));
+  return value;
+}
 bool LaunchQZip(const std::wstring& token) {
+  // Explorer loads this DLL from the sparse MSIX payload. Activate the
+  // externally located Win32 application through the package identity instead
+  // of deriving an executable path from the MSIX cache location.
+  const auto family = CurrentPackageFamilyName();
+  if (!family.empty()) {
+    IApplicationActivationManager* manager = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_ApplicationActivationManager, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&manager)))) {
+      DWORD process_id = 0;
+      const std::wstring app_id = family + L"!QZip";
+      const std::wstring arguments = L"--shell-request " + token;
+      const HRESULT result = manager->ActivateApplication(app_id.c_str(), arguments.c_str(), AO_NONE, &process_id);
+      manager->Release();
+      if (SUCCEEDED(result)) return true;
+    }
+  }
+  // Keep the development fallback for an externally loaded DLL.
   wchar_t module[MAX_PATH]{}; if (!GetModuleFileNameW(g_module, module, MAX_PATH)) return false;
   // Tauri installs the resource DLL below the application directory; the
   // executable name is the Cargo binary name, not the product display name.
@@ -87,7 +120,7 @@ class CommandEnumerator final : public IEnumExplorerCommand {
  private: LONG refs_ = 1; ULONG index_ = 0; std::vector<Command*> commands_;
 };
 class Command final : public IExplorerCommand {
- public: explicit Command(Action action) : action_(action) {} HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void**) override; ULONG STDMETHODCALLTYPE AddRef() override; ULONG STDMETHODCALLTYPE Release() override; HRESULT STDMETHODCALLTYPE GetTitle(IShellItemArray*, LPWSTR* value) override { return CopyString(Title(action_), value).empty() ? E_OUTOFMEMORY : S_OK; } HRESULT STDMETHODCALLTYPE GetIcon(IShellItemArray*, LPWSTR*) override { return E_NOTIMPL; } HRESULT STDMETHODCALLTYPE GetToolTip(IShellItemArray*, LPWSTR* value) override { return GetTitle(nullptr, value); } HRESULT STDMETHODCALLTYPE GetCanonicalName(GUID* value) override { if (!value) return E_POINTER; *value = CLSID_QZipExplorerCommand; return S_OK; } HRESULT STDMETHODCALLTYPE GetState(IShellItemArray*, BOOL, EXPCMDSTATE* state) override { if (!state) return E_POINTER; *state = ECS_ENABLED; return S_OK; } HRESULT STDMETHODCALLTYPE Invoke(IShellItemArray* items, IBindCtx*) override { if (action_ == Action::Root) return S_OK; std::wstring token; return SaveRequest(action_, items, &token) && LaunchQZip(token) ? S_OK : E_FAIL; } HRESULT STDMETHODCALLTYPE GetFlags(EXPCMDFLAGS* flags) override { if (!flags) return E_POINTER; *flags = action_ == Action::Root ? ECF_HASSUBCOMMANDS : ECF_DEFAULT; return S_OK; } HRESULT STDMETHODCALLTYPE EnumSubCommands(IEnumExplorerCommand** value) override { if (action_ != Action::Root) return E_NOTIMPL; *value = new (std::nothrow) CommandEnumerator(); return *value ? S_OK : E_OUTOFMEMORY; }
+ public: explicit Command(Action action) : action_(action) {} HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void**) override; ULONG STDMETHODCALLTYPE AddRef() override; ULONG STDMETHODCALLTYPE Release() override; HRESULT STDMETHODCALLTYPE GetTitle(IShellItemArray*, LPWSTR* value) override { return CopyString(Title(action_), value).empty() ? E_OUTOFMEMORY : S_OK; } HRESULT STDMETHODCALLTYPE GetIcon(IShellItemArray*, LPWSTR* value) override { if (!value) return E_POINTER; auto icon = CurrentPackagePath(); if (icon.empty()) return E_NOTIMPL; icon += L"\\Assets\\ContextMenuIcon.png"; return CopyString(icon.c_str(), value).empty() ? E_OUTOFMEMORY : S_OK; } HRESULT STDMETHODCALLTYPE GetToolTip(IShellItemArray*, LPWSTR* value) override { return GetTitle(nullptr, value); } HRESULT STDMETHODCALLTYPE GetCanonicalName(GUID* value) override { if (!value) return E_POINTER; *value = CLSID_QZipExplorerCommand; return S_OK; } HRESULT STDMETHODCALLTYPE GetState(IShellItemArray*, BOOL, EXPCMDSTATE* state) override { if (!state) return E_POINTER; *state = ECS_ENABLED; return S_OK; } HRESULT STDMETHODCALLTYPE Invoke(IShellItemArray* items, IBindCtx*) override { if (action_ == Action::Root) return S_OK; std::wstring token; return SaveRequest(action_, items, &token) && LaunchQZip(token) ? S_OK : E_FAIL; } HRESULT STDMETHODCALLTYPE GetFlags(EXPCMDFLAGS* flags) override { if (!flags) return E_POINTER; *flags = action_ == Action::Root ? ECF_HASSUBCOMMANDS : ECF_DEFAULT; return S_OK; } HRESULT STDMETHODCALLTYPE EnumSubCommands(IEnumExplorerCommand** value) override { if (action_ != Action::Root) return E_NOTIMPL; *value = new (std::nothrow) CommandEnumerator(); return *value ? S_OK : E_OUTOFMEMORY; }
  private: LONG refs_ = 1; Action action_;
 };
 CommandEnumerator::CommandEnumerator() { for (Action a : {Action::Open, Action::SevenZip, Action::Zip, Action::ExtractHere, Action::ExtractNamed, Action::MoreOptions}) commands_.push_back(new Command(a)); }

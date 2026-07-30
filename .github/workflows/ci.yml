@@ -56,5 +56,5 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Fetch and verify official 7-Zip sidecar
         run: pnpm sidecar:fetch
-      - name: Exercise 7-Zip backend with Unicode paths
-        run: pnpm sidecar:test
+      - name: Run core compression regression
+        run: pnpm test:core:windows

@@ -1,0 +1,122 @@
+﻿[
+    {
+        "TimeCreated":  "\/Date(1785320910661)\/",
+        "Id":  822,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "Updating registry for package Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe completed with result: 0x0."
+    },
+    {
+        "TimeCreated":  "\/Date(1785320910660)\/",
+        "Id":  821,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "During-logon registration of package Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe for user S-1-5-21-2047949552-857980807-821054962-504 finished with result: 0x0; updating registry..."
+    },
+    {
+        "TimeCreated":  "\/Date(1785320910596)\/",
+        "Id":  400,
+        "LevelDisplayName":  "Information",
+        "Message":  "Deployment OnDemandRegisterOperation operation with target volume C: on Package Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe from:   finished successfully."
+    },
+    {
+        "TimeCreated":  "\/Date(1785320910552)\/",
+        "Id":  679,
+        "LevelDisplayName":  "Information",
+        "Message":  "OnDemandRegisterPackageList Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe ."
+    },
+    {
+        "TimeCreated":  "\/Date(1785320910552)\/",
+        "Id":  607,
+        "LevelDisplayName":  "Information",
+        "Message":  "Deployment OnDemandRegisterOperation operation on package Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe has been de-queued and is running for user SID S-1-5-21-2047949552-857980807-821054962-504."
+    },
+    {
+        "TimeCreated":  "\/Date(1785320910548)\/",
+        "Id":  10002,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "Creating Resiliency File C:\\ProgramData\\Microsoft\\Windows\\AppRepository\\f3b6de0c-104a-4f07-99b5-9a29a05d5295_S-1-5-21-2047949552-857980807-821054962-504_1.rslc for OnDemandRegisterOperation Operation on Package Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe."
+    },
+    {
+        "TimeCreated":  "\/Date(1785320910519)\/",
+        "Id":  604,
+        "LevelDisplayName":  "Information",
+        "Message":  "Started deployment OnDemandRegisterOperation operation on a package with main parameter , dependency parameters Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe and Options ImmediatePriorityRequest and 0. See http://go.microsoft.com/fwlink/?LinkId=235160 for help diagnosing app deployment issues."
+    },
+    {
+        "TimeCreated":  "\/Date(1785320910496)\/",
+        "Id":  819,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "The following packages will be installed: Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe . The following packages will be removed: NULL"
+    },
+    {
+        "TimeCreated":  "\/Date(1785292572822)\/",
+        "Id":  940,
+        "LevelDisplayName":  "Information",
+        "Message":  "Appxsvc lifecycle transition to Running (Checkpoint=4)"
+    },
+    {
+        "TimeCreated":  "\/Date(1785292572811)\/",
+        "Id":  939,
+        "LevelDisplayName":  "Information",
+        "Message":  "Appxsvc lifecycle transition to Starting (Checkpoint=2)"
+    },
+    {
+        "TimeCreated":  "\/Date(1785292559293)\/",
+        "Id":  942,
+        "LevelDisplayName":  "Information",
+        "Message":  "Appxsvc lifecycle transition to Stopped (Checkpoint=9)"
+    },
+    {
+        "TimeCreated":  "\/Date(1785292559199)\/",
+        "Id":  941,
+        "LevelDisplayName":  "Information",
+        "Message":  "Appxsvc lifecycle transition to Stopping (Checkpoint=5)"
+    },
+    {
+        "TimeCreated":  "\/Date(1785292529786)\/",
+        "Id":  819,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "The following packages will be installed: Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe . The following packages will be removed: NULL"
+    },
+    {
+        "TimeCreated":  "\/Date(1785292529783)\/",
+        "Id":  400,
+        "LevelDisplayName":  "Information",
+        "Message":  "Deployment ProvisionPackageOperation operation with target volume C: on Package Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe from:   finished successfully."
+    },
+    {
+        "TimeCreated":  "\/Date(1785292529783)\/",
+        "Id":  617,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "Successfully updated the status for package Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe and user S-1-5-18 (Clear=0x10000C00, Set=0x0)."
+    },
+    {
+        "TimeCreated":  "\/Date(1785292529772)\/",
+        "Id":  855,
+        "LevelDisplayName":  "Information",
+        "Message":  "Finished resolving action lists. DeploymentRequest action lists: addPackageList: Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe."
+    },
+    {
+        "TimeCreated":  "\/Date(1785292529768)\/",
+        "Id":  607,
+        "LevelDisplayName":  "Information",
+        "Message":  "Deployment ProvisionPackageOperation operation on package Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe has been de-queued and is running for user SID S-1-5-18."
+    },
+    {
+        "TimeCreated":  "\/Date(1785292529758)\/",
+        "Id":  626,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "Deployment ProvisionPackageOperation operation on package Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe has been requeued for user SID S-1-5-18."
+    },
+    {
+        "TimeCreated":  "\/Date(1785292529758)\/",
+        "Id":  855,
+        "LevelDisplayName":  "Information",
+        "Message":  "Finished resolving action lists. DeploymentRequest action lists: addPackageList: Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe."
+    },
+    {
+        "TimeCreated":  "\/Date(1785292529754)\/",
+        "Id":  607,
+        "LevelDisplayName":  "Information",
+        "Message":  "Deployment ProvisionPackageOperation operation on package Microsoft.MicrosoftEdge.Stable_150.0.4078.99_neutral__8wekyb3d8bbwe has been de-queued and is running for user SID S-1-5-18."
+    }
+]

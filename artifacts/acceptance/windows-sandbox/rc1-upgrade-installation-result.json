@@ -1,0 +1,71 @@
+﻿{
+    "schemaVersion":  3,
+    "scenario":  "Upgrade",
+    "startedAt":  "2026-07-29T10:28:37.6359070Z",
+    "host":  {
+                 "caption":  "Microsoft Windows 11 Enterprise",
+                 "version":  "10.0.26100",
+                 "build":  "26100",
+                 "user":  "WDAGUtilityAccount"
+             },
+    "installers":  {
+                       "candidate":  {
+                                         "path":  "C:\\QZip\\target\\release\\bundle\\nsis\\QZip_1.0.0_x64-setup.exe",
+                                         "sha256":  "7CF1E11CB57C6449A02FF8F538000B7FB0685363269385932D551C79FC42CC98",
+                                         "fileVersion":  "1.0.0",
+                                         "productVersion":  "1.0.0",
+                                         "length":  5204622
+                                     },
+                       "baseline":  {
+                                        "path":  "C:\\QZipBaseline\\QZip_0.9.0_x64-setup.exe",
+                                        "sha256":  "E5BAB4915FDE1281B30BC42DED1394049E6F84D26B4E80C4B3676A3A694CFEF8",
+                                        "fileVersion":  "0.9.0",
+                                        "productVersion":  "0.9.0",
+                                        "length":  4034335
+                                    }
+                   },
+    "steps":  [
+                  {
+                      "name":  "developmentCertificate",
+                      "recordedAt":  "2026-07-29T10:28:38.8792541Z",
+                      "data":  {
+                                   "certificates":  [
+                                                        {
+                                                            "path":  "C:\\QZip\\artifacts\\windows-shell\\QZip.Development.cer",
+                                                            "thumbprint":  "0BED4D709D996A0D9A90B80CEE550204B3FD8F96"
+                                                        },
+                                                        {
+                                                            "path":  "C:\\QZipBaseline\\QZip.Development.cer",
+                                                            "thumbprint":  "0BED4D709D996A0D9A90B80CEE550204B3FD8F96"
+                                                        }
+                                                    ],
+                                   "importer":  "X509Store.Add + certutil",
+                                   "stores":  [
+                                                  "CurrentUser/TrustedPeople",
+                                                  "LocalMachine/Root"
+                                              ]
+                               }
+                  },
+                  {
+                      "name":  "baselineInstall",
+                      "recordedAt":  "2026-07-29T10:28:40.0773005Z",
+                      "data":  {
+                                   "stdout":  "C:\\QZipResults\\logs\\Upgrade\\baselineInstall.stdout.log",
+                                   "exitCode":  2,
+                                   "stderr":  "C:\\QZipResults\\logs\\Upgrade\\baselineInstall.stderr.log"
+                               }
+                  },
+                  {
+                      "name":  "appxDiagnostics",
+                      "recordedAt":  "2026-07-29T10:28:41.1650750Z",
+                      "data":  {
+                                   "path":  "C:\\QZipResults\\logs\\Upgrade\\appx-deployment-events.json"
+                               }
+                  }
+              ],
+    "errors":  [
+                   "baselineInstall failed with exit code 2."
+               ],
+    "result":  "failed",
+    "finishedAt":  "2026-07-29T10:28:41.1650750Z"
+}

@@ -9,6 +9,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/node_modules/**",
       "**/target/**",
+      "target-rc1-verify/**",
       "apps/desktop/src-tauri/target/**",
       "PIC/**"
     ]

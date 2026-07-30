@@ -5,6 +5,8 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $sidecar = Join-Path $root 'third_party\7zip\bin\win-x64'
 $work = Join-Path ([IO.Path]::GetTempPath()) ('qzip-m1-' + [Guid]::NewGuid())
+$tempRoot = [IO.Path]::GetTempPath()
+$initialQzipTempPaths = @(Get-ChildItem -LiteralPath $tempRoot -Directory -Filter 'qzip-*' -ErrorAction SilentlyContinue | ForEach-Object FullName)
 $inputDirectoryName = ([string][char]0x8F93) + ([char]0x5165) + ' ' + ([char]0x6587) + ([char]0x4EF6) + ([char]0x5939)
 $fixtureFileName = ([string][char]0x4F60) + ([char]0x597D) + ' world.txt'
 function Get-Sha256([string]$Path) {
@@ -28,6 +30,15 @@ try {
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar extract --archive (Join-Path $work 'archive name.7z') --output (Join-Path $work 'output') | Select-String 'completed' | Out-Null
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar create --format zip --output (Join-Path $work 'archive.zip') $sourceDirectory | Select-String 'completed' | Out-Null
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar test --archive (Join-Path $work 'archive.zip') | Select-String '"valid":true' | Out-Null
+  foreach ($format in @('tar.gz', 'tar.xz')) {
+    $archive = Join-Path $work ("archive.$format")
+    $output = Join-Path $work ("output-$format")
+    cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar create --format $format --output $archive $sourceDirectory | Select-String 'completed' | Out-Null
+    cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar list --archive $archive | Select-String 'world.txt' | Out-Null
+    cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar test --archive $archive | Select-String '"valid":true' | Out-Null
+    cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar extract --archive $archive --output $output | Select-String 'completed' | Out-Null
+    if ((Get-Sha256 (Join-Path (Join-Path $output $inputDirectoryName) $fixtureFileName)) -ne (Get-Sha256 (Join-Path $sourceDirectory $fixtureFileName))) { throw "$format extraction hash differs from source." }
+  }
   $original = Get-Sha256 (Join-Path $sourceDirectory $fixtureFileName)
   $extracted = Get-Sha256 (Join-Path (Join-Path $work 'output') (Join-Path $inputDirectoryName $fixtureFileName))
   if ($original -ne $extracted) { throw 'Extracted Unicode fixture hash differs from source.' }
@@ -40,6 +51,14 @@ try {
   $wrongText = $wrongOutput -join "`n"
   if (($wrongExit -ne 4) -or ($wrongText -notmatch 'WRONG_PASSWORD')) { throw 'Wrong password was not mapped to the expected structured error.' }
   if ($wrongText -match $password) { throw 'Password leaked to CLI output.' }
+  $secretOutput = Join-Path $work 'secret-output'
+  $wrongExtractOutput = 'incorrect' | cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar extract --archive $secretArchive --output $secretOutput --password-stdin 2>&1
+  $wrongExtractExit = $LASTEXITCODE
+  $wrongExtractText = $wrongExtractOutput -join "`n"
+  if (($wrongExtractExit -ne 4) -or ($wrongExtractText -notmatch 'WRONG_PASSWORD')) { throw 'Wrong password extraction was not mapped to the expected structured error.' }
+  if ((Test-Path -LiteralPath $secretOutput) -and ((Get-ChildItem -LiteralPath $secretOutput -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0)) { throw 'Wrong password extraction produced files.' }
+  $password | cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar extract --archive $secretArchive --output $secretOutput --password-stdin | Select-String 'completed' | Out-Null
+  if ((Get-Sha256 (Join-Path (Join-Path $secretOutput $inputDirectoryName) $fixtureFileName)) -ne $original) { throw 'Correct password retry extraction hash differs from source.' }
   $corruptArchive = Join-Path $work 'corrupt.7z'
   Copy-Item -LiteralPath (Join-Path $work 'archive name.7z') -Destination $corruptArchive
   $bytes = [IO.File]::ReadAllBytes($corruptArchive)
@@ -56,6 +75,9 @@ try {
     cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar extract --archive $RarSample --output $rarOutput | Select-String 'completed' | Out-Null
     if ((Get-ChildItem -LiteralPath $rarOutput -Recurse -File | Measure-Object).Count -lt 1) { throw 'RAR extraction produced no files.' }
   }
+  $newQzipTempPaths = @(Get-ChildItem -LiteralPath $tempRoot -Directory -Filter 'qzip-*' -ErrorAction SilentlyContinue | ForEach-Object FullName | Where-Object { $_ -notin $initialQzipTempPaths -and $_ -ne $work })
+  if ($newQzipTempPaths.Count -gt 0) { throw "QZip temporary directories were left behind: $($newQzipTempPaths -join ', ')" }
   Write-Host '7-Zip integration test passed.'
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
+$global:LASTEXITCODE = 0

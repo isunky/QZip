@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AddCircleRegular,
   ArchiveRegular,
@@ -38,6 +38,7 @@ import type {
   TaskSnapshot
 } from "../../contracts/archive";
 import { archiveClient } from "../../lib/archiveClient";
+import { joinOutputPath, splitOutputPath, suggestCreateOutputLocally } from "./archivePath";
 
 type Page = "home" | "create" | "extract" | "browser" | "tasks";
 
@@ -56,7 +57,6 @@ const profiles = [
   { value: "small", label: "更小" }
 ] as const;
 const conflictOptions = [
-  { value: "ask", label: "询问" },
   { value: "rename", label: "重命名" },
   { value: "overwrite", label: "覆盖" },
   { value: "skip", label: "跳过" }
@@ -97,44 +97,6 @@ function fileName(path: string) {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
-function splitOutputPath(path: string) {
-  const index = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
-  return index < 0
-    ? { directory: "", name: path }
-    : { directory: path.slice(0, index), name: path.slice(index + 1) };
-}
-
-function joinOutputPath(directory: string, name: string) {
-  if (!directory) return name;
-  const separator = directory.includes("\\") ? "\\" : "/";
-  return `${directory.replace(/[\\/]+$/, "")}${separator}${name}`;
-}
-
-function createExtension(format: ArchiveFormat) {
-  switch (format) {
-    case "sevenZip": return "7z";
-    case "zip": return "zip";
-    case "tar": return "tar";
-    case "tarGz": return "tar.gz";
-    case "tarXz": return "tar.xz";
-    default: return "7z";
-  }
-}
-
-export function suggestCreateOutputLocally(inputs: string[], format: ArchiveFormat) {
-  const first = inputs[0]?.replace(/[\\/]+$/, "");
-  if (!first) return null;
-  const split = splitOutputPath(first);
-  const leaf = split.name || "新建压缩包";
-  const lastDot = leaf.lastIndexOf(".");
-  const stem = inputs.length > 1
-    ? "压缩文件"
-    : lastDot > 0
-      ? leaf.slice(0, lastDot)
-      : leaf;
-  return joinOutputPath(split.directory, `${stem}.${createExtension(format)}`);
-}
-
 function formatType(entry: ArchiveEntry) {
   if (entry.isDirectory) return "文件夹";
   const extension = entry.displayName.split(".").pop()?.toUpperCase();
@@ -146,6 +108,14 @@ function formatElapsed(seconds = 0) {
   const minutes = Math.floor((seconds % 3600) / 60);
   const rest = Math.floor(seconds % 60);
   return [hours, minutes, rest].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
+function formatTaskTimestamp(value: number) {
+  // Rust task-runtime timestamps are Unix seconds; demo/test tasks use JS
+  // milliseconds. Accept both while persisted task history is migrated.
+  const milliseconds = value < 100_000_000_000 ? value * 1000 : value;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
 }
 
 function makeDemoTask(operation: "create" | "extract" | "test" | "update", name: string, output?: string): TaskSnapshot {
@@ -206,30 +176,55 @@ export function CreatePage({
   const [inputs, setInputs] = useState<string[]>(() => [...new Set(initialInputs)]);
   const [format, setFormat] = useState<ArchiveFormat>(defaultFormat);
   const [profile, setProfile] = useState<CompressionProfile>(defaultProfile);
-  const initialOutput = splitOutputPath(archiveClient.isTauri ? "" : "D:\\示例\\项目资料.7z");
+  const initialOutput = splitOutputPath(
+    suggestCreateOutputLocally(initialInputs, defaultFormat)
+      ?? (archiveClient.isTauri ? "" : "D:\\示例\\项目资料.7z")
+  );
   const [directory, setDirectory] = useState(initialOutput.directory);
   const [name, setName] = useState(initialOutput.name);
   const [password, setPassword] = useState("");
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [testing, setTesting] = useState(defaultTestAfterCreate);
-  const [deleteSources, setDeleteSources] = useState(false);
   const [encryptHeaders, setEncryptHeaders] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  const suggestionGeneration = useRef(0);
+  const initialSuggestion = useRef({ inputs: [...new Set(initialInputs)], format: defaultFormat });
 
-  const useSuggestedOutput = (path: string) => {
+  const applySuggestedOutput = useCallback((path: string) => {
     const next = splitOutputPath(path);
     setDirectory(next.directory);
     setName(next.name);
+  }, []);
+  const suggestOutput = useCallback((nextInputs: string[], nextFormat: ArchiveFormat) => {
+    const local = suggestCreateOutputLocally(nextInputs, nextFormat);
+    if (local) applySuggestedOutput(local);
+    if (!nextInputs.length || !archiveClient.isTauri) return;
+    const generation = ++suggestionGeneration.current;
+    void archiveClient.suggestCreateOutput(nextInputs, nextFormat)
+      .then((path) => {
+        if (generation === suggestionGeneration.current) applySuggestedOutput(path);
+      })
+      .catch(() => undefined);
+  }, [applySuggestedOutput]);
+  const replaceInputs = (nextInputs: string[]) => {
+    const unique = [...new Set(nextInputs)];
+    setInputs(unique);
+    suggestOutput(unique, format);
+  };
+  const selectFormat = (nextFormat: ArchiveFormat) => {
+    setFormat(nextFormat);
+    suggestOutput(inputs, nextFormat);
   };
   const addFiles = async () => {
     if (!archiveClient.isTauri) {
-      setInputs(["D:\\项目资料"]);
+      replaceInputs(["D:\\项目资料"]);
       return;
     }
     const picked = await archiveClient.pickInputPaths(false);
-    setInputs((current) => [...new Set([...current, ...picked])]);
+    replaceInputs([...inputs, ...picked]);
   };
   const addFolder = async () => {
     if (!archiveClient.isTauri) {
@@ -237,7 +232,7 @@ export function CreatePage({
       return;
     }
     const picked = await archiveClient.pickInputFolder();
-    if (picked) setInputs((current) => [...new Set([...current, picked])]);
+    if (picked) replaceInputs([...inputs, picked]);
   };
   const pickOutputFolder = async () => {
     if (!archiveClient.isTauri) {
@@ -249,13 +244,12 @@ export function CreatePage({
   };
 
   useEffect(() => {
-    if (!inputs.length || !archiveClient.isTauri) return;
-    const fallback = suggestCreateOutputLocally(inputs, format);
-    if (fallback) useSuggestedOutput(fallback);
+    const { inputs: initialInputsForSuggestion, format: initialFormat } = initialSuggestion.current;
+    if (!initialInputsForSuggestion.length || !archiveClient.isTauri) return;
     let cancelled = false;
-    void archiveClient.suggestCreateOutput(inputs, format)
+    void archiveClient.suggestCreateOutput(initialInputsForSuggestion, initialFormat)
       .then((path) => {
-        if (!cancelled) useSuggestedOutput(path);
+        if (!cancelled) applySuggestedOutput(path);
       })
       .catch(() => {
         // The local suggestion keeps the create flow usable if IPC path
@@ -264,9 +258,19 @@ export function CreatePage({
     return () => {
       cancelled = true;
     };
-  }, [format, inputs]);
+  }, [applySuggestedOutput]);
 
   const start = async () => {
+    if (busy || submittingRef.current) return;
+    if (!inputs.length || !directory.trim() || !name.trim()) {
+      setError("请先选择要压缩的文件，并填写保存位置和文件名。");
+      return;
+    }
+    if (format === "tar" && password) {
+      setError("TAR 格式不支持密码，请改用 7Z 或 ZIP。");
+      return;
+    }
+    submittingRef.current = true;
     setBusy(true);
     setError(null);
     const output = joinOutputPath(directory, name);
@@ -279,13 +283,14 @@ export function CreatePage({
         password: password || undefined,
         encryptHeaders: Boolean(password) && format === "sevenZip" && encryptHeaders,
         testAfterCreate: testing,
-        deleteSourcesAfterSuccess: deleteSources
+        deleteSourcesAfterSuccess: false
       };
       onCreated(archiveClient.isTauri ? await archiveClient.create(request) : makeDemoTask("create", name || "项目资料.7z", output));
       onOpenTasks();
     } catch (reason) {
       setError(String(reason));
     } finally {
+      submittingRef.current = false;
       setBusy(false);
     }
   };
@@ -311,7 +316,7 @@ export function CreatePage({
             <span key={path}>
               <DocumentRegular fontSize={17} />
               {fileName(path)}
-              <button type="button" aria-label={`移除 ${fileName(path)}`} onClick={() => setInputs((current) => current.filter((item) => item !== path))}>
+              <button type="button" aria-label={`移除 ${fileName(path)}`} onClick={() => replaceInputs(inputs.filter((item) => item !== path))}>
                 <DismissRegular fontSize={15} />
               </button>
             </span>
@@ -339,7 +344,7 @@ export function CreatePage({
           <SegmentedControl
             options={primaryFormatOptions}
             value={primaryFormatOptions.some((option) => option.value === format) ? format as "sevenZip" | "zip" | "tar" : "sevenZip"}
-            onValueChange={(value) => setFormat(value as ArchiveFormat)}
+            onValueChange={(value) => selectFormat(value as ArchiveFormat)}
             ariaLabel="压缩格式"
           />
         </FormRow>
@@ -388,12 +393,11 @@ export function CreatePage({
             <SegmentedControl
               options={advancedFormatOptions}
               value={advancedFormatOptions.some((option) => option.value === format) ? format as "tarGz" | "tarXz" : "tarGz"}
-              onValueChange={(value) => setFormat(value as ArchiveFormat)}
+              onValueChange={(value) => selectFormat(value as ArchiveFormat)}
               ariaLabel="其他压缩格式"
             />
           </FormRow>
           <label><input type="checkbox" checked={testing} onChange={(event) => setTesting(event.target.checked)} /> 创建完成后测试压缩包完整性</label>
-          <label><input type="checkbox" checked={deleteSources} onChange={(event) => setDeleteSources(event.target.checked)} /> 成功后删除源文件</label>
           <label data-disabled={!password || format !== "sevenZip"}><input type="checkbox" disabled={!password || format !== "sevenZip"} checked={encryptHeaders} onChange={(event) => setEncryptHeaders(event.target.checked)} /> 加密文件名（仅 7Z）</label>
         </section>
       ) : null}
@@ -410,7 +414,8 @@ export function ExtractPage({
   onBack,
   onBrowse,
   onCreated,
-  defaultConflictPolicy = "rename"
+  defaultConflictPolicy = "rename",
+  initialPassword = ""
 }: {
   archive: string;
   session: ArchiveSession;
@@ -419,10 +424,11 @@ export function ExtractPage({
   onBrowse: () => void;
   onCreated: (task: TaskSnapshot) => void;
   defaultConflictPolicy?: ConflictPolicy;
+  initialPassword?: string;
 }) {
   const [output, setOutput] = useState(archiveClient.isTauri ? "" : "D:\\项目资料");
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>(defaultConflictPolicy);
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState(initialPassword);
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -768,8 +774,8 @@ function TaskCard({
         {active ? <Progress value={Math.max(percent, task.status === "queued" ? 4 : 0)} /> : null}
         <p className="qzip-task-card__meta">
           {active ? <>当前文件：{task.progress?.currentEntry ?? "准备处理"} <i /> 已用时间：{formatElapsed(task.progress?.elapsedSeconds)}</> : null}
-          {task.status === "completed" ? <>完成时间：{new Date(task.updatedAt).toLocaleString()}</> : null}
-          {task.status === "failed" || task.status === "cancelled" ? <>失败时间：{new Date(task.updatedAt).toLocaleString()}</> : null}
+          {task.status === "completed" ? <>完成时间：{formatTaskTimestamp(task.updatedAt)}</> : null}
+          {task.status === "failed" || task.status === "cancelled" ? <>失败时间：{formatTaskTimestamp(task.updatedAt)}</> : null}
         </p>
         {needsPassword && showPassword ? <Input aria-label="重试密码" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="请输入正确密码" /> : null}
       </div>
@@ -783,7 +789,7 @@ function TaskCard({
             disabled={showPassword && needsPassword && !password}
             onClick={() => showPassword ? onRetry(task.taskId, password || undefined) : setShowPassword(true)}
           >
-            {showPassword ? "确认重试" : "重新输入密码"}
+            {showPassword ? "确认重试" : needsPassword ? "重新输入密码" : "重试"}
           </Button>
         ) : null}
         {task.status === "completed" && task.output ? <Button variant="secondary" icon={<OpenRegular fontSize={19} />} onClick={() => void archiveClient.open(task.output!)}>打开结果</Button> : null}

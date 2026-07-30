@@ -1,0 +1,7 @@
+﻿{
+    "scenario":  "Fresh",
+    "fixtureRoot":  "C:\\Users\\WDAGUtilityAccount\\Documents\\QZip-RC1-Acceptance",
+    "archive":  "C:\\Users\\WDAGUtilityAccount\\Documents\\QZip-RC1-Acceptance\\sample.zip",
+    "folder":  "C:\\Users\\WDAGUtilityAccount\\Documents\\QZip-RC1-Acceptance\\folder-sample",
+    "app":  "C:\\Users\\WDAGUtilityAccount\\AppData\\Local\\QZip\\qzip-desktop.exe"
+}
