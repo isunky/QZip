@@ -1,0 +1,122 @@
+﻿[
+    {
+        "TimeCreated":  "\/Date(1785324191844)\/",
+        "Id":  819,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "The following packages will be installed: . The following packages will be removed: "
+    },
+    {
+        "TimeCreated":  "\/Date(1785323615104)\/",
+        "Id":  942,
+        "LevelDisplayName":  "Information",
+        "Message":  "Appxsvc lifecycle transition to Stopped (Checkpoint=8)"
+    },
+    {
+        "TimeCreated":  "\/Date(1785323615093)\/",
+        "Id":  941,
+        "LevelDisplayName":  "Information",
+        "Message":  "Appxsvc lifecycle transition to Stopping (Checkpoint=5)"
+    },
+    {
+        "TimeCreated":  "\/Date(1785323094144)\/",
+        "Id":  613,
+        "LevelDisplayName":  "Information",
+        "Message":  "Performance summary of Deployment Add operation on Package app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4: \r\nOverall time: 2422 ms (Active time: 2407 ms)\r\nEnqueue cost: 2141 ms\r\nDequeue delay: 15 ms\r\nBundle processing cost: 0 ms\r\nIndexing cost: 16 ms\r\nResolve dependency cost: 16 ms\r\nCheck approval cost: 0 ms\r\nEvaluation cost: 15 ms\r\nHardlinking evaluation cost: 0 ms\r\nStage required cost: 16 ms\r\nFlushing and closing files cost: 0 ms\r\nGap: 15 ms\r\nMachine register cost: 32 ms\r\nStage user data cost: 0 ms\r\nRegistration cost: 62 ms\r\nRepository commit transaction cost: 47 ms\r\nGap: 31 ms\r\nData flush cost: 0 ms\r\nPost DeStage repository commit transaction cost: 0 ms\r\nRemaining cost: 16 ms\r\n"
+    },
+    {
+        "TimeCreated":  "\/Date(1785323094114)\/",
+        "Id":  400,
+        "LevelDisplayName":  "Information",
+        "Message":  "Deployment Add operation with target volume C: on Package app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 from:  (QZip.Shell.msix)  finished successfully."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323094106)\/",
+        "Id":  617,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "Successfully updated the status for package app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 and user S-1-5-21-2047949552-857980807-821054962-504 (Clear=0x10000C00, Set=0x0)."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323094100)\/",
+        "Id":  617,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "Successfully updated the status for package app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 and user S-1-5-21-2047949552-857980807-821054962-504 (Clear=0x20, Set=0x0)."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323094100)\/",
+        "Id":  617,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "Successfully updated the status for package app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 and user S-1-5-21-2047949552-857980807-821054962-504 (Clear=0x20, Set=0x0)."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323094044)\/",
+        "Id":  5507,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 : C:\\Program Files\\WindowsApps\\app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4\\microsoft.system.package.metadata\\Resources.????????.pri : No shared merged files found"
+    },
+    {
+        "TimeCreated":  "\/Date(1785323094044)\/",
+        "Id":  5507,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 : C:\\Program Files\\WindowsApps\\app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4\\microsoft.system.package.metadata\\S-1-5-21-2047949552-857980807-821054962-504-MergedResources-*.pri : No user-specific merged files found"
+    },
+    {
+        "TimeCreated":  "\/Date(1785323094044)\/",
+        "Id":  5507,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 : C:\\Program Files\\WindowsApps\\app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4\\microsoft.system.package.metadata\\Resources.????????.pri : No shared merged files found"
+    },
+    {
+        "TimeCreated":  "\/Date(1785323094044)\/",
+        "Id":  5507,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 : C:\\Program Files\\WindowsApps\\app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4\\microsoft.system.package.metadata\\S-1-5-21-2047949552-857980807-821054962-504-MergedResources-*.pri : No user-specific merged files found"
+    },
+    {
+        "TimeCreated":  "\/Date(1785323094022)\/",
+        "Id":  617,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "Successfully updated the status for package app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 and user S-1-5-21-2047949552-857980807-821054962-504 (Clear=0x0, Set=0x20)."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323093958)\/",
+        "Id":  617,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "Successfully updated the status for package app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 and user S-1-5-21-2047949552-857980807-821054962-504 (Clear=0x0, Set=0x20)."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323093904)\/",
+        "Id":  855,
+        "LevelDisplayName":  "Information",
+        "Message":  "Finished resolving action lists. DeploymentRequest action lists: addPackageList: app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323093897)\/",
+        "Id":  574,
+        "LevelDisplayName":  "Information",
+        "Message":  "Preferred package version for package family is changing. Current preferred version is: NULL. New preferred version will be: app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323093875)\/",
+        "Id":  854,
+        "LevelDisplayName":  "Information",
+        "Message":  "Successfully added the following uri(s) to be processed:  file:///C:/Users/WDAGUtilityAccount/AppData/Local/QZip/qzip-shell/QZip.Shell.msix."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323093874)\/",
+        "Id":  607,
+        "LevelDisplayName":  "Information",
+        "Message":  "Deployment Add operation on package app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4 has been de-queued and is running for user SID S-1-5-21-2047949552-857980807-821054962-504."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323093871)\/",
+        "Id":  10002,
+        "LevelDisplayName":  "Verbose",
+        "Message":  "Creating Resiliency File C:\\ProgramData\\Microsoft\\Windows\\AppRepository\\f3b6de0c-104a-4f07-99b5-9a29a05d5295_S-1-5-21-2047949552-857980807-821054962-504_4.rslc for Add Operation on Package app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4."
+    },
+    {
+        "TimeCreated":  "\/Date(1785323091716)\/",
+        "Id":  603,
+        "LevelDisplayName":  "Information",
+        "Message":  "Started deployment Add operation on a package with main parameter QZip.Shell.msix and Options NormalPriorityRequest and 0. See http://go.microsoft.com/fwlink/?LinkId=235160 for help diagnosing app deployment issues."
+    }
+]

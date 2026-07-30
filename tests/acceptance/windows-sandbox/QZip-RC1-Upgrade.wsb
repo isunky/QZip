@@ -10,9 +10,14 @@
       <SandboxFolder>C:\QZipResults</SandboxFolder>
       <ReadOnly>false</ReadOnly>
     </MappedFolder>
+    <MappedFolder>
+      <HostFolder>D:\AICode\QZip\artifacts\acceptance\windows-sandbox\baseline</HostFolder>
+      <SandboxFolder>C:\QZipBaseline</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
   </MappedFolders>
   <LogonCommand>
-    <Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\QZip\tests\acceptance\windows-sandbox\run-rc1-sandbox-acceptance.ps1 -Scenario Fresh -Interactive</Command>
+    <Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\QZip\tests\acceptance\windows-sandbox\run-rc1-sandbox-acceptance.ps1 -Scenario Upgrade -BaselineInstaller C:\QZipBaseline\QZip_0.9.0_x64-setup.exe</Command>
   </LogonCommand>
   <Networking>Enable</Networking>
   <ClipboardRedirection>Enable</ClipboardRedirection>

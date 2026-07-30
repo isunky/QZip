@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{Arc, Mutex},
+    time::{Duration, SystemTime},
 };
 
 #[cfg(target_os = "windows")]
@@ -35,6 +36,7 @@ struct AppState {
     sessions: Mutex<HashMap<String, ArchiveSession>>,
     settings: Mutex<AppSettings>,
     initial_launch_request: Mutex<Option<LaunchRequest>>,
+    shell_request_not_before: SystemTime,
 }
 
 const SETTINGS_STORE: &str = "settings.json";
@@ -165,9 +167,8 @@ fn shell_request_root() -> Option<PathBuf> {
         .map(|base| PathBuf::from(base).join("QZip").join("ShellRequests"))
 }
 
-fn consume_shell_request(token: &str) -> Option<LaunchRequest> {
-    let token = Uuid::parse_str(token).ok()?;
-    let root = shell_request_root()?;
+fn consume_shell_request_from_root(root: &Path, token: &str) -> Option<LaunchRequest> {
+    Uuid::parse_str(token).ok()?;
     let path = root.join(format!("{token}.json"));
     let canonical_root = root.canonicalize().ok()?;
     let canonical_path = path.canonicalize().ok()?;
@@ -197,6 +198,38 @@ fn consume_shell_request(token: &str) -> Option<LaunchRequest> {
     })
 }
 
+fn consume_shell_request(token: &str) -> Option<LaunchRequest> {
+    consume_shell_request_from_root(&shell_request_root()?, token)
+}
+
+fn take_pending_shell_request_from_root(
+    root: &Path,
+    not_before: SystemTime,
+) -> Option<LaunchRequest> {
+    let mut candidates = std::fs::read_dir(root)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                return None;
+            }
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            if modified < not_before {
+                return None;
+            }
+            let token = path.file_stem()?.to_str()?.to_owned();
+            Uuid::parse_str(&token).ok()?;
+            Some((modified, token))
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by_key(|(modified, _)| *modified);
+    candidates
+        .into_iter()
+        .rev()
+        .find_map(|(_, token)| consume_shell_request_from_root(root, &token))
+}
+
 fn launch_request_from_args(args: &[String]) -> Option<LaunchRequest> {
     if let Some(index) = args.iter().position(|arg| arg == "--shell-request") {
         return args
@@ -215,6 +248,37 @@ fn launch_request_from_args(args: &[String]) -> Option<LaunchRequest> {
         paths,
         source: "fileAssociation".to_owned(),
     })
+}
+
+#[cfg(test)]
+mod shell_request_tests {
+    use super::*;
+
+    #[test]
+    fn consumes_braced_windows_guid_request() {
+        let root = std::env::temp_dir().join(format!("qzip-shell-request-{}", Uuid::new_v4()));
+        let input = root.join("selected-folder");
+        std::fs::create_dir_all(&input).expect("create shell request fixture");
+        let token = format!("{{{}}}", Uuid::new_v4().to_string().to_uppercase());
+        let request_path = root.join(format!("{token}.json"));
+        let body = serde_json::json!({
+            "action": "compress-sevenzip",
+            "paths": [input]
+        });
+        std::fs::write(
+            &request_path,
+            serde_json::to_vec(&body).expect("serialize shell request fixture"),
+        )
+        .expect("write shell request fixture");
+
+        let request = take_pending_shell_request_from_root(&root, SystemTime::UNIX_EPOCH)
+            .expect("consume braced Windows GUID request");
+
+        assert!(matches!(request.kind, LaunchKind::CompressSevenZip));
+        assert_eq!(request.source, "shell");
+        assert!(!request_path.exists());
+        std::fs::remove_dir_all(&root).expect("remove shell request fixture");
+    }
 }
 
 fn load_settings(app: &AppHandle) -> AppSettings {
@@ -253,6 +317,67 @@ fn sidecar_path(app: &AppHandle) -> PathBuf {
         .join("..")
         .join("third_party/7zip/bin/win-x64/7z.exe")
 }
+
+#[cfg(target_os = "windows")]
+fn shell_registration_is_missing() -> bool {
+    !Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$package = Get-AppxPackage -Name 'app.qzip.desktop.shell' -ErrorAction SilentlyContinue; if ($package -and ([version]$package.Version -ge [version]'1.0.0.5')) { exit 0 } else { exit 1 }",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[cfg(target_os = "windows")]
+fn retry_shell_registration_after_launch() {
+    if !shell_registration_is_missing() {
+        return;
+    }
+    let Ok(executable) = std::env::current_exe() else {
+        return;
+    };
+    let Some(install_path) = executable.parent().map(Path::to_path_buf) else {
+        return;
+    };
+    let script = install_path
+        .join("qzip-shell")
+        .join("Register-QZipShell.ps1");
+    let package = install_path.join("qzip-shell").join("QZip.Shell.msix");
+    if !script.is_file() || !package.is_file() {
+        return;
+    }
+    std::thread::spawn(move || {
+        let _ = Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+            ])
+            .arg(script)
+            .arg("-InstallPath")
+            .arg(install_path)
+            .arg("-PackagePath")
+            .arg(package)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
+    });
+}
+
+#[cfg(not(target_os = "windows"))]
+fn retry_shell_registration_after_launch() {}
+
 fn secret(password: Option<String>) -> Option<SecretString> {
     password.map(SecretString::from)
 }
@@ -732,6 +857,10 @@ fn take_initial_launch_request(state: State<'_, AppState>) -> Option<LaunchReque
         .take()
 }
 #[tauri::command]
+fn take_pending_shell_request(state: State<'_, AppState>) -> Option<LaunchRequest> {
+    take_pending_shell_request_from_root(&shell_request_root()?, state.shell_request_not_before)
+}
+#[tauri::command]
 fn open_path(path: PathBuf) -> Result<(), CommandErrorDto> {
     Command::new("explorer.exe")
         .arg(&path)
@@ -767,6 +896,7 @@ pub fn run() {
             }
         }))
         .setup(|app| {
+            retry_shell_registration_after_launch();
             let backend = Arc::new(SevenZipCliBackend::new(sidecar_path(app.handle())));
             let history = app.path().app_data_dir()?.join("task-history-v1.json");
             let tasks = TaskManager::new(backend.clone(), history);
@@ -781,12 +911,16 @@ pub fn run() {
             let settings = load_settings(app.handle());
             let initial_launch_request =
                 launch_request_from_args(&std::env::args().collect::<Vec<_>>());
+            let shell_request_not_before = SystemTime::now()
+                .checked_sub(Duration::from_secs(15))
+                .unwrap_or(SystemTime::UNIX_EPOCH);
             app.manage(AppState {
                 backend,
                 tasks,
                 sessions: Mutex::new(HashMap::new()),
                 settings: Mutex::new(settings),
                 initial_launch_request: Mutex::new(initial_launch_request),
+                shell_request_not_before,
             });
             Ok(())
         })
@@ -815,6 +949,7 @@ pub fn run() {
             open_default_apps_settings,
             check_for_updates,
             take_initial_launch_request,
+            take_pending_shell_request,
             open_path,
             reveal_in_file_manager
         ])

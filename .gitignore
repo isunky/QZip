@@ -24,3 +24,4 @@ artifacts/release/
 artifacts/acceptance/installer-payload-*/
 artifacts/acceptance/ui-create-regression-*.7z
 artifacts/acceptance/password-debug/
+artifacts/acceptance/windows-sandbox/baseline/

@@ -158,17 +158,59 @@ export function App() {
       if (!target) return;
       if (request.kind === "open") {
         void prepareArchive(target, "browser");
-      } else if (request.kind === "compressSevenZip" || request.kind === "compressZip" || request.kind === "moreOptions") {
+      } else if (request.kind === "compressSevenZip" || request.kind === "compressZip") {
+        const format = request.kind === "compressZip" ? "zip" : "sevenZip";
+        void archiveClient.suggestCreateOutput(request.paths, format)
+          .then((output) => archiveClient.create({
+            inputs: request.paths,
+            output,
+            format,
+            profile: settingsRef.current.compressionProfile,
+            encryptHeaders: false,
+            testAfterCreate: settingsRef.current.testAfterCreate,
+            deleteSourcesAfterSuccess: false
+          }))
+          .then((task) => {
+            setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+            setPage("tasks");
+            setToast("已开始执行右键压缩任务。");
+          })
+          .catch((reason) => setToast(`无法启动右键压缩：${String(reason)}`));
+      } else if (request.kind === "moreOptions") {
         setCreateInputs(request.paths);
-        setCreateFormat(request.kind === "compressZip" ? "zip" : request.kind === "compressSevenZip" ? "sevenZip" : undefined);
+        setCreateFormat(undefined);
         setPage("create");
       } else if (request.kind === "extractHere" || request.kind === "extractNamed") {
-        void prepareArchive(target, "extract");
+        const named = request.kind === "extractNamed";
+        void archiveClient.suggestExtractOutput(target, named)
+          .then((output) => archiveClient.extract({
+            archive: target,
+            output,
+            conflictPolicy: settingsRef.current.conflictPolicy,
+            acceptRisk: false
+          }))
+          .then((task) => {
+            setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+            setPage("tasks");
+            setToast(named ? "已开始解压到同名文件夹。" : "已开始解压到此处。");
+          })
+          .catch((reason) => setToast(`无法启动右键解压：${String(reason)}`));
       }
     };
     void archiveClient.onLaunchRequest(handleLaunchRequest).then((next) => { unlisten = next; });
     void archiveClient.takeInitialLaunchRequest().then((request) => { if (request) handleLaunchRequest(request); }).catch(() => undefined);
-    return () => unlisten?.();
+    let checkingPendingRequest = false;
+    const checkPendingRequest = () => {
+      if (checkingPendingRequest) return;
+      checkingPendingRequest = true;
+      void archiveClient.takePendingShellRequest()
+        .then((request) => { if (request) handleLaunchRequest(request); })
+        .catch(() => undefined)
+        .finally(() => { checkingPendingRequest = false; });
+    };
+    checkPendingRequest();
+    const pendingRequestTimer = window.setInterval(checkPendingRequest, 750);
+    return () => { window.clearInterval(pendingRequestTimer); unlisten?.(); };
   }, [prepareArchive]);
 
   async function openArchive() {

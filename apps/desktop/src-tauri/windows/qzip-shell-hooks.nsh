@@ -13,13 +13,7 @@
   WriteRegStr HKCU "Software\QZip\Capabilities\FileAssociations" ".xz" "QZip.Archive"
   WriteRegStr HKCU "Software\QZip\Capabilities\FileAssociations" ".bz2" "QZip.Archive"
   WriteRegStr HKCU "Software\RegisteredApplications" "QZip" "Software\QZip\Capabilities"
-  DetailPrint "Registering QZip Explorer commands"
-  nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\qzip-shell\Register-QZipShell.ps1" -InstallPath "$INSTDIR" -PackagePath "$INSTDIR\qzip-shell\QZip.Shell.msix"'
-  Pop $0
-  ${If} $0 != 0
-    MessageBox MB_ICONSTOP "QZip Explorer menu registration failed. Installation was cancelled."
-    Abort
-  ${EndIf}
+  DetailPrint "QZip Explorer commands will register when QZip first starts"
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL

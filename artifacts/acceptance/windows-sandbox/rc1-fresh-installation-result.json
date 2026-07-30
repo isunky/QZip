@@ -1,0 +1,105 @@
+﻿{
+    "schemaVersion":  3,
+    "scenario":  "Fresh",
+    "startedAt":  "2026-07-29T11:02:57.5275690Z",
+    "host":  {
+                 "caption":  "Microsoft Windows 11 企业版",
+                 "version":  "10.0.26100",
+                 "build":  "26100",
+                 "user":  "WDAGUtilityAccount"
+             },
+    "installers":  {
+                       "candidate":  {
+                                         "path":  "C:\\QZip\\target\\release\\bundle\\nsis\\QZip_1.0.0_x64-setup.exe",
+                                         "sha256":  "BC3C3478DEDE1E08DE2456E2746131DAA87C5F07E0E377AF9A8C5C8BE6FFB593",
+                                         "fileVersion":  "1.0.0",
+                                         "productVersion":  "1.0.0",
+                                         "length":  211619409
+                                     }
+                   },
+    "steps":  [
+                  {
+                      "name":  "developmentCertificate",
+                      "recordedAt":  "2026-07-29T11:02:59.6386477Z",
+                      "data":  {
+                                   "certificates":  [
+                                                        {
+                                                            "path":  "C:\\QZip\\artifacts\\windows-shell\\QZip.Development.cer",
+                                                            "thumbprint":  "0BED4D709D996A0D9A90B80CEE550204B3FD8F96"
+                                                        }
+                                                    ],
+                                   "importer":  "X509Store.Add + certutil",
+                                   "stores":  [
+                                                  "CurrentUser/TrustedPeople",
+                                                  "LocalMachine/Root"
+                                              ]
+                               }
+                  },
+                  {
+                      "name":  "shellRegistrationPrerequisite",
+                      "recordedAt":  "2026-07-29T11:03:06.4072158Z",
+                      "data":  {
+                                   "package":  "app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4",
+                                   "status":  0,
+                                   "installPath":  "C:\\QZipShellProbe"
+                               }
+                  },
+                  {
+                      "name":  "candidateInstall",
+                      "recordedAt":  "2026-07-29T11:04:44.6174138Z",
+                      "data":  {
+                                   "stdout":  "C:\\QZipResults\\logs\\Fresh\\candidateInstall.stdout.log",
+                                   "exitCode":  0,
+                                   "stderr":  "C:\\QZipResults\\logs\\Fresh\\candidateInstall.stderr.log"
+                               }
+                  },
+                  {
+                      "name":  "appLaunch",
+                      "recordedAt":  "2026-07-29T11:04:50.0380958Z",
+                      "data":  {
+                                   "processId":  7220,
+                                   "path":  "C:\\Users\\WDAGUtilityAccount\\AppData\\Local\\QZip\\qzip-desktop.exe",
+                                   "productVersion":  "1.0.0",
+                                   "responsive":  true
+                               }
+                  },
+                  {
+                      "name":  "shellPackage",
+                      "recordedAt":  "2026-07-29T11:04:54.1147525Z",
+                      "data":  {
+                                   "status":  0,
+                                   "registered":  true,
+                                   "fullName":  "app.qzip.desktop.shell_1.0.0.2_x64__tmbtny23f43p4"
+                               }
+                  },
+                  {
+                      "name":  "fileAssociations",
+                      "recordedAt":  "2026-07-29T11:04:54.1567314Z",
+                      "data":  {
+                                   "registeredApplication":  "Software\\QZip\\Capabilities",
+                                   "openCommand":  "\"C:\\Users\\WDAGUtilityAccount\\AppData\\Local\\QZip\\qzip-desktop.exe\" \"%1\""
+                               }
+                  },
+                  {
+                      "name":  "explorerFixtures",
+                      "recordedAt":  "2026-07-29T11:04:55.2235409Z",
+                      "data":  {
+                                   "root":  "C:\\Users\\WDAGUtilityAccount\\Documents\\QZip-RC1-Acceptance",
+                                   "folder":  "C:\\Users\\WDAGUtilityAccount\\Documents\\QZip-RC1-Acceptance\\folder-sample",
+                                   "archive":  "C:\\Users\\WDAGUtilityAccount\\Documents\\QZip-RC1-Acceptance\\sample.zip"
+                               }
+                  },
+                  {
+                      "name":  "appxDiagnostics",
+                      "recordedAt":  "2026-07-29T11:34:56.8514139Z",
+                      "data":  {
+                                   "path":  "C:\\QZipResults\\logs\\Fresh\\appx-deployment-events.json"
+                               }
+                  }
+              ],
+    "errors":  [
+                   "Timed out waiting for Sandbox UI acceptance evidence."
+               ],
+    "result":  "failed",
+    "finishedAt":  "2026-07-29T11:34:56.8514139Z"
+}

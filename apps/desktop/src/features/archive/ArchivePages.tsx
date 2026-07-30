@@ -110,6 +110,14 @@ function formatElapsed(seconds = 0) {
   return [hours, minutes, rest].map((value) => String(value).padStart(2, "0")).join(":");
 }
 
+function formatTaskTimestamp(value: number) {
+  // Rust task-runtime timestamps are Unix seconds; demo/test tasks use JS
+  // milliseconds. Accept both while persisted task history is migrated.
+  const milliseconds = value < 100_000_000_000 ? value * 1000 : value;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+}
+
 function makeDemoTask(operation: "create" | "extract" | "test" | "update", name: string, output?: string): TaskSnapshot {
   return {
     taskId: crypto.randomUUID(),
@@ -766,8 +774,8 @@ function TaskCard({
         {active ? <Progress value={Math.max(percent, task.status === "queued" ? 4 : 0)} /> : null}
         <p className="qzip-task-card__meta">
           {active ? <>当前文件：{task.progress?.currentEntry ?? "准备处理"} <i /> 已用时间：{formatElapsed(task.progress?.elapsedSeconds)}</> : null}
-          {task.status === "completed" ? <>完成时间：{new Date(task.updatedAt).toLocaleString()}</> : null}
-          {task.status === "failed" || task.status === "cancelled" ? <>失败时间：{new Date(task.updatedAt).toLocaleString()}</> : null}
+          {task.status === "completed" ? <>完成时间：{formatTaskTimestamp(task.updatedAt)}</> : null}
+          {task.status === "failed" || task.status === "cancelled" ? <>失败时间：{formatTaskTimestamp(task.updatedAt)}</> : null}
         </p>
         {needsPassword && showPassword ? <Input aria-label="重试密码" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="请输入正确密码" /> : null}
       </div>

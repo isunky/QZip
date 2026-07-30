@@ -78,4 +78,19 @@ describe("archive core flow controls", () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onRetry).toHaveBeenCalledWith("task-password", "correct");
   });
+
+  it("formats Rust Unix-second completion timestamps as current dates", () => {
+    const task: TaskSnapshot = {
+      taskId: "task-completed",
+      operation: "create",
+      status: "completed",
+      displayName: "项目.7z",
+      createdAt: 1_700_000_000,
+      updatedAt: 1_700_000_000,
+      warnings: [],
+      retryable: false
+    };
+    render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={vi.fn()} />);
+    expect(screen.getByText(/完成时间：/).textContent).not.toContain("1970");
+  });
 });

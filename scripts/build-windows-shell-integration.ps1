@@ -54,15 +54,23 @@ if ($Release) {
 
 $shellOutput = Join-Path $OutputDirectory 'qzip-shell'
 $packageRoot = Join-Path $build 'sparse-package'
-New-Item -ItemType Directory -Force -Path $shellOutput, (Join-Path $packageRoot 'Assets') | Out-Null
+New-Item -ItemType Directory -Force -Path $shellOutput, (Join-Path $packageRoot 'Assets'), (Join-Path $packageRoot 'qzip-shell') | Out-Null
 Copy-Item -LiteralPath $dll -Destination (Join-Path $shellOutput 'qzip-shell.dll') -Force
+# The sparse package supplies the application identity, but Explorer activates
+# the IExplorerCommand COM server from the package payload. Keep a copy beside
+# the installed application for diagnostics and place the signed DLL in the
+# MSIX at the manifest-declared path for actual shell activation.
+Copy-Item -LiteralPath $dll -Destination (Join-Path $packageRoot 'qzip-shell\qzip-shell.dll') -Force
 $publisher = if ($Release) { $env:QZIP_WINDOWS_PUBLISHER } else { 'CN=QZip Development' }
 $manifest = (Get-Content -Raw (Join-Path $source 'AppxManifest.xml.in')).Replace('@PUBLISHER@', $publisher)
 Set-Content -LiteralPath (Join-Path $packageRoot 'AppxManifest.xml') -Value $manifest -Encoding utf8
-Add-Type -AssemblyName System.Drawing
-$bitmap = [System.Drawing.Bitmap]::new(150, 150)
-$graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.Clear([System.Drawing.Color]::FromArgb(35, 101, 255)); $graphics.Dispose()
-$bitmap.Save((Join-Path $packageRoot 'Assets\Logo.png'), [System.Drawing.Imaging.ImageFormat]::Png); $bitmap.Dispose()
+$iconRoot = Join-Path $root 'apps\desktop\src-tauri\icons'
+$packageLogo = Join-Path $iconRoot 'Square150x150Logo.png'
+$contextMenuIcon = Join-Path $iconRoot 'Square44x44Logo.png'
+if (-not (Test-Path -LiteralPath $packageLogo -PathType Leaf)) { throw "Package logo was not found: $packageLogo" }
+if (-not (Test-Path -LiteralPath $contextMenuIcon -PathType Leaf)) { throw "Context-menu icon was not found: $contextMenuIcon" }
+Copy-Item -LiteralPath $packageLogo -Destination (Join-Path $packageRoot 'Assets\Logo.png') -Force
+Copy-Item -LiteralPath $contextMenuIcon -Destination (Join-Path $packageRoot 'Assets\ContextMenuIcon.png') -Force
 $makeAppx = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter makeappx.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\makeappx\.exe$' } | Sort-Object FullName -Descending | Select-Object -First 1
 if (-not $makeAppx) { throw 'Windows SDK x64 makeappx.exe was not found.' }
 $msix = Join-Path $shellOutput 'QZip.Shell.msix'
