@@ -1,18 +1,102 @@
 ﻿{
-    "schemaVersion":  1,
-    "recordedAt":  "2026-07-28T04:16:08.1345050Z",
-    "executable":  "D:\\AICode\\QZip\\target\\release\\qzip-desktop.exe",
+    "schemaVersion":  2,
+    "recordedAt":  "2026-07-30T03:44:53.6165500Z",
+    "release":  {
+                    "sourceTreeDirty":  true,
+                    "sourceCommit":  "5eba2e8053678d64ca05e8d5c40437584d31cbc6",
+                    "executableSha256":  "21861e34e16e5c918e149a95bb56a9bbce74613f88e6c177a63f0304cfc8d0fe",
+                    "executable":  "D:\\AICode\\QZip\\target\\release\\qzip-desktop.exe"
+                },
     "machine":  {
+                    "osVersion":  "10.0.26200",
                     "name":  "WORK",
                     "os":  "Microsoft Windows 11 Pro",
-                    "memoryBytes":  17063325696
+                    "memoryBytes":  17063325696,
+                    "processor":  "Intel(R) Core(TM) i5-10400 CPU @ 2.90GHz"
                 },
-    "iterations":  [
-                       {
-                           "launchMilliseconds":  3923,
-                           "workingSetBytes":  34754560
-                       }
-                   ],
-    "medianLaunchMilliseconds":  3923,
-    "medianWorkingSetBytes":  34754560
+    "configuration":  {
+                          "idleSeconds":  10,
+                          "generatedWorkloadRetained":  false,
+                          "largeEntryCount":  100000,
+                          "iterations":  5
+                      },
+    "thresholds":  {
+                       "idleWorkingSetBytes":  104857600,
+                       "homeInteractiveMilliseconds":  1000
+                   },
+    "startup":  {
+                    "p95HomeInteractiveMilliseconds":  1125,
+                    "p95WorkingSetBytes":  28389376,
+                    "medianHomeInteractiveMilliseconds":  981,
+                    "runs":  [
+                                 {
+                                     "iteration":  1,
+                                     "windowResponsiveMilliseconds":  81,
+                                     "homeInteractiveMilliseconds":  1125,
+                                     "workingSetBytes":  28389376,
+                                     "privateBytes":  6426624
+                                 },
+                                 {
+                                     "iteration":  2,
+                                     "windowResponsiveMilliseconds":  118,
+                                     "homeInteractiveMilliseconds":  981,
+                                     "workingSetBytes":  28131328,
+                                     "privateBytes":  5533696
+                                 },
+                                 {
+                                     "iteration":  3,
+                                     "windowResponsiveMilliseconds":  127,
+                                     "homeInteractiveMilliseconds":  962,
+                                     "workingSetBytes":  28102656,
+                                     "privateBytes":  6234112
+                                 },
+                                 {
+                                     "iteration":  4,
+                                     "windowResponsiveMilliseconds":  129,
+                                     "homeInteractiveMilliseconds":  977,
+                                     "workingSetBytes":  28250112,
+                                     "privateBytes":  6107136
+                                 },
+                                 {
+                                     "iteration":  5,
+                                     "windowResponsiveMilliseconds":  114,
+                                     "homeInteractiveMilliseconds":  985,
+                                     "workingSetBytes":  28282880,
+                                     "privateBytes":  5632000
+                                 }
+                             ],
+                    "medianWorkingSetBytes":  28250112
+                },
+    "largeArchiveList":  {
+                             "entryCount":  100000,
+                             "archiveBytes":  113553,
+                             "archiveSha256":  "f5a63aa4476f16c1b5519fee0acd6ed37e41166e7faa158fec2a8cfa81e9e8e9",
+                             "windowResponsiveMilliseconds":  117,
+                             "firstPageReadyMilliseconds":  1353,
+                             "renderedPageLimit":  500,
+                             "workingSetBytes":  29143040,
+                             "privateBytes":  6111232
+                         },
+    "uiExceptionRecovery":  {
+                                "corruptArchiveErrorPresentedMilliseconds":  1063,
+                                "mainWindowStillRunning":  true
+                            },
+    "runtimeProbe":  {
+                         "schemaVersion":  1,
+                         "recordedAt":  1785383092,
+                         "progress":  {
+                                          "emitted":  2000,
+                                          "received":  128,
+                                          "dropped":  3748,
+                                          "durationMilliseconds":  15
+                                      },
+                         "exceptionRecovery":  {
+                                                   "failedTaskMilliseconds":  16,
+                                                   "subsequentTaskMilliseconds":  11,
+                                                   "subsequentTaskCompleted":  true
+                                               }
+                     },
+    "warnings":  [
+                     "The runtime probe dropped progress events under a burst; event throttling remains a V1.0 follow-up."
+                 ]
 }

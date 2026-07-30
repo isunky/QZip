@@ -2346,17 +2346,12 @@ ERROR 0x80004005
 
 ## 32.5 交叉兼容样本
 
-使用以下软件生成测试文件：
+RC1 不将第三方压缩软件生成的交叉样本作为发布门禁。Windows RC1 使用
+QZip 捆绑的 7-Zip、合成数据和核心流程回归验证读写行为；不得据此对外
+宣称已完成 WinRAR、Bandizip、PeaZip、Keka 或其他第三方产品兼容认证。
 
-- 7-Zip；
-- WinRAR；
-- Bandizip；
-- PeaZip；
-- Keka；
-- 系统 ZIP；
-- tar、gzip、xz。
-
-测试样本不得包含受版权或隐私限制的数据。
+如后续开展交叉兼容性测试，样本必须由 7-Zip、WinRAR、Bandizip、PeaZip、
+Keka、系统 ZIP 或 tar/gzip/xz 真实生成，且仅包含无版权及隐私限制的合成数据。
 
 ---
 

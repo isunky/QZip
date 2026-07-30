@@ -1,9 +1,11 @@
 use std::{
     collections::HashMap,
+    fs::OpenOptions,
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{Arc, Mutex},
-    time::{Duration, SystemTime},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(target_os = "windows")]
@@ -128,6 +130,13 @@ struct RiskDto {
     code: String,
     message: String,
     overridable: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PerformanceMarker {
+    name: String,
+    timestamp_unix_milliseconds: u128,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -886,6 +895,55 @@ fn reveal_in_file_manager(path: PathBuf) -> Result<(), CommandErrorDto> {
         })
 }
 
+/// Records UI readiness only when the local RC performance harness supplies a
+/// constrained temporary output path. Normal application runs do not persist
+/// these markers.
+#[tauri::command]
+fn record_performance_marker(name: String) {
+    if !matches!(
+        name.as_str(),
+        "home-interactive" | "archive-list-first-page" | "archive-error-presented"
+    ) {
+        return;
+    }
+    let Ok(raw_path) = std::env::var("QZIP_PERF_MARKER_PATH") else {
+        return;
+    };
+    let path = PathBuf::from(raw_path);
+    let valid_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| {
+            value.starts_with("qzip-performance-markers-") && value.ends_with(".jsonl")
+        });
+    let Ok(temp_root) = std::env::temp_dir().canonicalize() else {
+        return;
+    };
+    let Ok(parent) = path
+        .parent()
+        .unwrap_or_else(|| Path::new(""))
+        .canonicalize()
+    else {
+        return;
+    };
+    if !valid_name || !parent.starts_with(temp_root) {
+        return;
+    }
+    let marker = PerformanceMarker {
+        name,
+        timestamp_unix_milliseconds: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis(),
+    };
+    let Ok(line) = serde_json::to_string(&marker) else {
+        return;
+    };
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{line}");
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -951,7 +1009,8 @@ pub fn run() {
             take_initial_launch_request,
             take_pending_shell_request,
             open_path,
-            reveal_in_file_manager
+            reveal_in_file_manager,
+            record_performance_marker
         ])
         .run(tauri::generate_context!())
         .expect("failed to run QZip desktop application");

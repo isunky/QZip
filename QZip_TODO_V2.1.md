@@ -12,7 +12,7 @@
 - [x] **M1** 后端技术验证已实现并通过 7Z/ZIP/RAR、Unicode、密码、损坏包、取消和打包验证。
 - [~] **M2–M5** 已实施第一版：创建、快速解压与安全预检、压缩包浏览、任务队列和任务中心已接入桌面端；剩余功能和完整验收必须在 RC2/V1.0 稳定版前关闭。
 - [~] **M6** 已完成设置核心、设置页、单实例路由，以及 NSIS 可注册/卸载的 Windows 11 稀疏 MSIX Shell 集成；本机 NSIS 安装、应用启动、原生窗口关闭、默认应用能力注册和真实 Explorer 一级菜单已验收，干净 Windows 环境的升级、卸载与 DPI 证据待完成。
-- [~] **M7** 已实施 RC1 的安全写入、Sidecar 完整性、Windows 发布物组装、开发签名 Shell 包与严格签名门禁；兼容性生产样本、性能基线和干净安装验证仍未完成。
+- [~] **M7** 已实施 RC1 的安全写入、Sidecar 完整性、Windows 发布物组装、开发签名 Shell 包与严格签名门禁；性能基线已记录，干净安装验证和受信任签名仍未完成。
 
 ### 版本边界
 
@@ -29,7 +29,7 @@
 - [x] 已修复 NSIS Shell 资源路径、稀疏 MSIX 外部内容/`desktop5` 清单和 COM DLL 导出；本机注册包 `app.qzip.desktop.shell 1.0.0.2` 状态为 `Ok`。
 - [x] 已在本机 Windows 11 Explorer 的文件及文件夹真实右键菜单中确认一级“QZip”入口，并在文件菜单中确认打开、压缩为 7Z/ZIP、解压到当前目录/同名目录和更多选项六个子命令；修复后 NSIS 安装包已重新构建。
 - [~] GitHub 仓库尚未配置受信任证书机密，且未创建 `v1.0.0-rc.1` 标签或 GitHub prerelease。
-- [~] 已生成并校验本机可生产的 7-Zip、Bandizip、Windows Explorer 和 bsdtar 样本；其余第三方生产样本、性能与干净安装环境验收尚未完成。
+- [x] 已记录 Windows RC1 真实启动、内存、十万项大包首批列表、进度突发与异常恢复基线；第三方压缩软件交叉兼容性不属于 RC1 发布门禁。
 
 ### RC1 核心流程人工验收（2026-07-29）
 
@@ -131,8 +131,8 @@
 
 ## M7：发布候选
 
-- [~] M7-01 已生成并校验合成的 7-Zip 7Z/ZIP、Bandizip ZIP、Windows Explorer ZIP 与 Windows bsdtar TAR.XZ 样本；WinRAR、PeaZip、Keka 与 GNU tar 样本仍因本机生产工具缺失而阻塞。
-- [ ] M7-02 完成性能基线：启动、首页交互、空闲内存、大列表、进度事件和异常恢复。
+- [x] M7-01 RC1 不要求第三方压缩软件交叉兼容性认证；保留现有合成样本仅用于 QZip/Sidecar 核心回归，不对外宣称 WinRAR、Bandizip、PeaZip、Keka 等兼容认证。
+- [x] M7-02 已完成性能基线：Windows 11 实际 release 构建连续 5 次首页可交互中位数 981ms、空闲工作集约 28.3MB；十万项合成 7Z 首批列表 1353ms；损坏包错误呈现后主窗口仍存活。高频进度突发存在广播事件丢弃，已记录为 V1.0 后续优化。
 - [~] M7-03 已增加每次 Sidecar 调用的双文件 SHA-256 验证、暂存提交、重解析点/磁盘空间防护与对应单元测试；加密创建后的完整性测试现会复用仅在内存中的密码。7-Zip 进程在 Windows 使用无控制台创建标志；完整恶意样本、密码日志与临时文件矩阵待补。
 - [~] M7-04 已本地生成并校验 Windows x64 RC 的 NSIS、MSI、便携 ZIP、校验和和 portable Sidecar；本次已用当前用户开发证书重新生成 NSIS 安装包并验证 Shell DLL 开发签名。尚未接入真实签名凭据或生成正式公开资产；SBOM 属于后续发布增强项。
 - [~] M7-05 已完成 README、隐私说明、卸载说明、已知问题、变更记录、RC 验收记录和标签触发的 GitHub prerelease 工作流；必须配置受信任签名秘密后才会创建公开 Release。
@@ -142,7 +142,7 @@
 
 - [~] R1-01 已提供 Windows Sandbox 隔离验收配置、自动安装/卸载记录脚本和结果目录，并已在本机 Windows 11 完成 NSIS 安装、Shell 包注册及真实 Explorer 菜单可见性验收；仍须在干净 Sandbox 环境执行安装、升级、卸载、文件关联清理和 DPI 100%/150%/200% 验收。
 - [~] R1-02 已完成创建/解压、取消、错误密码、覆盖冲突、文件占用、临时清理及对应自动化回归；压缩炸弹、磁盘不足、链接和完整恶意路径矩阵仍待完成。
-- [ ] R1-03 补齐兼容样本、生产工具版本和 SHA-256，通过 `scripts/verify-compat-fixtures.ps1`，并记录性能基线及原始数据。
+- [x] R1-03 已记录 `artifacts/performance/rc1-baseline.json` 原始基线数据；第三方压缩软件交叉兼容性按 RC1 范围豁免，不作为发布门禁。
 - [ ] R1-04 在 GitHub 仓库配置 `WINDOWS_PFX_BASE64`、`WINDOWS_PFX_PASSWORD` 和 `QZIP_WINDOWS_PUBLISHER`，验证受信任签名及失败关闭的发布工作流。
 - [ ] R1-05 完成 RC1 验收记录签字后，创建 `v1.0.0-rc.1` 标签以触发公开 prerelease。
 

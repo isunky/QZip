@@ -100,6 +100,7 @@ export function App() {
     } catch (reason) {
       const message = String(reason);
       if (archiveClient.isTauri) {
+        void archiveClient.recordPerformanceMarker("archive-error-presented");
         setPasswordPrompt({
           archive: target,
           destination,
@@ -124,6 +125,15 @@ export function App() {
     const timer = window.setTimeout(() => setToast(null), 2800);
     return () => window.clearTimeout(timer);
   }, [toast]);
+  useEffect(() => {
+    if (!archiveClient.isTauri || page !== "home") return;
+    const firstFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        void archiveClient.recordPerformanceMarker("home-interactive");
+      });
+    });
+    return () => window.cancelAnimationFrame(firstFrame);
+  }, [page]);
   useEffect(() => {
     if (!archiveClient.isTauri) return;
     void archiveClient.tasks().then(setTasks).catch((reason) => setToast(String(reason)));

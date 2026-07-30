@@ -550,6 +550,7 @@ export function BrowserPage({
   const [loading, setLoading] = useState(archiveClient.isTauri);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const reportedSessionRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!archiveClient.isTauri) return;
@@ -557,6 +558,11 @@ export function BrowserPage({
       .then((page) => setEntries(page.entries))
       .finally(() => setLoading(false));
   }, [directory, session.sessionId]);
+  useEffect(() => {
+    if (!archiveClient.isTauri || loading || reportedSessionRef.current === session.sessionId) return;
+    reportedSessionRef.current = session.sessionId;
+    void archiveClient.recordPerformanceMarker("archive-list-first-page");
+  }, [loading, session.sessionId]);
 
   const visibleEntries = !archiveClient.isTauri && directory ? [] : entries;
   const shown = visibleEntries.filter((entry) => entry.displayName.toLowerCase().includes(search.toLowerCase()));

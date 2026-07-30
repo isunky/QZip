@@ -27,6 +27,7 @@ export const archiveClient = {
   reveal: (path: string) => command<void>("reveal_in_file_manager", { path }),
   takeInitialLaunchRequest: () => command<{ kind: string; paths: string[]; source: string } | null>("take_initial_launch_request"),
   takePendingShellRequest: () => command<{ kind: string; paths: string[]; source: string } | null>("take_pending_shell_request"),
+  recordPerformanceMarker: (name: "home-interactive" | "archive-list-first-page" | "archive-error-presented") => command<void>("record_performance_marker", { name }),
   onTaskEvent: async (handler: (event: TaskEvent) => void) => listen<TaskEvent>("qzip://task-event", (event) => handler(event.payload)),
   onLaunchRequest: async (handler: (request: { kind: string; paths: string[]; source: string }) => void) => listen<{ kind: string; paths: string[]; source: string }>("qzip://launch-request", (event) => handler(event.payload))
 };
