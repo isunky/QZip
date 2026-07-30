@@ -6,6 +6,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+  $windowsPowerShellModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+  if (-not [string]::IsNullOrWhiteSpace($windowsPowerShellModulePath)) { $env:PSModulePath = $windowsPowerShellModulePath }
+}
+Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) { $OutputDirectory = Join-Path $root 'artifacts\windows-shell' }
 $source = Join-Path $root 'native\windows\qzip-shell'
@@ -16,6 +21,16 @@ if ($Release -and (-not $env:QZIP_WINDOWS_PFX_PATH -or -not $env:QZIP_WINDOWS_PF
 }
 if ((-not $Release) -and (-not $InstallDevCertificate)) {
   throw 'Local sparse MSIX builds require -InstallDevCertificate. This explicitly creates/trusts the development certificate for the current user.'
+}
+if (-not $Release) {
+  # The Certificate provider is not guaranteed to be auto-loaded in a
+  # non-interactive PowerShell session (including pnpm-launched builds).
+  # Node and pnpm can pass a PowerShell 7 PSModulePath to Windows PowerShell.
+  # The inbox Certificate provider was loaded above after normalizing that path.
+  Import-Module PKI -ErrorAction Stop
+  if (-not (Get-PSProvider -PSProvider Certificate -ErrorAction SilentlyContinue)) {
+    throw 'The Windows Certificate provider is unavailable. Run the build from Windows PowerShell with the PKI module installed.'
+  }
 }
 
 $cmake = (Get-Command cmake -ErrorAction SilentlyContinue | Select-Object -First 1).Source

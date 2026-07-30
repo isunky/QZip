@@ -3,59 +3,47 @@ param(
   [Parameter(Mandatory)]
   [ValidatePattern('^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$')]
   [string]$Version,
-  [switch]$SkipBundle
+  [switch]$SkipBundle,
+  [switch]$Release
 )
 
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+  $windowsPowerShellModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+  if (-not [string]::IsNullOrWhiteSpace($windowsPowerShellModulePath)) { $env:PSModulePath = $windowsPowerShellModulePath }
+}
+Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
 $releaseVersion = $Version.TrimStart('v')
 $productVersion = ($releaseVersion -split '-', 2)[0]
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $tauriConfigPath = Join-Path $repoRoot 'apps\desktop\src-tauri\tauri.conf.json'
 $tauriConfig = Get-Content -Raw $tauriConfigPath | ConvertFrom-Json
 if ($tauriConfig.version -ne $productVersion) {
-  throw "Requested release $releaseVersion requires MSI-compatible product version $productVersion, but tauri.conf.json has $($tauriConfig.version)."
+  throw "Requested release $releaseVersion requires Windows product version $productVersion, but tauri.conf.json has $($tauriConfig.version)."
 }
 
 & (Join-Path $PSScriptRoot 'fetch-sevenzip.ps1') -VerifyOnly
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if (-not $SkipBundle) {
-  & (Join-Path $PSScriptRoot 'bundle-windows.ps1')
+  & (Join-Path $PSScriptRoot 'build-nsis.ps1') -Release:$Release
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
 $bundleRoot = Join-Path $repoRoot 'target\release\bundle'
-$bundleNamePattern = 'QZip_{0}_*' -f $productVersion
-$nsis = @(Get-ChildItem (Join-Path $bundleRoot 'nsis') -Filter '*.exe' -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like $bundleNamePattern })
-$msi = @(Get-ChildItem (Join-Path $bundleRoot 'msi') -Filter '*.msi' -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like $bundleNamePattern })
-if ($nsis.Count -ne 1 -or $msi.Count -ne 1) {
-  throw "Expected exactly one NSIS EXE and one MSI for product version $productVersion."
-}
-
-$desktopExecutable = Join-Path $repoRoot 'target\release\qzip-desktop.exe'
-if (-not (Test-Path -LiteralPath $desktopExecutable -PathType Leaf)) {
-  throw "Desktop executable was not found: $desktopExecutable"
+$bundleNamePattern = "QZip_${productVersion}_x64-setup.exe"
+$nsis = @(Get-ChildItem (Join-Path $bundleRoot 'nsis') -Filter $bundleNamePattern -File -ErrorAction SilentlyContinue)
+if ($nsis.Count -ne 1) {
+  throw "Expected exactly one NSIS setup EXE for product version $productVersion."
 }
 
 $releaseRoot = Join-Path $repoRoot ("artifacts\release\{0}" -f $releaseVersion)
+if (Test-Path -LiteralPath $releaseRoot) { Remove-Item -LiteralPath $releaseRoot -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
 $setupName = "QZip-$releaseVersion-windows-x64-setup.exe"
-$msiName = "QZip-$releaseVersion-windows-x64.msi"
-$portableName = "QZip-$releaseVersion-windows-x64-portable.zip"
 Copy-Item -LiteralPath $nsis[0].FullName -Destination (Join-Path $releaseRoot $setupName) -Force
-Copy-Item -LiteralPath $msi[0].FullName -Destination (Join-Path $releaseRoot $msiName) -Force
 
-$portableRoot = Join-Path $releaseRoot 'portable-content'
-if (Test-Path -LiteralPath $portableRoot) { Remove-Item -LiteralPath $portableRoot -Recurse -Force }
-New-Item -ItemType Directory -Path $portableRoot | Out-Null
-Copy-Item -LiteralPath $desktopExecutable -Destination (Join-Path $portableRoot 'QZip.exe')
-Copy-Item -LiteralPath (Join-Path $repoRoot 'third_party\7zip\bin\win-x64') -Destination (Join-Path $portableRoot '7zip') -Recurse
-$portablePath = Join-Path $releaseRoot $portableName
-if (Test-Path -LiteralPath $portablePath) { Remove-Item -LiteralPath $portablePath -Force }
-Compress-Archive -Path (Join-Path $portableRoot '*') -DestinationPath $portablePath -CompressionLevel Optimal
-Remove-Item -LiteralPath $portableRoot -Recurse -Force
-
-$assetNames = @($setupName, $msiName, $portableName)
+$assetNames = @($setupName)
 $checksumLines = foreach ($assetName in $assetNames) {
   $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $releaseRoot $assetName)).Hash.ToLowerInvariant()
   "$hash *$assetName"
@@ -72,4 +60,4 @@ $releaseManifest = [ordered]@{
   sidecar = [ordered]@{ version = $sidecarManifest.version; fileHashes = $sidecarManifest.runtime.fileHashes }
 }
 [System.IO.File]::WriteAllText((Join-Path $releaseRoot 'release-manifest.json'), ($releaseManifest | ConvertTo-Json -Depth 6), [System.Text.UTF8Encoding]::new($false))
-Write-Host "Prepared release assets in $releaseRoot"
+Write-Host "Prepared NSIS release assets in $releaseRoot"

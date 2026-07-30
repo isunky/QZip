@@ -9,6 +9,6 @@
 - 批量解压会跳过加密包和需要风险确认的压缩包，这些项目需要随后单独打开处理。
 - macOS DMG、Finder Quick Action、Linux AppImage、MIME/Desktop Entry 不属于 Windows V1.0 范围，计划在 V1.1 提供。
 - 自动更新在 RC 阶段默认关闭。
-- 本地 RC1 候选包使用开发签名的 Shell MSIX；公开发行仍必须使用受信任 Authenticode 证书。MSI 仅提供基础安装，不包含 Windows 11 现代右键菜单。
+- 本地候选包使用开发签名的 Shell MSIX；公开发行仍必须使用受信任 Authenticode 证书。当前 GitHub Release 仅提供 NSIS 安装包。
 
 安全问题请不要公开披露密码、压缩包或可复现的敏感数据；请在仓库维护者确认的私密渠道联系。

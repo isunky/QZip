@@ -1,23 +1,38 @@
-name: RC release
+name: Build and release NSIS
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing v-prefixed release tag to publish
+        description: Release tag, for example v1.0.0-rc.2 or v1.0.0
         required: true
         type: string
+      mode:
+        description: build-only uploads an internal artifact; publish creates a GitHub Release after trusted-signature verification
+        required: true
+        default: build-only
+        type: choice
+        options:
+          - build-only
+          - publish
 
 permissions:
   contents: write
   attestations: write
   id-token: write
 
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
-  windows-rc:
+  build-nsis:
+    name: build-nsis-${{ inputs.mode }}
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
     env:
       WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
       WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
@@ -26,6 +41,30 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - id: metadata
+        name: Validate release metadata
+        shell: pwsh
+        run: |
+          $tag = '${{ inputs.tag }}'.Trim()
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "tag must be vMAJOR.MINOR.PATCH with an optional prerelease suffix: $tag"
+          }
+          if (git ls-remote --exit-code --tags origin "refs/tags/$tag") {
+            throw "Tag already exists and will not be overwritten: $tag"
+          }
+          $version = $tag.TrimStart('v')
+          $productVersion = ($version -split '-', 2)[0]
+          $package = Get-Content -Raw package.json | ConvertFrom-Json
+          $workspaceCargo = Get-Content -Raw Cargo.toml
+          $tauri = Get-Content -Raw apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json
+          $cargoMatch = [regex]::Match($workspaceCargo, '(?m)^version\s*=\s*"([^"]+)"')
+          if (-not $cargoMatch.Success) { throw 'Workspace Cargo version was not found.' }
+          if ($package.version -ne $version -or $cargoMatch.Groups[1].Value -ne $version -or $tauri.version -ne $productVersion) {
+            throw "Version mismatch. package=$($package.version), cargo=$($cargoMatch.Groups[1].Value), tauri=$($tauri.version), requested=$version"
+          }
+          "version=$version" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          "tag=$tag" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          "prerelease=$($version.Contains('-').ToString().ToLowerInvariant())" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
       - uses: pnpm/action-setup@v4
         with:
           version: 11.9.0
@@ -37,40 +76,78 @@ jobs:
         with:
           toolchain: 1.96.0
           components: clippy,rustfmt
-      - name: Require release signing configuration
+      - uses: Swatinem/rust-cache@v2
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Fetch and verify official 7-Zip sidecar
+        run: pnpm sidecar:fetch
+      - name: Check workspace
+        run: pnpm check
+      - name: Run core compression regression
+        run: pnpm test:core:windows
+      - name: Prepare trusted signing credentials
+        if: inputs.mode == 'publish'
         shell: pwsh
         run: |
           $required = @('WINDOWS_PFX_BASE64', 'WINDOWS_PFX_PASSWORD', 'QZIP_WINDOWS_PUBLISHER')
           $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
-          if ($missing) { throw "Public RC publishing is disabled until these values are configured: $($missing -join ', ')." }
-          $pfx = "$env:RUNNER_TEMP\qzip-signing.pfx"
+          if ($missing) { throw "Public publishing is disabled until these values are configured: $($missing -join ', ')." }
+          $pfx = Join-Path $env:RUNNER_TEMP 'qzip-signing.pfx'
           [System.IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
           "QZIP_WINDOWS_PFX_PATH=$pfx" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: pnpm sidecar:verify
-      - name: Build Windows artifacts
+      - name: Build NSIS installer
         shell: pwsh
         run: |
-          powershell -ExecutionPolicy Bypass -File scripts/bundle-windows.ps1 -Release
-      - name: Assemble and verify RC assets
+          if ('${{ inputs.mode }}' -eq 'publish') {
+            powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -Release
+          } else {
+            powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1
+          }
+      - name: Assemble and verify NSIS release assets
         shell: pwsh
         run: |
-          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}' } else { '${{ github.ref_name }}' }
-          powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version $tag -SkipBundle
-          powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $tag -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
+          powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version '${{ steps.metadata.outputs.tag }}' -SkipBundle
+          if ('${{ inputs.mode }}' -eq 'publish') {
+            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version '${{ steps.metadata.outputs.tag }}' -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
+          } else {
+            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version '${{ steps.metadata.outputs.tag }}'
+          }
       - uses: actions/attest-build-provenance@v2
         with:
-          subject-path: artifacts/release/**
+          subject-path: artifacts/release/${{ steps.metadata.outputs.version }}/**
       - uses: actions/upload-artifact@v4
         with:
-          name: qzip-rc-assets
-          path: artifacts/release/**
+          name: qzip-${{ steps.metadata.outputs.version }}-nsis
+          path: artifacts/release/${{ steps.metadata.outputs.version }}/**
           if-no-files-found: error
-      - name: Publish GitHub prerelease
+
+  publish:
+    name: publish-github-release
+    if: inputs.mode == 'publish'
+    needs: build-nsis
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: qzip-${{ needs.build-nsis.outputs.version }}-nsis
+          path: artifacts/release/${{ needs.build-nsis.outputs.version }}
+      - name: Verify signed release assets
+        shell: pwsh
+        env:
+          QZIP_WINDOWS_PUBLISHER: ${{ vars.QZIP_WINDOWS_PUBLISHER }}
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version '${{ needs.build-nsis.outputs.tag }}' -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
+      - name: Create GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-nsis.outputs.tag }}
+          VERSION: ${{ needs.build-nsis.outputs.version }}
+          PRERELEASE: ${{ needs.build-nsis.outputs.prerelease }}
+          TARGET_SHA: ${{ github.sha }}
         run: |
-          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}' } else { '${{ github.ref_name }}' }
-          gh release create $tag artifacts/release/*/* --prerelease --generate-notes --title "QZip $tag"
+          $arguments = @('release', 'create', $env:TAG, "artifacts/release/$env:VERSION/*", '--target', $env:TARGET_SHA, '--generate-notes', '--title', "QZip $env:TAG")
+          if ($env:PRERELEASE -eq 'true') { $arguments += '--prerelease' }
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -102,7 +102,7 @@ V1.0 明确不包含：RAR 创建、修复压缩包、自解压 EXE、云服务�
 - 文件关联覆盖 7Z、ZIP、RAR、TAR、GZ、XZ、BZ2；双击复用单实例。
 - Explorer 右键菜单提供打开、压缩为 7Z/ZIP、解压到当前目录/同名目录和更多选项。
 - 支持 Windows 长路径、保留名称及 100%～200% DPI。
-- 发布物包含 NSIS/MSI、便携包、校验和、第三方许可、Sidecar 版本和来源信息，并通过受信任 Authenticode 签名。
+- 当前公开发布物包含 NSIS 安装包、校验和、第三方许可、Sidecar 版本和来源信息，并通过受信任 Authenticode 签名；MSI 与便携包作为后续发行增强项，不阻塞 Windows V1.0。
 
 ## V1.0 验收摘要
 
@@ -2202,7 +2202,7 @@ V1.0：
 - 长路径；
 - Windows 保留名称；
 - 100%～200% DPI；
-- NSIS 为主要安装包，MSI 为补充安装包；
+- NSIS 为当前唯一公开安装包；MSI 作为后续补充安装包；
 - 安装、升级和卸载不得残留关键文件关联；
 - 正式发行物必须使用受信任 Authenticode 签名。
 
@@ -2654,7 +2654,7 @@ Pull Request 必须通过：
 
 - Windows 10/11 x64 可安装、升级和卸载；
 - Explorer 文件关联和右键菜单可用且卸载后正确清理；
-- NSIS、MSI 和便携包具有受信任 Authenticode 签名；
+- NSIS 安装包具有受信任 Authenticode 签名；
 - 校验和；
 - 许可；
 - 隐私说明；
@@ -2672,10 +2672,10 @@ Pull Request 必须通过：
 
 ```text
 QZip-{version}-windows-x64-setup.exe
-QZip-{version}-windows-x64.msi
-QZip-{version}-windows-x64-portable.zip
 QZip-{version}-checksums.txt
 ```
+
+MSI 和便携 ZIP 暂不作为当前 GitHub Release 资产。
 
 系统内显示：
 

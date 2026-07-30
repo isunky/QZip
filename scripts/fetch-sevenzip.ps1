@@ -2,6 +2,11 @@
 param([switch]$VerifyOnly)
 
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+  $windowsPowerShellModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+  if (-not [string]::IsNullOrWhiteSpace($windowsPowerShellModulePath)) { $env:PSModulePath = $windowsPowerShellModulePath }
+}
+Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
 $manifestPath = Join-Path $PSScriptRoot '..\third_party\7zip\manifest.json'
 $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
 $runtimeDir = Join-Path $PSScriptRoot '..\third_party\7zip\bin\win-x64'

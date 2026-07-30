@@ -143,8 +143,8 @@
 - [x] M7-01 RC1 不要求第三方压缩软件交叉兼容性认证；保留现有合成样本仅用于 QZip/Sidecar 核心回归，不对外宣称 WinRAR、Bandizip、PeaZip、Keka 等兼容认证。
 - [x] M7-02 已完成性能基线：Windows 11 实际 release 构建连续 5 次首页可交互中位数 981ms、空闲工作集约 28.3MB；十万项合成 7Z 首批列表 1353ms；损坏包错误呈现后主窗口仍存活。高频进度突发存在广播事件丢弃，已记录为 V1.0 后续优化。
 - [~] M7-03 已增加每次 Sidecar 调用的双文件 SHA-256 验证、暂存提交、重解析点/磁盘空间防护与对应单元测试；加密创建后的完整性测试现会复用仅在内存中的密码。7-Zip 进程在 Windows 使用无控制台创建标志；完整恶意样本、密码日志与临时文件矩阵待补。
-- [~] M7-04 已本地生成并校验 Windows x64 RC 的 NSIS、MSI、便携 ZIP、校验和和 portable Sidecar；本次已用当前用户开发证书重新生成 NSIS 安装包并验证 Shell DLL 开发签名。尚未接入真实签名凭据或生成正式公开资产；SBOM 属于后续发布增强项。
-- [~] M7-05 已完成 README、隐私说明、卸载说明、已知问题、变更记录、RC 验收记录和标签触发的 GitHub prerelease 工作流；必须配置受信任签名秘密后才会创建公开 Release。
+- [~] M7-04 已本地生成并校验 Windows x64 NSIS、校验和和 Sidecar；本次已用当前用户开发证书重新生成 NSIS 安装包并验证 Shell DLL 开发签名。MSI 与便携 ZIP 暂不作为当前公开发行资产；尚未接入真实签名凭据或生成正式公开资产。
+- [~] M7-05 已完成 README、隐私说明、卸载说明、已知问题、变更记录、RC 验收记录和仅手动触发的 GitHub NSIS 工作流；普通提交只运行 CI，只有受信任签名验证通过的手动发布才会创建公开 Release。
 - [~] M7-06 已建立 RC1 验收记录与已知问题边界；尚未执行完整 V1.0 总验收。
 
 ### RC1 发布前剩余动作（按优先级）
@@ -152,8 +152,8 @@
 - [~] R1-01 已提供 Windows Sandbox 隔离验收配置、自动安装/卸载记录脚本和结果目录，并已在本机 Windows 11 完成 NSIS 安装、Shell 包注册及真实 Explorer 菜单可见性验收；仍须在干净 Sandbox 环境执行安装、升级、卸载、文件关联清理和 DPI 100%/150%/200% 验收。
 - [~] R1-02 已完成创建/解压、取消、错误密码、覆盖冲突、文件占用、临时清理及对应自动化回归；压缩炸弹、磁盘不足、链接和完整恶意路径矩阵仍待完成。
 - [x] R1-03 已记录 `artifacts/performance/rc1-baseline.json` 原始基线数据；第三方压缩软件交叉兼容性按 RC1 范围豁免，不作为发布门禁。
-- [ ] R1-04 在 GitHub 仓库配置 `WINDOWS_PFX_BASE64`、`WINDOWS_PFX_PASSWORD` 和 `QZIP_WINDOWS_PUBLISHER`，验证受信任签名及失败关闭的发布工作流。
-- [ ] R1-05 完成 RC1 验收记录签字后，创建 `v1.0.0-rc.1` 标签以触发公开 prerelease。
+- [ ] R1-04 取得受信任代码签名 PFX 后运行 `scripts/configure-github-signing.ps1` 配置 `WINDOWS_PFX_BASE64`、`WINDOWS_PFX_PASSWORD` 和 `QZIP_WINDOWS_PUBLISHER`，验证手动发布的受信任签名与失败关闭。
+- [ ] R1-05 完成 RC 验收记录签字后，从 GitHub Actions 以 `publish` 模式手动创建对应标签和公开 prerelease。
 
 ### V1.0 稳定版剩余阻塞项
 

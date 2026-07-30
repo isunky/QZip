@@ -7,6 +7,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+  $windowsPowerShellModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+  if (-not [string]::IsNullOrWhiteSpace($windowsPowerShellModulePath)) { $env:PSModulePath = $windowsPowerShellModulePath }
+}
+if ($Release) { Import-Module Microsoft.PowerShell.Security -ErrorAction Stop }
 if ($Release -and $InstallDevCertificate) {
   throw 'Release and InstallDevCertificate cannot be used together.'
 }

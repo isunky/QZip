@@ -89,7 +89,8 @@ docs/                 补充文档
 ## 质量与发布
 
 - `pnpm check` 会依次运行 ESLint、TypeScript、前端测试、Web 构建、Rust 格式检查、Clippy 与 Rust 测试。
-- 发布由 GitHub Actions 构建。缺少可信签名凭据时，流程会失败，且不会创建公开 Release。
+- 普通提交只运行 Windows CI。NSIS 安装包通过 GitHub Actions 手动构建；`build-only` 仅上传内测产物，`publish` 必须验证受信任签名后才会创建公开 Release。
+- 取得代码签名 PFX 后，可在本机运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/configure-github-signing.ps1 -PfxPath <PFX 路径>` 配置 GitHub Secrets。自签名证书仅用于内测，不可用于公开可信发布。
 - RC 阶段的功能缺口与平台范围请以[已知问题](KNOWN_ISSUES.md)为准；需求、验收与后续里程碑以[产品需求文档](QZip_PRD_V2.1.md)为唯一权威来源。
 
 ## 文档
