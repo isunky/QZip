@@ -3,7 +3,7 @@ import type { AccentTheme, ThemeMode } from "@qzip/ui";
 import { Header } from "../components/Header";
 import { Toast } from "../components/Toast";
 import { HomePage } from "../features/home/HomePage";
-import { BrowserPage, CreatePage, ExtractPage, TaskCenter, type Page } from "../features/archive/ArchivePages";
+import { BatchExtractPage, BrowserPage, CreatePage, ExtractPage, TaskCenter, type Page } from "../features/archive/ArchivePages";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import type { ArchiveSession, TaskSnapshot } from "../contracts/archive";
 import { defaultAppSettings, type AppSettings, uiScaleFactor } from "../contracts/settings";
@@ -14,6 +14,7 @@ import { resolveThemeMode, useAppearanceStore } from "../stores/appearance";
 type AppPage = Page | "settings";
 type ArchiveDestination = "browser" | "extract";
 type PasswordPrompt = { archive: string; destination: ArchiveDestination; message: string };
+type CommandIssue = { code: string; message: string };
 const demoSession: ArchiveSession = { sessionId: "demo-session", format: "zip", compressedSize: 2_189_122, estimatedUncompressedSize: 4_383_462, entryCount: 5, encrypted: false, risks: [] };
 const demoTasks: TaskSnapshot[] = [
   {
@@ -55,6 +56,30 @@ const demoTasks: TaskSnapshot[] = [
 
 function getSystemDark(): boolean { return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false; }
 
+function commandIssue(reason: unknown): CommandIssue {
+  if (reason && typeof reason === "object") {
+    const value = reason as { code?: unknown; message?: unknown };
+    return {
+      code: typeof value.code === "string" ? value.code : "UNKNOWN",
+      message: typeof value.message === "string" ? value.message : String(reason)
+    };
+  }
+  if (typeof reason === "string") {
+    try {
+      const parsed = JSON.parse(reason) as { code?: unknown; message?: unknown };
+      if (parsed && typeof parsed === "object") {
+        return {
+          code: typeof parsed.code === "string" ? parsed.code : "UNKNOWN",
+          message: typeof parsed.message === "string" ? parsed.message : reason
+        };
+      }
+    } catch {
+      // Plain text errors are preserved below.
+    }
+  }
+  return { code: "UNKNOWN", message: String(reason) };
+}
+
 export function App() {
   const { mode, accent, setMode, setAccent } = useAppearanceStore();
   const [systemDark, setSystemDark] = useState(getSystemDark);
@@ -68,6 +93,7 @@ export function App() {
   const [createFormat, setCreateFormat] = useState<"sevenZip" | "zip" | undefined>();
   const [selectedEntries, setSelectedEntries] = useState<string[]>([]);
   const [archivePassword, setArchivePassword] = useState("");
+  const [batchArchives, setBatchArchives] = useState<string[]>([]);
   const [passwordPrompt, setPasswordPrompt] = useState<PasswordPrompt | null>(null);
   const settingsRef = useRef(settings);
   const resolvedMode = resolveThemeMode(mode, systemDark);
@@ -98,16 +124,18 @@ export function App() {
       setSelectedEntries([]);
       setPage(destination);
     } catch (reason) {
-      const message = String(reason);
-      if (archiveClient.isTauri) {
+      const issue = commandIssue(reason);
+      if (archiveClient.isTauri && issue.code === "WRONG_PASSWORD") {
         void archiveClient.recordPerformanceMarker("archive-error-presented");
         setPasswordPrompt({
           archive: target,
           destination,
-          message: password ? `无法读取压缩包：${message}` : "压缩包可能已加密。请输入密码后重试；如未加密，请检查压缩包是否完整。"
+          message: password ? `密码不正确：${issue.message}` : "此压缩包已加密，请输入密码后重试。"
         });
       } else {
-        setToast(message);
+        if (archiveClient.isTauri) void archiveClient.recordPerformanceMarker("archive-error-presented");
+        setPasswordPrompt(null);
+        setToast(`无法读取压缩包：${issue.message}`);
       }
     }
   }, []);
@@ -222,11 +250,39 @@ export function App() {
     const pendingRequestTimer = window.setInterval(checkPendingRequest, 750);
     return () => { window.clearInterval(pendingRequestTimer); unlisten?.(); };
   }, [prepareArchive]);
+  useEffect(() => {
+    if (!archiveClient.isTauri) return;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/webview").then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type !== "drop" || !event.payload.paths.length) return;
+      void archiveClient.scan(event.payload.paths)
+        .then((result) => {
+          if (result.normalPaths.length) {
+            setCreateInputs(result.paths);
+            setCreateFormat(undefined);
+            setPage("create");
+            setToast(result.archivePaths.length ? "已识别混合内容，可统一创建新的压缩包。" : `已添加 ${result.paths.length} 个对象。`);
+          } else if (result.archivePaths.length > 1) {
+            setBatchArchives(result.archivePaths);
+            setPage("batchExtract");
+          } else if (result.archivePaths[0]) {
+            void prepareArchive(result.archivePaths[0], "extract");
+          }
+        })
+        .catch((reason) => setToast(`无法识别拖入内容：${commandIssue(reason).message}`));
+    })).then((dispose) => { unlisten = dispose; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [prepareArchive]);
 
   async function openArchive() {
     try {
       const selected = archiveClient.isTauri ? await archiveClient.pickInputPaths(true) : [archive];
       if (!selected[0]) return;
+      if (selected.length > 1) {
+        setBatchArchives(selected);
+        setPage("batchExtract");
+        return;
+      }
       await prepareArchive(selected[0], "extract");
     } catch (reason) { setToast(String(reason)); }
   }
@@ -236,6 +292,7 @@ export function App() {
     if (page === "settings") return <SettingsPage settings={settings} onBack={goHome} onChanged={applySettings} onToast={setToast} />;
     if (page === "create") return <CreatePage onBack={goHome} onCreated={addTask} onOpenTasks={() => setPage("tasks")} defaultFormat={createFormat ?? settings.defaultFormat} defaultProfile={settings.compressionProfile} defaultTestAfterCreate={settings.testAfterCreate} initialInputs={createInputs} />;
     if (page === "extract") return <ExtractPage archive={archive} session={session} selectedEntries={selectedEntries} onBack={goHome} onBrowse={() => setPage("browser")} onCreated={(task) => { setArchivePassword(""); addTask(task); }} defaultConflictPolicy={settings.conflictPolicy} initialPassword={archivePassword} />;
+    if (page === "batchExtract") return <BatchExtractPage archives={batchArchives} onBack={goHome} defaultConflictPolicy={settings.conflictPolicy} onStarted={(nextTasks, failures) => { if (nextTasks.length) setTasks((current) => [...nextTasks, ...current.filter((item) => !nextTasks.some((next) => next.taskId === item.taskId))]); setPage("tasks"); setToast(failures.length ? `已启动 ${nextTasks.length} 个任务，${failures.length} 个压缩包需要单独处理。` : `已启动 ${nextTasks.length} 个解压任务。`); }} />;
     if (page === "browser") return <BrowserPage archive={archive} session={session} onBack={() => setPage("extract")} onClose={goHome} onExtract={(entries) => { setSelectedEntries(entries ?? []); setPage("extract"); }} onCreated={addTask} />;
     if (page === "tasks") return <TaskCenter tasks={tasks} onBack={goHome} onClear={() => { if (archiveClient.isTauri) void archiveClient.clearCompleted().then(() => setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)))).catch((reason) => setToast(`无法清理任务：${String(reason)}`)); else setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status))); }} onCancel={(taskId) => { if (archiveClient.isTauri) void archiveClient.cancel(taskId).catch((reason) => setToast(`无法取消任务：${String(reason)}`)); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "cancelled", updatedAt: Date.now() } : task)); }} onRetry={(taskId, password) => { if (archiveClient.isTauri) void archiveClient.retry(taskId, password).then(addTask).catch((reason) => setToast(`无法重试任务：${String(reason)}`)); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "queued", updatedAt: Date.now(), error: undefined } : task)); }} />;
     return <HomePage onCreate={() => { setCreateInputs([]); setCreateFormat(undefined); setPage("create"); }} onOpenArchive={() => void openArchive()} />;

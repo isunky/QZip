@@ -108,7 +108,7 @@ dependencies = [
 
 [[package]]
 name = "archive-core"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "async-trait",
  "secrecy",
@@ -120,7 +120,7 @@ dependencies = [
 
 [[package]]
 name = "archive-security"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "archive-core",
  "thiserror 2.0.19",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "archive-sevenzip"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "archive-core",
  "archive-security",
@@ -2754,7 +2754,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "platform-integration"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "archive-core",
  "serde",
@@ -2933,7 +2933,7 @@ dependencies = [
 
 [[package]]
 name = "qzip-cli"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "archive-core",
  "archive-sevenzip",
@@ -2947,7 +2947,7 @@ dependencies = [
 
 [[package]]
 name = "qzip-desktop"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "archive-core",
  "archive-security",
@@ -3904,7 +3904,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "task-runtime"
-version = "1.0.0-rc.1"
+version = "1.0.0-rc.2"
 dependencies = [
  "archive-core",
  "archive-security",

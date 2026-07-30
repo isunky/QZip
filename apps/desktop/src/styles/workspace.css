@@ -194,6 +194,11 @@
   min-height: 38px;
 }
 
+.qzip-inline-link:disabled {
+  color: var(--qzip-color-text-disabled);
+  cursor: not-allowed;
+}
+
 .qzip-primary-action {
   justify-content: center;
   min-height: 59px;
@@ -448,6 +453,70 @@
   min-height: 68px;
 }
 
+.qzip-batch-summary {
+  align-items: center;
+  background: var(--qzip-color-accent-soft);
+  border: 1px solid var(--qzip-color-border-default);
+  border-radius: 12px;
+  color: var(--qzip-color-accent-strong);
+  display: flex;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.qzip-batch-summary > div {
+  display: grid;
+  gap: 4px;
+}
+
+.qzip-batch-summary span {
+  color: var(--qzip-color-text-secondary);
+  font-size: 13px;
+}
+
+.qzip-batch-list {
+  border: 1px solid var(--qzip-color-border-default);
+  border-radius: 12px;
+  display: grid;
+  margin-top: 14px;
+  max-height: 310px;
+  overflow: auto;
+}
+
+.qzip-batch-list > div {
+  align-items: center;
+  border-bottom: 1px solid var(--qzip-color-divider);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  min-height: 54px;
+  padding: 0 15px;
+}
+
+.qzip-batch-list > div:last-child {
+  border-bottom: 0;
+}
+
+.qzip-batch-list > div[data-current="true"] {
+  background: var(--qzip-color-accent-soft);
+}
+
+.qzip-batch-list svg {
+  color: var(--qzip-color-accent-strong);
+}
+
+.qzip-batch-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qzip-batch-list em {
+  color: var(--qzip-color-text-secondary);
+  font-size: 12px;
+  font-style: normal;
+}
+
 .qzip-browser-page {
   display: flex;
   flex-direction: column;
@@ -669,6 +738,36 @@
 
 .qzip-entry-row > span:first-child svg {
   color: var(--qzip-color-accent-strong);
+}
+
+.qzip-load-more {
+  background: var(--qzip-color-bg-subtle);
+  border: 1px solid var(--qzip-color-border-default);
+  border-radius: 9px;
+  color: var(--qzip-color-accent-strong);
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  margin: 16px auto;
+  min-height: 40px;
+  padding: 0 20px;
+}
+
+.qzip-load-more:hover:not(:disabled) {
+  background: var(--qzip-color-accent-soft);
+  border-color: var(--qzip-color-accent);
+}
+
+.qzip-load-more:disabled {
+  color: var(--qzip-color-text-disabled);
+  cursor: wait;
+}
+
+.qzip-browser-load-error {
+  color: var(--qzip-color-danger);
+  font-size: 13px;
+  padding: 14px 20px;
+  text-align: center;
 }
 
 .qzip-browser-footer {
@@ -925,6 +1024,27 @@
   background: var(--qzip-color-divider);
   height: 14px;
   width: 1px;
+}
+
+.qzip-task-card__details {
+  background: var(--qzip-color-bg-subtle);
+  border: 1px solid var(--qzip-color-border-default);
+  border-radius: 8px;
+  display: grid;
+  font-size: 12px;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.qzip-task-card__details span {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 74px minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
+
+.qzip-task-card__details strong {
+  color: var(--qzip-color-text-secondary);
 }
 
 .qzip-task-card__actions {

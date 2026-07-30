@@ -142,7 +142,7 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
 
           <SettingsSection id="about" icon={<InfoRegular fontSize={23} />} title="关于">
             <div className="qzip-about">
-              <span>QZip {status?.appVersion ?? "1.0.0-rc.1"}</span>
+              <span>QZip {status?.appVersion ?? "1.0.0-rc.2"}</span>
               <span>本地优先的压缩与解压工具</span>
               <a href="https://github.com/isunky/QZip" target="_blank" rel="noreferrer">GitHub <ChevronRightRegular fontSize={17} /></a>
             </div>

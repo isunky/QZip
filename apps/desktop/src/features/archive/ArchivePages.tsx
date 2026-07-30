@@ -32,6 +32,7 @@ import type {
   ArchiveFormat,
   ArchiveRisk,
   ArchiveSession,
+  BackendCapabilities,
   CompressionProfile,
   ConflictPolicy,
   CreateTaskRequest,
@@ -40,7 +41,7 @@ import type {
 import { archiveClient } from "../../lib/archiveClient";
 import { joinOutputPath, splitOutputPath, suggestCreateOutputLocally } from "./archivePath";
 
-type Page = "home" | "create" | "extract" | "browser" | "tasks";
+type Page = "home" | "create" | "extract" | "batchExtract" | "browser" | "tasks";
 
 const primaryFormatOptions = [
   { value: "sevenZip", label: "7Z" },
@@ -95,6 +96,11 @@ function formatBytes(value: number) {
 
 function fileName(path: string) {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+function errorMessage(reason: unknown) {
+  if (reason && typeof reason === "object" && "message" in reason && typeof reason.message === "string") return reason.message;
+  return String(reason);
 }
 
 function formatType(entry: ArchiveEntry) {
@@ -189,9 +195,19 @@ export function CreatePage({
   const [encryptHeaders, setEncryptHeaders] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<BackendCapabilities | null>(null);
   const submittingRef = useRef(false);
   const suggestionGeneration = useRef(0);
   const initialSuggestion = useRef({ inputs: [...new Set(initialInputs)], format: defaultFormat });
+  const writableFormats = capabilities?.writableFormats;
+  const primaryOptions = primaryFormatOptions.map((option) => ({
+    ...option,
+    disabled: Boolean(writableFormats && !writableFormats.includes(option.value))
+  }));
+  const advancedOptions = advancedFormatOptions.map((option) => ({
+    ...option,
+    disabled: Boolean(writableFormats && !writableFormats.includes(option.value))
+  }));
 
   const applySuggestedOutput = useCallback((path: string) => {
     const next = splitOutputPath(path);
@@ -215,6 +231,7 @@ export function CreatePage({
     suggestOutput(unique, format);
   };
   const selectFormat = (nextFormat: ArchiveFormat) => {
+    if (writableFormats && !writableFormats.includes(nextFormat)) return;
     setFormat(nextFormat);
     suggestOutput(inputs, nextFormat);
   };
@@ -244,6 +261,11 @@ export function CreatePage({
   };
 
   useEffect(() => {
+    if (!archiveClient.isTauri) return;
+    void archiveClient.capabilities().then(setCapabilities).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     const { inputs: initialInputsForSuggestion, format: initialFormat } = initialSuggestion.current;
     if (!initialInputsForSuggestion.length || !archiveClient.isTauri) return;
     let cancelled = false;
@@ -268,6 +290,10 @@ export function CreatePage({
     }
     if (format === "tar" && password) {
       setError("TAR 格式不支持密码，请改用 7Z 或 ZIP。");
+      return;
+    }
+    if (writableFormats && !writableFormats.includes(format)) {
+      setError("当前压缩后端不支持所选格式，请选择可用格式。");
       return;
     }
     submittingRef.current = true;
@@ -342,7 +368,7 @@ export function CreatePage({
         </FormRow>
         <FormRow label="格式">
           <SegmentedControl
-            options={primaryFormatOptions}
+            options={primaryOptions}
             value={primaryFormatOptions.some((option) => option.value === format) ? format as "sevenZip" | "zip" | "tar" : "sevenZip"}
             onValueChange={(value) => selectFormat(value as ArchiveFormat)}
             ariaLabel="压缩格式"
@@ -367,7 +393,7 @@ export function CreatePage({
               trailing={<EyeRegular fontSize={19} />}
             />
           ) : (
-            <button type="button" className="qzip-inline-link" onClick={() => setPasswordOpen(true)}>
+            <button type="button" className="qzip-inline-link" disabled={capabilities?.supportsPassword === false} onClick={() => setPasswordOpen(true)}>
               <LockClosedRegular fontSize={18} /> 添加密码
             </button>
           )}
@@ -391,7 +417,7 @@ export function CreatePage({
         <section className="qzip-more-settings">
           <FormRow label="其他格式">
             <SegmentedControl
-              options={advancedFormatOptions}
+              options={advancedOptions}
               value={advancedFormatOptions.some((option) => option.value === format) ? format as "tarGz" | "tarXz" : "tarGz"}
               onValueChange={(value) => selectFormat(value as ArchiveFormat)}
               ariaLabel="其他压缩格式"
@@ -529,6 +555,72 @@ export function ExtractPage({
   );
 }
 
+export function BatchExtractPage({
+  archives,
+  onBack,
+  onStarted,
+  defaultConflictPolicy = "rename"
+}: {
+  archives: string[];
+  onBack: () => void;
+  onStarted: (tasks: TaskSnapshot[], failures: { archive: string; message: string }[]) => void;
+  defaultConflictPolicy?: ConflictPolicy;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [completed, setCompleted] = useState(0);
+  const [current, setCurrent] = useState("");
+
+  async function start() {
+    if (busy || !archives.length) return;
+    setBusy(true);
+    setCompleted(0);
+    const tasks: TaskSnapshot[] = [];
+    const failures: { archive: string; message: string }[] = [];
+    for (const target of archives) {
+      setCurrent(target);
+      try {
+        const prepared = await archiveClient.prepare(target);
+        if (prepared.risks.length) throw new Error("需要单独打开并确认安全风险");
+        const output = await archiveClient.suggestExtractOutput(target, true);
+        tasks.push(await archiveClient.extract({
+          archive: target,
+          output,
+          conflictPolicy: defaultConflictPolicy,
+          acceptRisk: false
+        }));
+      } catch (reason) {
+        failures.push({ archive: target, message: errorMessage(reason) });
+      }
+      setCompleted((value) => value + 1);
+    }
+    setBusy(false);
+    setCurrent("");
+    onStarted(tasks, failures);
+  }
+
+  return (
+    <DetailWorkspace title="批量解压" onBack={onBack} className="qzip-batch-extract-page">
+      <div className="qzip-batch-summary">
+        <ArchiveRegular fontSize={36} />
+        <div><strong>{archives.length} 个压缩包</strong><span>每个压缩包将解压到所在位置的同名文件夹</span></div>
+      </div>
+      <div className="qzip-batch-list">
+        {archives.map((target, index) => (
+          <div key={target} data-current={busy && target === current}>
+            <ArchiveRegular fontSize={21} />
+            <span>{fileName(target)}</span>
+            <em>{index < completed ? "已处理" : busy && target === current ? "正在检查" : "等待"}</em>
+          </div>
+        ))}
+      </div>
+      <Button className="qzip-primary-action qzip-primary-action--wide" loading={busy} disabled={!archives.length} icon={<ArrowDownloadRegular fontSize={22} />} onClick={() => void start()}>
+        开始批量解压
+      </Button>
+      <p className="qzip-page-note"><ShieldCheckmarkRegular fontSize={20} /> 加密包或需要风险确认的压缩包会跳过，请随后单独打开处理</p>
+    </DetailWorkspace>
+  );
+}
+
 export function BrowserPage({
   archive,
   session,
@@ -548,24 +640,54 @@ export function BrowserPage({
   const [directory, setDirectory] = useState("");
   const [entries, setEntries] = useState<ArchiveEntry[]>(archiveClient.isTauri ? [] : demoEntries);
   const [loading, setLoading] = useState(archiveClient.isTauri);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [total, setTotal] = useState(archiveClient.isTauri ? 0 : demoEntries.length);
+  const [nextOffset, setNextOffset] = useState<number | undefined>();
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const reportedSessionRef = useRef<string | null>(null);
+  const listGenerationRef = useRef(0);
 
   useEffect(() => {
     if (!archiveClient.isTauri) return;
-    void archiveClient.entries(session.sessionId, directory || undefined)
-      .then((page) => setEntries(page.entries))
-      .finally(() => setLoading(false));
-  }, [directory, session.sessionId]);
+    const generation = ++listGenerationRef.current;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setLoadError(null);
+      setSelected(new Set());
+      setEntries([]);
+      setTotal(0);
+      setNextOffset(undefined);
+      void archiveClient.entries(session.sessionId, directory || undefined, search || undefined)
+        .then((page) => {
+          if (cancelled || generation !== listGenerationRef.current) return;
+          setEntries(page.entries);
+          setTotal(page.total);
+          setNextOffset(page.nextOffset);
+        })
+        .catch((reason) => {
+          if (!cancelled && generation === listGenerationRef.current) setLoadError(errorMessage(reason));
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, search ? 220 : 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [directory, search, session.sessionId]);
   useEffect(() => {
-    if (!archiveClient.isTauri || loading || reportedSessionRef.current === session.sessionId) return;
+    if (!archiveClient.isTauri || loading || loadError || reportedSessionRef.current === session.sessionId) return;
     reportedSessionRef.current = session.sessionId;
     void archiveClient.recordPerformanceMarker("archive-list-first-page");
-  }, [loading, session.sessionId]);
+  }, [loadError, loading, session.sessionId]);
 
   const visibleEntries = !archiveClient.isTauri && directory ? [] : entries;
-  const shown = visibleEntries.filter((entry) => entry.displayName.toLowerCase().includes(search.toLowerCase()));
+  const shown = archiveClient.isTauri ? visibleEntries : visibleEntries.filter((entry) => entry.displayName.toLowerCase().includes(search.toLowerCase()));
   const breadcrumbs = directory.split("/").filter(Boolean);
   const ratio = session.estimatedUncompressedSize
     ? Math.max(0, Math.min(100, 100 - (session.compressedSize / session.estimatedUncompressedSize) * 100))
@@ -588,6 +710,26 @@ export function BrowserPage({
   function navigateBreadcrumb(index: number) {
     setDirectory(index < 0 ? "" : `${breadcrumbs.slice(0, index + 1).join("/")}/`);
     setSelected(new Set());
+  }
+  async function loadMore() {
+    if (!archiveClient.isTauri || nextOffset === undefined || loadingMore) return;
+    const generation = listGenerationRef.current;
+    setLoadingMore(true);
+    setLoadError(null);
+    try {
+      const page = await archiveClient.entries(session.sessionId, directory || undefined, search || undefined, nextOffset);
+      if (generation !== listGenerationRef.current) return;
+      setEntries((current) => {
+        const known = new Set(current.map((entry) => entry.path));
+        return [...current, ...page.entries.filter((entry) => !known.has(entry.path))];
+      });
+      setTotal(page.total);
+      setNextOffset(page.nextOffset);
+    } catch (reason) {
+      if (generation === listGenerationRef.current) setLoadError(errorMessage(reason));
+    } finally {
+      setLoadingMore(false);
+    }
   }
   async function addToArchive(folder: boolean) {
     const inputs = archiveClient.isTauri
@@ -664,10 +806,12 @@ export function BrowserPage({
               <span>{entry.modifiedAt?.replace("T", " ").slice(0, 16) ?? "—"}</span>
             </button>
           ))}
+          {loadError ? <div className="qzip-browser-load-error">读取列表失败：{loadError}</div> : null}
+          {nextOffset !== undefined && !loading ? <button type="button" className="qzip-load-more" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "正在加载…" : `加载更多（已显示 ${entries.length}/${total}）`}</button> : null}
           {!shown.length && !loading ? <Empty icon={<SearchRegular fontSize={34} />} text={directory ? "此文件夹为空" : "没有匹配的文件"} /> : null}
         </div>
         <footer className="qzip-browser-footer">
-          <span>共 {session.entryCount} 项</span>
+          <span>{directory || search ? `当前结果 ${total} 项` : `共 ${session.entryCount} 项`} · 已显示 {entries.length}</span>
           <span>原始大小：{formatBytes(session.estimatedUncompressedSize)}</span>
           <span>压缩后大小：{formatBytes(session.compressedSize)}</span>
           <strong>压缩率 {ratio.toFixed(1)}%</strong>
@@ -720,7 +864,7 @@ export function TaskCenter({
       <section className="qzip-task-content">
         <header>
           <h2>进行中（{active.length}）</h2>
-          {active.length ? <div><button type="button" disabled title="RC1 暂不支持暂停任务">全部暂停</button><button type="button" onClick={() => active.forEach((task) => onCancel(task.taskId))}>全部取消</button></div> : null}
+          {active.length ? <div><button type="button" disabled title="当前版本暂不支持暂停任务">全部暂停</button><button type="button" onClick={() => active.forEach((task) => onCancel(task.taskId))}>全部取消</button></div> : null}
         </header>
         <div className="qzip-task-list">
           {taskGroups.map((group, index) => (
@@ -754,6 +898,7 @@ function TaskCard({
   const active = ["queued", "scanning", "running", "cancelling"].includes(task.status);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const needsPassword = task.error?.code === "WRONG_PASSWORD";
   const percent = task.progress?.percent ?? (task.status === "completed" ? 100 : 0);
   const status = task.status === "completed"
@@ -783,10 +928,19 @@ function TaskCard({
           {task.status === "completed" ? <>完成时间：{formatTaskTimestamp(task.updatedAt)}</> : null}
           {task.status === "failed" || task.status === "cancelled" ? <>失败时间：{formatTaskTimestamp(task.updatedAt)}</> : null}
         </p>
+        {detailsOpen ? (
+          <div className="qzip-task-card__details">
+            <span><strong>任务 ID</strong>{task.taskId}</span>
+            <span><strong>操作</strong>{task.operation}</span>
+            {task.output ? <span><strong>目标位置</strong>{task.output}</span> : null}
+            {task.error ? <span><strong>错误代码</strong>{task.error.code}</span> : null}
+            {task.warnings.length ? <span><strong>警告</strong>{task.warnings.join("；")}</span> : null}
+          </div>
+        ) : null}
         {needsPassword && showPassword ? <Input aria-label="重试密码" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="请输入正确密码" /> : null}
       </div>
       <div className="qzip-task-card__actions">
-        {active ? <Button variant="icon" aria-label="暂停任务（暂不支持）" disabled title="RC1 暂不支持暂停任务" icon={<PauseRegular fontSize={22} />} /> : null}
+        {active ? <Button variant="icon" aria-label="暂停任务（暂不支持）" disabled title="当前版本暂不支持暂停任务" icon={<PauseRegular fontSize={22} />} /> : null}
         {active ? <Button variant="icon" aria-label="取消任务" icon={<DismissRegular fontSize={22} />} onClick={() => onCancel(task.taskId)} /> : null}
         {task.status === "failed" && task.retryable ? (
           <Button
@@ -798,8 +952,9 @@ function TaskCard({
             {showPassword ? "确认重试" : needsPassword ? "重新输入密码" : "重试"}
           </Button>
         ) : null}
+        {!active ? <Button variant="secondary" icon={<MoreHorizontalRegular fontSize={19} />} onClick={() => setDetailsOpen((current) => !current)}>{detailsOpen ? "收起详情" : "查看详情"}</Button> : null}
         {task.status === "completed" && task.output ? <Button variant="secondary" icon={<OpenRegular fontSize={19} />} onClick={() => void archiveClient.open(task.output!)}>打开结果</Button> : null}
-        {task.output && task.status !== "failed" ? <Button variant="secondary" onClick={() => void archiveClient.reveal(task.output!)}>打开位置</Button> : null}
+        {task.output ? <Button variant="secondary" onClick={() => void archiveClient.reveal(task.output!)}>打开位置</Button> : null}
       </div>
     </Card>
   );

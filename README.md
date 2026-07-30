@@ -6,7 +6,7 @@
 
 拖入文件，即刻完成压缩、解压与压缩包浏览；将复杂选项留给需要它们的人。
 
-`Windows 10 / 11 x64` · `v1.0.0-rc.1` · `Apache-2.0`
+`Windows 10 / 11 x64` · `v1.0.0-rc.2` · `Apache-2.0`
 
 </div>
 
@@ -14,7 +14,7 @@
   <img src="./PIC/ChatGPT%20Image%202026%E5%B9%B47%E6%9C%8827%E6%97%A5%2010_36_35%20(1).png" alt="QZip 首页：拖放文件、压缩文件或打开压缩包" width="92%" />
 </p>
 
-> QZip 目前处于 Windows x64 的 `v1.0.0-rc.1` 收口阶段。RC2 将补齐部分交互与功能缺口；macOS 与 Linux 发行计划于 V1.1 提供。详见[已知问题](KNOWN_ISSUES.md)与[产品路线](QZip_PRD_V2.1.md)。
+> QZip 目前处于 Windows x64 的 `v1.0.0-rc.2` 功能收口阶段，重点完善拖放、批量解压、大包浏览和任务诊断体验；macOS 与 Linux 发行计划于 V1.1 提供。详见[已知问题](KNOWN_ISSUES.md)与[产品路线](QZip_PRD_V2.1.md)。
 
 ## 为什么是 QZip
 
