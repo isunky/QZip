@@ -34,6 +34,7 @@ jobs:
   build-nsis:
     name: build-nsis-${{ inputs.mode }}
     runs-on: windows-2022
+    timeout-minutes: 45
     outputs:
       release_label: ${{ steps.metadata.outputs.release_label }}
       tag: ${{ steps.metadata.outputs.tag }}
@@ -96,7 +97,7 @@ jobs:
           if ('${{ inputs.mode }}' -eq 'publish') {
             powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -Release
           } else {
-            powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1
+            powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -CiDevelopmentSigning
           }
       - name: Assemble and verify NSIS release assets
         shell: pwsh

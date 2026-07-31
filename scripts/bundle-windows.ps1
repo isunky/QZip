@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
   [switch]$InstallDevCertificate,
+  [switch]$CiDevelopmentSigning,
   [switch]$Release,
   [ValidateSet('nsis', 'msi')]
   [string[]]$Bundles = @('nsis', 'msi')
@@ -12,15 +13,18 @@ if ($PSVersionTable.PSEdition -eq 'Desktop') {
   if (-not [string]::IsNullOrWhiteSpace($windowsPowerShellModulePath)) { $env:PSModulePath = $windowsPowerShellModulePath }
 }
 if ($Release) { Import-Module Microsoft.PowerShell.Security -ErrorAction Stop }
-if ($Release -and $InstallDevCertificate) {
-  throw 'Release and InstallDevCertificate cannot be used together.'
+if ($Release -and ($InstallDevCertificate -or $CiDevelopmentSigning)) {
+  throw 'Release, InstallDevCertificate, and CiDevelopmentSigning cannot be used together.'
+}
+if ($InstallDevCertificate -and $CiDevelopmentSigning) {
+  throw 'InstallDevCertificate and CiDevelopmentSigning cannot be used together.'
 }
 if ($Release -and (-not $env:QZIP_WINDOWS_PFX_PATH -or -not $env:QZIP_WINDOWS_PFX_PASSWORD -or -not $env:QZIP_WINDOWS_PUBLISHER)) {
   throw 'Release builds require QZIP_WINDOWS_PFX_PATH, QZIP_WINDOWS_PFX_PASSWORD, and QZIP_WINDOWS_PUBLISHER.'
 }
 & (Join-Path $PSScriptRoot 'fetch-sevenzip.ps1') -VerifyOnly
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& (Join-Path $PSScriptRoot 'build-windows-shell-integration.ps1') -InstallDevCertificate:$InstallDevCertificate -Release:$Release
+& (Join-Path $PSScriptRoot 'build-windows-shell-integration.ps1') -InstallDevCertificate:$InstallDevCertificate -CiDevelopmentSigning:$CiDevelopmentSigning -Release:$Release
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 pnpm --filter @qzip/desktop tauri build --no-bundle --config tauri.windows.bundle.json

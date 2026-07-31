@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
   [switch]$Release,
+  [switch]$CiDevelopmentSigning,
   [switch]$OpenOutput
 )
 
@@ -13,10 +14,13 @@ Write-Host 'Building QZip NSIS installer for Windows x64...' -ForegroundColor Cy
 $bundleArguments = @{
   Bundles = @('nsis')
   Release = $Release
+  CiDevelopmentSigning = $CiDevelopmentSigning
 }
 if (-not $Release) {
-  # Local sparse MSIX shell integration needs a current-user development certificate.
-  $bundleArguments.InstallDevCertificate = $true
+  if (-not $CiDevelopmentSigning) {
+    # Local sparse MSIX shell integration needs a current-user development certificate.
+    $bundleArguments.InstallDevCertificate = $true
+  }
 }
 
 & $bundleScript @bundleArguments
