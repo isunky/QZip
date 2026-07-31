@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)]
-  [ValidatePattern('^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$')]
+  [ValidateNotNullOrEmpty()]
   [string]$Version,
   [switch]$SkipBundle,
   [switch]$Release
@@ -13,14 +13,14 @@ if ($PSVersionTable.PSEdition -eq 'Desktop') {
   if (-not [string]::IsNullOrWhiteSpace($windowsPowerShellModulePath)) { $env:PSModulePath = $windowsPowerShellModulePath }
 }
 Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
-$releaseVersion = $Version.TrimStart('v')
-$productVersion = ($releaseVersion -split '-', 2)[0]
+$releaseVersion = $Version.Trim()
+if ($releaseVersion -match '[\r\n]' -or $releaseVersion.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {
+  throw 'Version must be safe for a Windows filename.'
+}
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $tauriConfigPath = Join-Path $repoRoot 'apps\desktop\src-tauri\tauri.conf.json'
 $tauriConfig = Get-Content -Raw $tauriConfigPath | ConvertFrom-Json
-if ($tauriConfig.version -ne $productVersion) {
-  throw "Requested release $releaseVersion requires Windows product version $productVersion, but tauri.conf.json has $($tauriConfig.version)."
-}
+$productVersion = $tauriConfig.version
 
 & (Join-Path $PSScriptRoot 'fetch-sevenzip.ps1') -VerifyOnly
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

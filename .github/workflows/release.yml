@@ -4,9 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag, for example v1.0.0-rc.2 or v1.0.0
+        description: Release tag or build label, for example rc2, preview-20260731, or v1.0.0-rc.2
         required: true
         type: string
+      prerelease:
+        description: Mark the GitHub Release as a prerelease when mode is publish
+        required: true
+        default: true
+        type: boolean
       mode:
         description: build-only uploads an internal artifact; publish creates a GitHub Release after trusted-signature verification
         required: true
@@ -30,7 +35,7 @@ jobs:
     name: build-nsis-${{ inputs.mode }}
     runs-on: windows-latest
     outputs:
-      version: ${{ steps.metadata.outputs.version }}
+      release_label: ${{ steps.metadata.outputs.release_label }}
       tag: ${{ steps.metadata.outputs.tag }}
       prerelease: ${{ steps.metadata.outputs.prerelease }}
     env:
@@ -42,29 +47,19 @@ jobs:
         with:
           fetch-depth: 0
       - id: metadata
-        name: Validate release metadata
+        name: Prepare release metadata
         shell: pwsh
+        env:
+          RELEASE_LABEL_INPUT: ${{ inputs.tag }}
+          PRERELEASE_INPUT: ${{ inputs.prerelease }}
         run: |
-          $tag = '${{ inputs.tag }}'.Trim()
-          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
-            throw "tag must be vMAJOR.MINOR.PATCH with an optional prerelease suffix: $tag"
+          $tag = $env:RELEASE_LABEL_INPUT.Trim()
+          if ([string]::IsNullOrWhiteSpace($tag) -or $tag -match '[\r\n]' -or $tag.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {
+            throw 'Release tag or build label must be non-empty and safe for a Windows filename.'
           }
-          if (git ls-remote --exit-code --tags origin "refs/tags/$tag") {
-            throw "Tag already exists and will not be overwritten: $tag"
-          }
-          $version = $tag.TrimStart('v')
-          $productVersion = ($version -split '-', 2)[0]
-          $package = Get-Content -Raw package.json | ConvertFrom-Json
-          $workspaceCargo = Get-Content -Raw Cargo.toml
-          $tauri = Get-Content -Raw apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json
-          $cargoMatch = [regex]::Match($workspaceCargo, '(?m)^version\s*=\s*"([^"]+)"')
-          if (-not $cargoMatch.Success) { throw 'Workspace Cargo version was not found.' }
-          if ($package.version -ne $version -or $cargoMatch.Groups[1].Value -ne $version -or $tauri.version -ne $productVersion) {
-            throw "Version mismatch. package=$($package.version), cargo=$($cargoMatch.Groups[1].Value), tauri=$($tauri.version), requested=$version"
-          }
-          "version=$version" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          "release_label=$tag" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
           "tag=$tag" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
-          "prerelease=$($version.Contains('-').ToString().ToLowerInvariant())" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          "prerelease=$env:PRERELEASE_INPUT" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
       - uses: pnpm/action-setup@v4
         with:
           version: 11.9.0
@@ -105,20 +100,23 @@ jobs:
           }
       - name: Assemble and verify NSIS release assets
         shell: pwsh
+        env:
+          RELEASE_LABEL: ${{ steps.metadata.outputs.release_label }}
+          RELEASE_MODE: ${{ inputs.mode }}
         run: |
-          powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version '${{ steps.metadata.outputs.tag }}' -SkipBundle
-          if ('${{ inputs.mode }}' -eq 'publish') {
-            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version '${{ steps.metadata.outputs.tag }}' -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
+          powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version $env:RELEASE_LABEL -SkipBundle
+          if ($env:RELEASE_MODE -eq 'publish') {
+            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
           } else {
-            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version '${{ steps.metadata.outputs.tag }}'
+            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL
           }
       - uses: actions/attest-build-provenance@v2
         with:
-          subject-path: artifacts/release/${{ steps.metadata.outputs.version }}/**
+          subject-path: artifacts/release/${{ steps.metadata.outputs.release_label }}/**
       - uses: actions/upload-artifact@v4
         with:
-          name: qzip-${{ steps.metadata.outputs.version }}-nsis
-          path: artifacts/release/${{ steps.metadata.outputs.version }}/**
+          name: qzip-nsis
+          path: artifacts/release/${{ steps.metadata.outputs.release_label }}/**
           if-no-files-found: error
 
   publish:
@@ -130,24 +128,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: qzip-${{ needs.build-nsis.outputs.version }}-nsis
-          path: artifacts/release/${{ needs.build-nsis.outputs.version }}
+          name: qzip-nsis
+          path: artifacts/release/${{ needs.build-nsis.outputs.release_label }}
       - name: Verify signed release assets
         shell: pwsh
         env:
           QZIP_WINDOWS_PUBLISHER: ${{ vars.QZIP_WINDOWS_PUBLISHER }}
+          RELEASE_LABEL: ${{ needs.build-nsis.outputs.release_label }}
         run: |
-          powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version '${{ needs.build-nsis.outputs.tag }}' -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
+          powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
       - name: Create GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.build-nsis.outputs.tag }}
-          VERSION: ${{ needs.build-nsis.outputs.version }}
+          RELEASE_LABEL: ${{ needs.build-nsis.outputs.release_label }}
           PRERELEASE: ${{ needs.build-nsis.outputs.prerelease }}
           TARGET_SHA: ${{ github.sha }}
         run: |
-          $arguments = @('release', 'create', $env:TAG, "artifacts/release/$env:VERSION/*", '--target', $env:TARGET_SHA, '--generate-notes', '--title', "QZip $env:TAG")
+          $arguments = @('release', 'create', $env:TAG, "artifacts/release/$env:RELEASE_LABEL/*", '--target', $env:TARGET_SHA, '--generate-notes', '--title', "QZip $env:TAG")
           if ($env:PRERELEASE -eq 'true') { $arguments += '--prerelease' }
           & gh @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

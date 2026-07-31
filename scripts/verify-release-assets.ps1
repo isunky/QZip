@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)]
-  [ValidatePattern('^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$')]
+  [ValidateNotNullOrEmpty()]
   [string]$Version,
   [switch]$RequireTrustedSignature,
   [string]$ExpectedPublisher
@@ -14,7 +14,10 @@ if ($PSVersionTable.PSEdition -eq 'Desktop') {
 }
 Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
 if ($RequireTrustedSignature) { Import-Module Microsoft.PowerShell.Security -ErrorAction Stop }
-$releaseVersion = $Version.TrimStart('v')
+$releaseVersion = $Version.Trim()
+if ($releaseVersion -match '[\r\n]' -or $releaseVersion.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {
+  throw 'Version must be safe for a Windows filename.'
+}
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $releaseRoot = Join-Path $repoRoot ("artifacts\release\{0}" -f $releaseVersion)
 $checksumsPath = Join-Path $releaseRoot 'checksums-sha256.txt'
