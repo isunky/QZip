@@ -22,7 +22,7 @@ platform-integration = { path = "../../../crates/platform-integration" }
 serde.workspace = true
 serde_json.workspace = true
 secrecy.workspace = true
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["image-png"] }
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

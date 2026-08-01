@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+"""Build QZip Windows icon assets from the approved fox master image.
+
+Requires Pillow.  The script intentionally owns every exported raster so the
+application, runtime theme icons, and Windows file associations stay in sync.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+from typing import Iterable
+
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MASTER_PATH = ROOT / "artifacts/design/icon-refresh/final/qzip-fox-master.png"
+FINAL_DIR = ROOT / "artifacts/design/icon-refresh/final"
+TAURI_ICONS = ROOT / "apps/desktop/src-tauri/icons"
+FILE_ICON_DIR = TAURI_ICONS / "file-types"
+RUNTIME_ICON_DIR = ROOT / "apps/desktop/src/assets/app-icons"
+ICO_SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
+
+ACCENTS: dict[str, tuple[str, str]] = {
+    "mint": ("#42b883", "#7edfcc"),
+    "ocean": ("#3b8ed0", "#87c9ff"),
+    "lavender": ("#9366c7", "#cbb1f0"),
+    "amber": ("#dfa536", "#ffd27a"),
+    "coral": ("#dd6f61", "#ffaaa0"),
+    "cyan-slate": ("#4d9d9a", "#95d5d2"),
+}
+
+FILE_TYPES = (
+    ("7z", "7Z", "#24c6a4", "nodes"),
+    ("zip", "ZIP", "#4aa3ff", "zip"),
+    ("rar", "RAR", "#a26dff", "grid"),
+    ("tar", "TAR", "#ffb25c", "cube"),
+    ("gz", "GZ", "#ff6f61", "ring"),
+    ("tgz", "TGZ", "#ff6f61", "ring"),
+    ("xz", "XZ", "#4aa3ff", "layers"),
+    ("txz", "TXZ", "#4aa3ff", "layers"),
+    ("bz2", "BZ2", "#a26dff", "hex"),
+    ("iso", "ISO", "#24b9a1", "disc"),
+    ("cab", "CAB", "#24a889", "cab"),
+    ("wim", "WIM", "#667085", "layers"),
+    ("archive", "QZIP", "#667085", "dots"),
+)
+
+
+def hex_rgb(value: str) -> tuple[int, int, int]:
+    value = value.lstrip("#")
+    return tuple(int(value[index : index + 2], 16) for index in (0, 2, 4))  # type: ignore[return-value]
+
+
+def mix(left: tuple[int, int, int], right: tuple[int, int, int], amount: float) -> tuple[int, int, int]:
+    amount = max(0.0, min(1.0, amount))
+    return tuple(round(a * (1 - amount) + b * amount) for a, b in zip(left, right))  # type: ignore[return-value]
+
+
+def scale_color(value: tuple[int, int, int], factor: float) -> tuple[int, int, int]:
+    return tuple(max(0, min(255, round(channel * factor))) for channel in value)  # type: ignore[return-value]
+
+
+def font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    for candidate in (
+        Path("C:/Windows/Fonts/segoeuib.ttf"),
+        Path("C:/Windows/Fonts/seguisb.ttf"),
+        Path("C:/Windows/Fonts/arialbd.ttf"),
+    ):
+        if candidate.exists():
+            return ImageFont.truetype(candidate, size=size)
+    return ImageFont.load_default()
+
+
+def save_ico(image: Image.Image, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    image.convert("RGBA").save(destination, format="ICO", sizes=[(size, size) for size in ICO_SIZES])
+
+
+def recolor_master(master: Image.Image, accent: str, mode: str) -> Image.Image:
+    base, highlight = map(hex_rgb, ACCENTS[accent])
+    graphite = (29, 34, 40)
+    image = master.convert("RGBA")
+    data = []
+    for red, green, blue, alpha in image.getdata():
+        if alpha == 0:
+            data.append((0, 0, 0, 0))
+            continue
+        maximum, minimum = max(red, green, blue), min(red, green, blue)
+        brightness = maximum / 255
+        saturation = (maximum - minimum) / max(maximum, 1)
+        is_white = minimum > 208 and maximum - minimum < 58
+        if is_white:
+            # Keep the reference's white tail and chest as the high-contrast anchor.
+            data.append((red, green, blue, alpha))
+            continue
+        if mode == "light":
+            tone = mix(scale_color(base, 0.72), highlight, brightness)
+        else:
+            # Dark mode keeps the tile graphite while leaving concentrated teal facets visible.
+            emphasis = min(0.52, 0.06 + brightness * saturation * 0.56)
+            tone = mix(graphite, base, emphasis)
+        data.append((*tone, alpha))
+    image.putdata(data)
+    return image
+
+
+def app_variant(master: Image.Image, accent: str, mode: str, size: int = 256) -> Image.Image:
+    return recolor_master(master, accent, mode).resize((size, size), Image.Resampling.LANCZOS)
+
+
+def draw_glyph(draw: ImageDraw.ImageDraw, kind: str, box: tuple[int, int, int, int], color: tuple[int, int, int]) -> None:
+    left, top, right, bottom = box
+    width = right - left
+    cx, cy = (left + right) // 2, (top + bottom) // 2
+    line = max(3, width // 15)
+    if kind == "nodes":
+        points = [(left + width * 0.28, top + width * 0.30), (left + width * 0.62, top + width * 0.26), (left + width * 0.47, top + width * 0.57), (left + width * 0.72, top + width * 0.76), (left + width * 0.22, top + width * 0.76)]
+        for a, b in ((0, 2), (1, 2), (2, 3), (2, 4)):
+            draw.line((points[a], points[b]), fill=color, width=line)
+        radius = max(5, width // 11)
+        for x, y in points:
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
+    elif kind == "zip":
+        radius = max(5, width // 10)
+        for row in range(3):
+            for column in range(2):
+                x = left + width * (0.34 + column * 0.32)
+                y = top + width * (0.24 + row * 0.25)
+                draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
+        draw.line((cx, top + width * 0.70, cx + width * 0.22, bottom - width * 0.10), fill=color, width=line)
+    elif kind == "grid":
+        unit = width * 0.20
+        for row in range(3):
+            for column in range(3):
+                x = left + width * 0.18 + column * unit * 1.28
+                y = top + width * 0.16 + row * unit * 1.28
+                draw.rounded_rectangle((x, y, x + unit, y + unit), radius=max(2, int(unit * .18)), fill=color)
+    elif kind == "cube":
+        half = width * 0.29
+        upper = [(cx, top + width * 0.12), (cx + half, top + width * 0.28), (cx, top + width * 0.45), (cx - half, top + width * 0.28)]
+        lower = [(cx - half, top + width * 0.28), (cx, top + width * 0.45), (cx, top + width * 0.78), (cx - half, top + width * 0.60)]
+        right_face = [(cx + half, top + width * 0.28), (cx, top + width * 0.45), (cx, top + width * 0.78), (cx + half, top + width * 0.60)]
+        for polygon in (upper, lower, right_face):
+            draw.line(polygon + [polygon[0]], fill=color, width=line, joint="curve")
+    elif kind == "ring":
+        radius = width * 0.28
+        draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline=color, width=line * 2)
+        draw.arc((cx - radius * 1.28, cy - radius * 1.28, cx + radius * 1.28, cy + radius * 1.28), 38, 292, fill=color, width=line)
+    elif kind == "hex":
+        radius = width * 0.15
+        centers = [(cx, cy), (cx - radius * 1.7, cy), (cx + radius * 1.7, cy), (cx - radius * .85, cy - radius * 1.45), (cx + radius * .85, cy - radius * 1.45), (cx, cy + radius * 1.5)]
+        for x, y in centers:
+            draw.regular_polygon((x, y, radius), n_sides=6, rotation=30, fill=color)
+    elif kind == "layers":
+        for offset in (0, 1, 2):
+            y = top + width * (0.20 + offset * 0.22)
+            polygon = [(cx, y), (cx + width * .31, y + width * .15), (cx, y + width * .30), (cx - width * .31, y + width * .15)]
+            draw.polygon(polygon, fill=color)
+    elif kind == "disc":
+        radius = width * .29
+        draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), fill=color)
+        inner = radius * .38
+        draw.ellipse((cx - inner, cy - inner, cx + inner, cy + inner), fill=(255, 255, 255))
+    elif kind == "cab":
+        unit = width * .23
+        for row in range(2):
+            for column in range(2):
+                x = cx - unit * 1.14 + column * unit * 1.28
+                y = cy - unit * 1.14 + row * unit * 1.28
+                draw.rounded_rectangle((x, y, x + unit, y + unit), radius=max(2, int(unit * .16)), fill=color)
+    else:
+        radius = max(5, width // 13)
+        for index in range(3):
+            x = cx + (index - 1) * radius * 3
+            draw.ellipse((x - radius, cy - radius, x + radius, cy + radius), fill=color)
+
+
+def file_icon(label: str, color_hex: str, glyph: str, master: Image.Image, size: int = 256) -> Image.Image:
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    color = hex_rgb(color_hex)
+    margin = round(size * .15)
+    left, top, right, bottom = margin, margin * 0.62, size - margin, size - margin * .54
+    fold = round((right - left) * .25)
+    shadow = (0, 0, 0, 24)
+    draw.rounded_rectangle((left + 3, top + 5, right + 3, bottom + 5), radius=round(size * .08), fill=shadow)
+    draw.rounded_rectangle((left, top, right, bottom), radius=round(size * .075), fill=(255, 255, 255, 255), outline=mix(color, (255, 255, 255), .55), width=max(1, size // 90))
+    draw.polygon([(right - fold, top), (right, top + fold), (right - fold, top + fold)], fill=mix(color, (255, 255, 255), .78))
+    draw.line((right - fold, top, right - fold, top + fold, right, top + fold), fill=mix(color, (255, 255, 255), .48), width=max(1, size // 110))
+    footer_top = round(bottom - (bottom - top) * .25)
+    draw.rounded_rectangle((left, footer_top, right, bottom), radius=round(size * .045), fill=color)
+    draw.rectangle((left, footer_top, right, footer_top + round(size * .045)), fill=mix(color, (255, 255, 255), .20))
+    glyph_box = (left + round(size * .10), top + round(size * .13), right - round(size * .10), footer_top - round(size * .06))
+    draw_glyph(draw, glyph, glyph_box, color)
+    if size >= 28:
+        label_font = font(max(8, round(size * (.104 if len(label) <= 3 else .078))))
+        text_box = draw.textbbox((0, 0), label, font=label_font)
+        text_x = (left + right - (text_box[2] - text_box[0])) // 2
+        text_y = footer_top + (bottom - footer_top - (text_box[3] - text_box[1])) // 2 - text_box[1]
+        draw.text((text_x, text_y), label, font=label_font, fill=(255, 255, 255))
+    # A tiny copy of the approved app mark connects every file type to QZip.
+    sticker_size = max(10, round(size * .25))
+    sticker = master.resize((sticker_size, sticker_size), Image.Resampling.LANCZOS)
+    canvas.alpha_composite(sticker, (right - sticker_size + round(size * .04), footer_top - round(sticker_size * .28)))
+    return canvas
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_manifest(paths: Iterable[Path]) -> None:
+    records = []
+    for path in sorted(paths):
+        image_record: dict[str, object] = {"path": path.relative_to(ROOT).as_posix(), "sha256": sha256(path), "bytes": path.stat().st_size}
+        if path.suffix.lower() == ".png":
+            with Image.open(path) as image:
+                image_record["size"] = list(image.size)
+                image_record["mode"] = image.mode
+        records.append(image_record)
+    payload = {
+        "source": MASTER_PATH.relative_to(ROOT).as_posix(),
+        "sourceSha256": sha256(MASTER_PATH),
+        "icoSizes": list(ICO_SIZES),
+        "themes": list(ACCENTS),
+        "files": records,
+    }
+    (FINAL_DIR / "icon-export-manifest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    if not MASTER_PATH.exists():
+        raise SystemExit(f"Missing approved master: {MASTER_PATH}")
+    master = Image.open(MASTER_PATH).convert("RGBA")
+    TAURI_ICONS.mkdir(parents=True, exist_ok=True)
+    FILE_ICON_DIR.mkdir(parents=True, exist_ok=True)
+    RUNTIME_ICON_DIR.mkdir(parents=True, exist_ok=True)
+    generated: list[Path] = []
+
+    default = app_variant(master, "mint", "light", 512)
+    default.save(TAURI_ICONS / "icon.png")
+    generated.append(TAURI_ICONS / "icon.png")
+    for name, size in (("32x32.png", 32), ("64x64.png", 64), ("128x128.png", 128), ("128x128@2x.png", 256)):
+        target = TAURI_ICONS / name
+        default.resize((size, size), Image.Resampling.LANCZOS).save(target)
+        generated.append(target)
+    for size in (30, 44, 71, 89, 107, 142, 150, 284, 310):
+        target = TAURI_ICONS / f"Square{size}x{size}Logo.png"
+        default.resize((size, size), Image.Resampling.LANCZOS).save(target)
+        generated.append(target)
+    store = TAURI_ICONS / "StoreLogo.png"
+    default.resize((50, 50), Image.Resampling.LANCZOS).save(store)
+    generated.append(store)
+    app_ico = TAURI_ICONS / "icon.ico"
+    save_ico(default, app_ico)
+    generated.append(app_ico)
+
+    for mode in ("light", "dark"):
+        for accent in ACCENTS:
+            target = RUNTIME_ICON_DIR / f"{mode}-{accent}.png"
+            app_variant(master, accent, mode).save(target)
+            generated.append(target)
+
+    sticker = app_variant(master, "mint", "light", 64)
+    for slug, label, color, glyph in FILE_TYPES:
+        icon = file_icon(label, color, glyph, sticker)
+        target = FILE_ICON_DIR / f"{slug}.ico"
+        save_ico(icon, target)
+        generated.append(target)
+
+    write_manifest(generated)
+
+
+if __name__ == "__main__":
+    main()

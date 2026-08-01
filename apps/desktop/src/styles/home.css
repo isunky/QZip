@@ -45,13 +45,20 @@ html[data-mode="dark"] .qzip-app-shell {
 
 .qzip-brand__icon {
   align-items: center;
-  background: linear-gradient(145deg, var(--qzip-color-accent), var(--qzip-color-accent-strong));
+  background: transparent;
   border-radius: 9px;
-  box-shadow: 0 5px 12px color-mix(in srgb, var(--qzip-color-accent) 22%, transparent);
   color: #fff;
   display: inline-flex;
   height: 40px;
   justify-content: center;
+  overflow: hidden;
+  width: 40px;
+}
+
+.qzip-brand__icon img {
+  display: block;
+  height: 40px;
+  object-fit: contain;
   width: 40px;
 }
 

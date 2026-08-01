@@ -9,6 +9,7 @@ import type { ArchiveSession, TaskSnapshot } from "../contracts/archive";
 import { defaultAppSettings, type AppSettings, uiScaleFactor } from "../contracts/settings";
 import { archiveClient } from "../lib/archiveClient";
 import { settingsClient } from "../lib/settingsClient";
+import { syncWindowIcon, windowIconUrl } from "../lib/windowIcon";
 import { resolveThemeMode, useAppearanceStore } from "../stores/appearance";
 
 type AppPage = Page | "settings";
@@ -144,6 +145,7 @@ export function App() {
     document.documentElement.dataset.accent = accent;
     document.documentElement.dataset.density = settings.listDensity;
     document.documentElement.dataset.reduceMotion = String(settings.reduceMotion);
+    void syncWindowIcon(resolvedMode, accent).catch(() => undefined);
     if (settingsClient.isTauri) {
       void import("@tauri-apps/api/webview").then(({ getCurrentWebview }) => getCurrentWebview().setZoom(uiScaleFactor[settings.uiScale])).catch(() => undefined);
     }
@@ -297,5 +299,5 @@ export function App() {
     if (page === "tasks") return <TaskCenter tasks={tasks} onBack={goHome} onClear={() => { if (archiveClient.isTauri) void archiveClient.clearCompleted().then(() => setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)))).catch((reason) => setToast(`无法清理任务：${String(reason)}`)); else setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status))); }} onCancel={(taskId) => { if (archiveClient.isTauri) void archiveClient.cancel(taskId).catch((reason) => setToast(`无法取消任务：${String(reason)}`)); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "cancelled", updatedAt: Date.now() } : task)); }} onRetry={(taskId, password) => { if (archiveClient.isTauri) void archiveClient.retry(taskId, password).then(addTask).catch((reason) => setToast(`无法重试任务：${String(reason)}`)); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "queued", updatedAt: Date.now(), error: undefined } : task)); }} />;
     return <HomePage onCreate={() => { setCreateInputs([]); setCreateFormat(undefined); setPage("create"); }} onOpenArchive={() => void openArchive()} />;
   }
-  return <main className="qzip-app-shell"><Header activePage={page} onHomeClick={goHome} onTasksClick={() => setPage("tasks")} onSettingsClick={() => setPage("settings")} /><section className="qzip-app-content" data-page={page}>{currentPage()}</section>{passwordPrompt ? <section className="qzip-password-prompt" role="dialog" aria-modal="true" aria-labelledby="qzip-password-prompt-title"><form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); const password = String(data.get("password") ?? ""); if (!password) return; void prepareArchive(passwordPrompt.archive, passwordPrompt.destination, password); }}><h2 id="qzip-password-prompt-title">需要压缩包密码</h2><p>{passwordPrompt.message}</p><input name="password" type="password" autoFocus placeholder="请输入密码" aria-label="压缩包密码" /><div><button type="button" onClick={() => setPasswordPrompt(null)}>取消</button><button type="submit">继续</button></div></form></section> : null}{toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}</main>;
+  return <main className="qzip-app-shell"><Header activePage={page} iconSrc={windowIconUrl(resolvedMode, accent)} onHomeClick={goHome} onTasksClick={() => setPage("tasks")} onSettingsClick={() => setPage("settings")} /><section className="qzip-app-content" data-page={page}>{currentPage()}</section>{passwordPrompt ? <section className="qzip-password-prompt" role="dialog" aria-modal="true" aria-labelledby="qzip-password-prompt-title"><form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); const password = String(data.get("password") ?? ""); if (!password) return; void prepareArchive(passwordPrompt.archive, passwordPrompt.destination, password); }}><h2 id="qzip-password-prompt-title">需要压缩包密码</h2><p>{passwordPrompt.message}</p><input name="password" type="password" autoFocus placeholder="请输入密码" aria-label="压缩包密码" /><div><button type="button" onClick={() => setPasswordPrompt(null)}>取消</button><button type="submit">继续</button></div></form></section> : null}{toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}</main>;
 }

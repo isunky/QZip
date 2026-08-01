@@ -5,11 +5,11 @@ import {
   SettingsRegular,
   SubtractRegular
 } from "@fluentui/react-icons";
-import { FileArchive } from "lucide-react";
 import { Button } from "@qzip/ui";
 
 interface HeaderProps {
   activePage?: string;
+  iconSrc: string;
   onHomeClick: () => void;
   onTasksClick: () => void;
   onSettingsClick: () => void;
@@ -25,12 +25,12 @@ async function withCurrentWindow(
   await action(getCurrentWindow());
 }
 
-export function Header({ activePage, onHomeClick, onTasksClick, onSettingsClick }: HeaderProps) {
+export function Header({ activePage, iconSrc, onHomeClick, onTasksClick, onSettingsClick }: HeaderProps) {
   return (
     <header className="qzip-titlebar">
       <button type="button" className="qzip-brand" aria-label="返回首页" onClick={onHomeClick}>
         <span className="qzip-brand__icon" aria-hidden="true">
-          <FileArchive size={22} strokeWidth={2.2} />
+          <img src={iconSrc} alt="" />
         </span>
         <span className="qzip-brand__name">轻压</span>
       </button>

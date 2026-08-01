@@ -73,13 +73,21 @@ function Test-AssociationRegistration {
   $registered = Get-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\RegisteredApplications' -Name 'QZip' -ErrorAction Stop
   if ($registered.QZip -ne 'Software\QZip\Capabilities') { throw 'QZip RegisteredApplications value is invalid.' }
   $capabilities = 'Registry::HKEY_CURRENT_USER\Software\QZip\Capabilities\FileAssociations'
-  foreach ($extension in @('.7z', '.zip', '.rar', '.tar', '.gz', '.xz', '.bz2')) {
-    $actual = (Get-ItemProperty -LiteralPath $capabilities -Name $extension -ErrorAction Stop).$extension
-    if ($actual -ne 'QZip.Archive') { throw "QZip association is missing for $extension." }
+  $associations = [ordered]@{
+    '.7z' = '7z'; '.zip' = 'zip'; '.rar' = 'rar'; '.tar' = 'tar'; '.gz' = 'gz'; '.tgz' = 'tgz'
+    '.xz' = 'xz'; '.txz' = 'txz'; '.bz2' = 'bz2'; '.iso' = 'iso'; '.cab' = 'cab'; '.wim' = 'wim'
   }
-  $openCommand = (Get-Item -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Classes\QZip.Archive\shell\open\command' -ErrorAction Stop).GetValue('')
-  if ($openCommand -notmatch 'qzip-desktop\.exe') { throw 'QZip open command is missing.' }
-  Add-Step 'fileAssociations' @{ registeredApplication = $registered.QZip; openCommand = $openCommand }
+  foreach ($entry in $associations.GetEnumerator()) {
+    $actual = (Get-ItemProperty -LiteralPath $capabilities -Name $entry.Key -ErrorAction Stop).$($entry.Key)
+    $progId = "QZip.Archive.$($entry.Value)"
+    if ($actual -ne $progId) { throw "QZip association is missing for $($entry.Key)." }
+    $classRoot = "Registry::HKEY_CURRENT_USER\Software\Classes\$progId"
+    $openCommand = (Get-Item -LiteralPath "$classRoot\shell\open\command" -ErrorAction Stop).GetValue('')
+    $defaultIcon = (Get-Item -LiteralPath "$classRoot\DefaultIcon" -ErrorAction Stop).GetValue('')
+    if ($openCommand -notmatch 'qzip-desktop\.exe') { throw "QZip open command is missing for $($entry.Key)." }
+    if ($defaultIcon -notmatch "file-icons\\$($entry.Value)\.ico") { throw "QZip icon is missing for $($entry.Key)." }
+  }
+  Add-Step 'fileAssociations' @{ registeredApplication = $registered.QZip; extensions = @($associations.Keys) }
 }
 
 function Test-InstalledIntegration([string]$ExpectedVersion) {
@@ -132,6 +140,9 @@ function Test-UninstallCleanup {
   if (Get-AppxPackage -Name 'app.qzip.desktop.shell' -ErrorAction SilentlyContinue) { throw 'QZip sparse Shell MSIX package remained after uninstall.' }
   if (Test-Path -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\QZip\Capabilities') { throw 'QZip capabilities remained after uninstall.' }
   if (Test-Path -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Classes\QZip.Archive') { throw 'QZip ProgID remained after uninstall.' }
+  foreach ($slug in @('7z', 'zip', 'rar', 'tar', 'gz', 'tgz', 'xz', 'txz', 'bz2', 'iso', 'cab', 'wim')) {
+    if (Test-Path -LiteralPath "Registry::HKEY_CURRENT_USER\Software\Classes\QZip.Archive.$slug") { throw "QZip $slug ProgID remained after uninstall." }
+  }
   $registered = Get-ItemProperty -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\RegisteredApplications' -Name 'QZip' -ErrorAction SilentlyContinue
   if ($registered) { throw 'QZip RegisteredApplications value remained after uninstall.' }
   $installRoot = Join-Path $env:LOCALAPPDATA 'QZip'

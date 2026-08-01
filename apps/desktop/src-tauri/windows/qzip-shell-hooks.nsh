@@ -1,18 +1,40 @@
+!macro RegisterQZipArchive SLUG EXTENSION DISPLAY_NAME
+  WriteRegStr HKCU "Software\Classes\QZip.Archive.${SLUG}" "" "${DISPLAY_NAME}"
+  WriteRegStr HKCU "Software\Classes\QZip.Archive.${SLUG}\DefaultIcon" "" "$INSTDIR\file-icons\${SLUG}.ico"
+  WriteRegStr HKCU "Software\Classes\QZip.Archive.${SLUG}\shell\open\command" "" '"$INSTDIR\qzip-desktop.exe" "%1"'
+  WriteRegStr HKCU "Software\QZip\Capabilities\FileAssociations" "${EXTENSION}" "QZip.Archive.${SLUG}"
+!macroend
+
+!macro RemoveQZipArchive SLUG
+  DeleteRegKey HKCU "Software\Classes\QZip.Archive.${SLUG}"
+!macroend
+
+!macro RefreshQZipAssociations
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend
+
 !macro NSIS_HOOK_POSTINSTALL
   DetailPrint "Registering QZip file associations"
+  ; Retain the previous generic ProgID so existing UserChoice values remain usable after upgrade.
   WriteRegStr HKCU "Software\Classes\QZip.Archive" "" "QZip Archive"
-  WriteRegStr HKCU "Software\Classes\QZip.Archive\DefaultIcon" "" "$INSTDIR\qzip-desktop.exe,0"
+  WriteRegStr HKCU "Software\Classes\QZip.Archive\DefaultIcon" "" "$INSTDIR\file-icons\archive.ico"
   WriteRegStr HKCU "Software\Classes\QZip.Archive\shell\open\command" "" '"$INSTDIR\qzip-desktop.exe" "%1"'
   WriteRegStr HKCU "Software\QZip\Capabilities" "ApplicationName" "QZip"
   WriteRegStr HKCU "Software\QZip\Capabilities" "ApplicationDescription" "QZip archive manager"
-  WriteRegStr HKCU "Software\QZip\Capabilities\FileAssociations" ".7z" "QZip.Archive"
-  WriteRegStr HKCU "Software\QZip\Capabilities\FileAssociations" ".zip" "QZip.Archive"
-  WriteRegStr HKCU "Software\QZip\Capabilities\FileAssociations" ".rar" "QZip.Archive"
-  WriteRegStr HKCU "Software\QZip\Capabilities\FileAssociations" ".tar" "QZip.Archive"
-  WriteRegStr HKCU "Software\QZip\Capabilities\FileAssociations" ".gz" "QZip.Archive"
-  WriteRegStr HKCU "Software\QZip\Capabilities\FileAssociations" ".xz" "QZip.Archive"
-  WriteRegStr HKCU "Software\QZip\Capabilities\FileAssociations" ".bz2" "QZip.Archive"
+  !insertmacro RegisterQZipArchive "7z" ".7z" "7-Zip Archive"
+  !insertmacro RegisterQZipArchive "zip" ".zip" "ZIP Archive"
+  !insertmacro RegisterQZipArchive "rar" ".rar" "RAR Archive"
+  !insertmacro RegisterQZipArchive "tar" ".tar" "TAR Archive"
+  !insertmacro RegisterQZipArchive "gz" ".gz" "GZip Archive"
+  !insertmacro RegisterQZipArchive "tgz" ".tgz" "TAR.GZ Archive"
+  !insertmacro RegisterQZipArchive "xz" ".xz" "XZ Archive"
+  !insertmacro RegisterQZipArchive "txz" ".txz" "TAR.XZ Archive"
+  !insertmacro RegisterQZipArchive "bz2" ".bz2" "BZip2 Archive"
+  !insertmacro RegisterQZipArchive "iso" ".iso" "ISO Image"
+  !insertmacro RegisterQZipArchive "cab" ".cab" "Windows Cabinet Archive"
+  !insertmacro RegisterQZipArchive "wim" ".wim" "Windows Imaging Format"
   WriteRegStr HKCU "Software\RegisteredApplications" "QZip" "Software\QZip\Capabilities"
+  !insertmacro RefreshQZipAssociations
   DetailPrint "QZip Explorer commands will register when QZip first starts"
 !macroend
 
@@ -24,5 +46,18 @@
   DeleteRegValue HKCU "Software\RegisteredApplications" "QZip"
   DeleteRegKey HKCU "Software\QZip\Capabilities"
   DeleteRegKey /ifempty HKCU "Software\QZip"
+  !insertmacro RemoveQZipArchive "7z"
+  !insertmacro RemoveQZipArchive "zip"
+  !insertmacro RemoveQZipArchive "rar"
+  !insertmacro RemoveQZipArchive "tar"
+  !insertmacro RemoveQZipArchive "gz"
+  !insertmacro RemoveQZipArchive "tgz"
+  !insertmacro RemoveQZipArchive "xz"
+  !insertmacro RemoveQZipArchive "txz"
+  !insertmacro RemoveQZipArchive "bz2"
+  !insertmacro RemoveQZipArchive "iso"
+  !insertmacro RemoveQZipArchive "cab"
+  !insertmacro RemoveQZipArchive "wim"
   DeleteRegKey HKCU "Software\Classes\QZip.Archive"
+  !insertmacro RefreshQZipAssociations
 !macroend

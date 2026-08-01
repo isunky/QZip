@@ -288,6 +288,12 @@ mod shell_request_tests {
         assert!(!request_path.exists());
         std::fs::remove_dir_all(&root).expect("remove shell request fixture");
     }
+
+    #[test]
+    fn detects_compound_archive_aliases() {
+        assert_eq!(detect(Path::new("release.tgz")), ArchiveFormat::TarGz);
+        assert_eq!(detect(Path::new("release.txz")), ArchiveFormat::TarXz);
+    }
 }
 
 fn load_settings(app: &AppHandle) -> AppSettings {
@@ -399,6 +405,8 @@ fn detect(path: &Path) -> ArchiveFormat {
     for (suffix, format) in [
         (".tar.gz", ArchiveFormat::TarGz),
         (".tar.xz", ArchiveFormat::TarXz),
+        (".tgz", ArchiveFormat::TarGz),
+        (".txz", ArchiveFormat::TarXz),
         (".7z", ArchiveFormat::SevenZip),
         (".zip", ArchiveFormat::Zip),
         (".rar", ArchiveFormat::Rar),
@@ -526,7 +534,7 @@ fn suggest_extract_output(archive: PathBuf, named: bool) -> Result<PathBuf, Comm
         .and_then(|v| v.to_str())
         .unwrap_or("解压结果");
     let stem = [
-        ".tar.gz", ".tar.xz", ".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2",
+        ".tar.gz", ".tar.xz", ".tgz", ".txz", ".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2", ".iso", ".cab", ".wim",
     ]
     .iter()
     .find_map(|suffix| file_name.strip_suffix(suffix))

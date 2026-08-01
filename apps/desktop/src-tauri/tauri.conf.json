@@ -39,7 +39,13 @@
       { "ext": ["7z"], "name": "7-Zip Archive", "role": "Viewer", "rank": "Alternate" },
       { "ext": ["zip"], "name": "ZIP Archive", "role": "Viewer", "rank": "Alternate" },
       { "ext": ["rar"], "name": "RAR Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["tar", "gz", "xz", "bz2"], "name": "Compressed Archive", "role": "Viewer", "rank": "Alternate" }
+      { "ext": ["tar"], "name": "TAR Archive", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["gz", "tgz"], "name": "GZip Archive", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["xz", "txz"], "name": "XZ Archive", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["bz2"], "name": "BZip2 Archive", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["iso"], "name": "ISO Image", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["cab"], "name": "Windows Cabinet Archive", "role": "Viewer", "rank": "Alternate" },
+      { "ext": ["wim"], "name": "Windows Imaging Format", "role": "Viewer", "rank": "Alternate" }
     ]
   }
 }
