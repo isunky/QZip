@@ -534,7 +534,8 @@ fn suggest_extract_output(archive: PathBuf, named: bool) -> Result<PathBuf, Comm
         .and_then(|v| v.to_str())
         .unwrap_or("解压结果");
     let stem = [
-        ".tar.gz", ".tar.xz", ".tgz", ".txz", ".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2", ".iso", ".cab", ".wim",
+        ".tar.gz", ".tar.xz", ".tgz", ".txz", ".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2",
+        ".iso", ".cab", ".wim",
     ]
     .iter()
     .find_map(|suffix| file_name.strip_suffix(suffix))
