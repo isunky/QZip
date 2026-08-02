@@ -81,6 +81,8 @@ function Test-AssociationRegistration {
     $actual = (Get-ItemProperty -LiteralPath $capabilities -Name $entry.Key -ErrorAction Stop).$($entry.Key)
     $progId = "QZip.Archive.$($entry.Value)"
     if ($actual -ne $progId) { throw "QZip association is missing for $($entry.Key)." }
+    $extensionProgId = (Get-Item -LiteralPath "Registry::HKEY_CURRENT_USER\Software\Classes\$($entry.Key)" -ErrorAction Stop).GetValue('')
+    if ($extensionProgId -ne $progId) { throw "QZip shell association is not using the per-format ProgID for $($entry.Key)." }
     $classRoot = "Registry::HKEY_CURRENT_USER\Software\Classes\$progId"
     $openCommand = (Get-Item -LiteralPath "$classRoot\shell\open\command" -ErrorAction Stop).GetValue('')
     $defaultIcon = (Get-Item -LiteralPath "$classRoot\DefaultIcon" -ErrorAction Stop).GetValue('')
