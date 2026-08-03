@@ -39,6 +39,7 @@ import type {
   TaskSnapshot
 } from "../../contracts/archive";
 import { archiveClient } from "../../lib/archiveClient";
+import { localize, useI18n, type AppLocale } from "../../lib/i18n";
 import { joinOutputPath, splitOutputPath, suggestCreateOutputLocally } from "./archivePath";
 
 type Page = "home" | "create" | "extract" | "batchExtract" | "browser" | "tasks";
@@ -52,17 +53,6 @@ const advancedFormatOptions = [
   { value: "tarGz", label: "TAR.GZ" },
   { value: "tarXz", label: "TAR.XZ" }
 ] as const;
-const profiles = [
-  { value: "fast", label: "快速" },
-  { value: "balanced", label: "均衡" },
-  { value: "small", label: "更小" }
-] as const;
-const conflictOptions = [
-  { value: "rename", label: "重命名" },
-  { value: "overwrite", label: "覆盖" },
-  { value: "skip", label: "跳过" }
-] as const;
-
 const demoEntries: ArchiveEntry[] = [
   { path: "设计资料/", displayName: "设计资料", size: 0, isDirectory: true, modifiedAt: "2024-05-20T10:24:00", encrypted: false, isSymlink: false, isHardlink: false },
   { path: "项目文档/", displayName: "项目文档", size: 0, isDirectory: true, modifiedAt: "2024-05-18T09:15:00", encrypted: false, isSymlink: false, isHardlink: false },
@@ -84,7 +74,7 @@ const formatLabels: Record<ArchiveFormat, string> = {
   iso: "ISO",
   cab: "CAB",
   wim: "WIM",
-  unknown: "未知"
+  unknown: "?"
 };
 
 function formatBytes(value: number) {
@@ -103,10 +93,10 @@ function errorMessage(reason: unknown) {
   return String(reason);
 }
 
-function formatType(entry: ArchiveEntry) {
-  if (entry.isDirectory) return "文件夹";
+function formatType(entry: ArchiveEntry, locale: AppLocale) {
+  if (entry.isDirectory) return localize(locale, "文件夹", "Folder");
   const extension = entry.displayName.split(".").pop()?.toUpperCase();
-  return extension ? `${extension} 文件` : "文件";
+  return extension ? localize(locale, `${extension} 文件`, `${extension} file`) : localize(locale, "文件", "File");
 }
 
 function formatElapsed(seconds = 0) {
@@ -116,12 +106,12 @@ function formatElapsed(seconds = 0) {
   return [hours, minutes, rest].map((value) => String(value).padStart(2, "0")).join(":");
 }
 
-function formatTaskTimestamp(value: number) {
+function formatTaskTimestamp(value: number, locale: AppLocale) {
   // Rust task-runtime timestamps are Unix seconds; demo/test tasks use JS
   // milliseconds. Accept both while persisted task history is migrated.
   const milliseconds = value < 100_000_000_000 ? value * 1000 : value;
   const date = new Date(milliseconds);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(locale);
 }
 
 function makeDemoTask(operation: "create" | "extract" | "test" | "update", name: string, output?: string): TaskSnapshot {
@@ -143,18 +133,19 @@ function RiskNotice({ risks, accepted, onAccepted }: {
   accepted: boolean;
   onAccepted: (value: boolean) => void;
 }) {
+  const { text } = useI18n();
   if (!risks.length) return null;
   const mayContinue = risks.some((risk) => risk.overridable);
   return (
     <aside className="qzip-risk-notice">
       <WarningRegular fontSize={22} />
       <div>
-        <strong>安全检查提示</strong>
+        <strong>{text("安全检查提示", "Security notice")}</strong>
         <p>{risks.map((risk) => risk.message).join("；")}</p>
         {mayContinue ? (
           <label>
             <input type="checkbox" checked={accepted} onChange={(event) => onAccepted(event.target.checked)} />
-            我已了解本次风险并继续
+            {text("我已了解本次风险并继续", "I understand the risk and want to continue")}
           </label>
         ) : null}
       </div>
@@ -179,12 +170,13 @@ export function CreatePage({
   defaultTestAfterCreate?: boolean;
   initialInputs?: string[];
 }) {
+  const { locale, text } = useI18n();
   const [inputs, setInputs] = useState<string[]>(() => [...new Set(initialInputs)]);
   const [format, setFormat] = useState<ArchiveFormat>(defaultFormat);
   const [profile, setProfile] = useState<CompressionProfile>(defaultProfile);
   const initialOutput = splitOutputPath(
-    suggestCreateOutputLocally(initialInputs, defaultFormat)
-      ?? (archiveClient.isTauri ? "" : "D:\\示例\\项目资料.7z")
+    suggestCreateOutputLocally(initialInputs, defaultFormat, locale)
+      ?? (archiveClient.isTauri ? "" : text("D:\\示例\\项目资料.7z", "D:\\Examples\\Project.7z"))
   );
   const [directory, setDirectory] = useState(initialOutput.directory);
   const [name, setName] = useState(initialOutput.name);
@@ -208,6 +200,11 @@ export function CreatePage({
     ...option,
     disabled: Boolean(writableFormats && !writableFormats.includes(option.value))
   }));
+  const profileOptions = [
+    { value: "fast", label: text("快速", "Fast") },
+    { value: "balanced", label: text("均衡", "Balanced") },
+    { value: "small", label: text("更小", "Smaller") }
+  ];
 
   const applySuggestedOutput = useCallback((path: string) => {
     const next = splitOutputPath(path);
@@ -215,7 +212,7 @@ export function CreatePage({
     setName(next.name);
   }, []);
   const suggestOutput = useCallback((nextInputs: string[], nextFormat: ArchiveFormat) => {
-    const local = suggestCreateOutputLocally(nextInputs, nextFormat);
+    const local = suggestCreateOutputLocally(nextInputs, nextFormat, locale);
     if (local) applySuggestedOutput(local);
     if (!nextInputs.length || !archiveClient.isTauri) return;
     const generation = ++suggestionGeneration.current;
@@ -224,7 +221,7 @@ export function CreatePage({
         if (generation === suggestionGeneration.current) applySuggestedOutput(path);
       })
       .catch(() => undefined);
-  }, [applySuggestedOutput]);
+  }, [applySuggestedOutput, locale]);
   const replaceInputs = (nextInputs: string[]) => {
     const unique = [...new Set(nextInputs)];
     setInputs(unique);
@@ -237,7 +234,7 @@ export function CreatePage({
   };
   const addFiles = async () => {
     if (!archiveClient.isTauri) {
-      replaceInputs(["D:\\项目资料"]);
+      replaceInputs([text("D:\\项目资料", "D:\\Project")]);
       return;
     }
     const picked = await archiveClient.pickInputPaths(false);
@@ -245,7 +242,7 @@ export function CreatePage({
   };
   const addFolder = async () => {
     if (!archiveClient.isTauri) {
-      setInputs(["D:\\项目资料"]);
+      setInputs([text("D:\\项目资料", "D:\\Project")]);
       return;
     }
     const picked = await archiveClient.pickInputFolder();
@@ -253,7 +250,7 @@ export function CreatePage({
   };
   const pickOutputFolder = async () => {
     if (!archiveClient.isTauri) {
-      setDirectory("D:\\桌面");
+      setDirectory(text("D:\\桌面", "D:\\Desktop"));
       return;
     }
     const picked = await archiveClient.pickInputFolder();
@@ -285,15 +282,15 @@ export function CreatePage({
   const start = async () => {
     if (busy || submittingRef.current) return;
     if (!inputs.length || !directory.trim() || !name.trim()) {
-      setError("请先选择要压缩的文件，并填写保存位置和文件名。");
+      setError(text("请先选择要压缩的文件，并填写保存位置和文件名。", "Select files to compress, then enter a destination and file name."));
       return;
     }
     if (format === "tar" && password) {
-      setError("TAR 格式不支持密码，请改用 7Z 或 ZIP。");
+      setError(text("TAR 格式不支持密码，请改用 7Z 或 ZIP。", "TAR does not support passwords. Use 7Z or ZIP instead."));
       return;
     }
     if (writableFormats && !writableFormats.includes(format)) {
-      setError("当前压缩后端不支持所选格式，请选择可用格式。");
+      setError(text("当前压缩后端不支持所选格式，请选择可用格式。", "The current compression backend does not support this format."));
       return;
     }
     submittingRef.current = true;
@@ -311,7 +308,7 @@ export function CreatePage({
         testAfterCreate: testing,
         deleteSourcesAfterSuccess: false
       };
-      onCreated(archiveClient.isTauri ? await archiveClient.create(request) : makeDemoTask("create", name || "项目资料.7z", output));
+      onCreated(archiveClient.isTauri ? await archiveClient.create(request) : makeDemoTask("create", name || text("项目资料.7z", "project.7z"), output));
       onOpenTasks();
     } catch (reason) {
       setError(String(reason));
@@ -321,18 +318,18 @@ export function CreatePage({
     }
   };
 
-  const summaryName = inputs.length === 1 ? fileName(inputs[0] ?? "") : `${inputs.length} 个对象`;
+  const summaryName = inputs.length === 1 ? fileName(inputs[0] ?? "") : text(`${inputs.length} 个对象`, `${inputs.length} items`);
   return (
-    <DetailWorkspace title="创建压缩包" onBack={onBack} className="qzip-create-page">
+    <DetailWorkspace title={text("创建压缩包", "Create archive")} onBack={onBack} className="qzip-create-page">
       <section className="qzip-selection-summary">
         <div className="qzip-selection-summary__icon"><FolderRegular fontSize={38} /></div>
         <div>
-          <strong>{inputs.length ? summaryName : "选择要压缩的文件"}</strong>
-          <span>{inputs.length ? `${inputs.length} 个已选对象` : "可添加文件或整个文件夹"}</span>
+          <strong>{inputs.length ? summaryName : text("选择要压缩的文件", "Choose files to compress")}</strong>
+          <span>{inputs.length ? text(`${inputs.length} 个已选对象`, `${inputs.length} selected`) : text("可添加文件或整个文件夹", "Add files or an entire folder")}</span>
         </div>
         <div className="qzip-selection-summary__actions">
-          <Button variant="secondary" icon={<DocumentAddRegular fontSize={20} />} onClick={() => void addFiles()}>添加文件</Button>
-          <Button variant="secondary" icon={<FolderAddRegular fontSize={20} />} onClick={() => void addFolder()}>添加文件夹</Button>
+          <Button variant="secondary" icon={<DocumentAddRegular fontSize={20} />} onClick={() => void addFiles()}>{text("添加文件", "Add files")}</Button>
+          <Button variant="secondary" icon={<FolderAddRegular fontSize={20} />} onClick={() => void addFolder()}>{text("添加文件夹", "Add folder")}</Button>
         </div>
       </section>
 
@@ -342,7 +339,7 @@ export function CreatePage({
             <span key={path}>
               <DocumentRegular fontSize={17} />
               {fileName(path)}
-              <button type="button" aria-label={`移除 ${fileName(path)}`} onClick={() => replaceInputs(inputs.filter((item) => item !== path))}>
+              <button type="button" aria-label={text(`移除 ${fileName(path)}`, `Remove ${fileName(path)}`)} onClick={() => replaceInputs(inputs.filter((item) => item !== path))}>
                 <DismissRegular fontSize={15} />
               </button>
             </span>
@@ -351,41 +348,41 @@ export function CreatePage({
       ) : null}
 
       <section className="qzip-form-sheet">
-        <FormRow label="文件名">
-          <Input aria-label="文件名" value={name} onChange={(event) => setName(event.target.value)} />
+        <FormRow label={text("文件名", "File name")}>
+          <Input aria-label={text("文件名", "File name")} value={name} onChange={(event) => setName(event.target.value)} />
         </FormRow>
-        <FormRow label="保存位置">
+        <FormRow label={text("保存位置", "Destination")}>
           <Input
-            aria-label="保存位置"
+            aria-label={text("保存位置", "Destination")}
             value={directory}
             onChange={(event) => setDirectory(event.target.value)}
             trailing={
-              <button type="button" className="qzip-input-action" aria-label="选择保存位置" onClick={() => void pickOutputFolder()}>
+              <button type="button" className="qzip-input-action" aria-label={text("选择保存位置", "Choose destination")} onClick={() => void pickOutputFolder()}>
                 <FolderOpenRegular fontSize={20} />
               </button>
             }
           />
         </FormRow>
-        <FormRow label="格式">
+        <FormRow label={text("格式", "Format")}>
           <SegmentedControl
             options={primaryOptions}
             value={primaryFormatOptions.some((option) => option.value === format) ? format as "sevenZip" | "zip" | "tar" : "sevenZip"}
             onValueChange={(value) => selectFormat(value as ArchiveFormat)}
-            ariaLabel="压缩格式"
+            ariaLabel={text("压缩格式", "Archive format")}
           />
         </FormRow>
-        <FormRow label="压缩方式">
+        <FormRow label={text("压缩方式", "Compression level")}>
           <SegmentedControl
-            options={profiles}
+            options={profileOptions}
             value={profile === "store" || profile === "maximum" ? "balanced" : profile}
             onValueChange={(value) => setProfile(value as CompressionProfile)}
-            ariaLabel="压缩等级"
+            ariaLabel={text("压缩等级", "Compression level")}
           />
         </FormRow>
-        <FormRow label="密码">
+        <FormRow label={text("密码", "Password")}>
           {passwordOpen ? (
             <Input
-              aria-label="压缩密码"
+              aria-label={text("压缩密码", "Archive password")}
               type="password"
               autoFocus
               value={password}
@@ -394,7 +391,7 @@ export function CreatePage({
             />
           ) : (
             <button type="button" className="qzip-inline-link" disabled={capabilities?.supportsPassword === false} onClick={() => setPasswordOpen(true)}>
-              <LockClosedRegular fontSize={18} /> 添加密码
+              <LockClosedRegular fontSize={18} /> {text("添加密码", "Add password")}
             </button>
           )}
         </FormRow>
@@ -407,28 +404,28 @@ export function CreatePage({
         icon={<ArchiveRegular fontSize={23} />}
         onClick={() => void start()}
       >
-        开始压缩
+        {text("开始压缩", "Start compression")}
       </Button>
 
       <button type="button" className="qzip-more-toggle" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
-        更多设置 <ChevronDownRegular fontSize={18} />
+        {text("更多设置", "More settings")} <ChevronDownRegular fontSize={18} />
       </button>
       {moreOpen ? (
         <section className="qzip-more-settings">
-          <FormRow label="其他格式">
+          <FormRow label={text("其他格式", "Other formats")}>
             <SegmentedControl
               options={advancedOptions}
               value={advancedFormatOptions.some((option) => option.value === format) ? format as "tarGz" | "tarXz" : "tarGz"}
               onValueChange={(value) => selectFormat(value as ArchiveFormat)}
-              ariaLabel="其他压缩格式"
+              ariaLabel={text("其他压缩格式", "Other archive formats")}
             />
           </FormRow>
-          <label><input type="checkbox" checked={testing} onChange={(event) => setTesting(event.target.checked)} /> 创建完成后测试压缩包完整性</label>
-          <label data-disabled={!password || format !== "sevenZip"}><input type="checkbox" disabled={!password || format !== "sevenZip"} checked={encryptHeaders} onChange={(event) => setEncryptHeaders(event.target.checked)} /> 加密文件名（仅 7Z）</label>
+          <label><input type="checkbox" checked={testing} onChange={(event) => setTesting(event.target.checked)} /> {text("创建完成后测试压缩包完整性", "Test archive integrity after creation")}</label>
+          <label data-disabled={!password || format !== "sevenZip"}><input type="checkbox" disabled={!password || format !== "sevenZip"} checked={encryptHeaders} onChange={(event) => setEncryptHeaders(event.target.checked)} /> {text("加密文件名（仅 7Z）", "Encrypt file names (7Z only)")}</label>
         </section>
       ) : null}
       {error ? <p className="qzip-form-error">{error}</p> : null}
-      <p className="qzip-page-note"><ShieldCheckmarkRegular fontSize={20} /> 均衡模式在压缩速度与大小之间取得较好平衡，适合大多数场景</p>
+      <p className="qzip-page-note"><ShieldCheckmarkRegular fontSize={20} /> {text("均衡模式在压缩速度与大小之间取得较好平衡，适合大多数场景", "Balanced mode offers a good tradeoff between speed and size for most uses")}</p>
     </DetailWorkspace>
   );
 }
@@ -452,13 +449,19 @@ export function ExtractPage({
   defaultConflictPolicy?: ConflictPolicy;
   initialPassword?: string;
 }) {
-  const [output, setOutput] = useState(archiveClient.isTauri ? "" : "D:\\项目资料");
+  const { text } = useI18n();
+  const [output, setOutput] = useState(archiveClient.isTauri ? "" : text("D:\\项目资料", "D:\\Project"));
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>(defaultConflictPolicy);
   const [password, setPassword] = useState(initialPassword);
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasBlocking = session.risks.some((risk) => !risk.overridable);
+  const conflictOptions = [
+    { value: "rename", label: text("重命名", "Rename") },
+    { value: "overwrite", label: text("覆盖", "Overwrite") },
+    { value: "skip", label: text("跳过", "Skip") }
+  ];
 
   useEffect(() => {
     if (!archiveClient.isTauri) return;
@@ -467,7 +470,7 @@ export function ExtractPage({
 
   const pickOutputFolder = async () => {
     if (!archiveClient.isTauri) {
-      setOutput("D:\\项目资料");
+      setOutput(text("D:\\项目资料", "D:\\Project"));
       return;
     }
     const picked = await archiveClient.pickInputFolder();
@@ -498,7 +501,7 @@ export function ExtractPage({
   };
 
   return (
-    <DetailWorkspace title="快速解压" onBack={onBack} className="qzip-extract-page">
+    <DetailWorkspace title={text("快速解压", "Quick extract")} onBack={onBack} className="qzip-extract-page">
       <section className="qzip-archive-identity">
         <div className="qzip-archive-identity__art">
           <ArchiveRegular fontSize={60} />
@@ -506,35 +509,35 @@ export function ExtractPage({
         </div>
         <div>
           <h2>{fileName(archive)}</h2>
-          <p>{selectedEntries?.length ? `已选择 ${selectedEntries.length} 项` : "选择的压缩包"}</p>
+          <p>{selectedEntries?.length ? text(`已选择 ${selectedEntries.length} 项`, `${selectedEntries.length} items selected`) : text("选择的压缩包", "Selected archive")}</p>
         </div>
       </section>
 
       <section className="qzip-stat-grid">
-        <Stat label="格式" value={formatLabels[session.format]} />
-        <Stat label="压缩大小" value={formatBytes(session.compressedSize)} />
-        <Stat label="预计解压大小" value={formatBytes(session.estimatedUncompressedSize)} />
-        <Stat label="文件数量" value={`${session.entryCount} 个`} />
+        <Stat label={text("格式", "Format")} value={formatLabels[session.format]} />
+        <Stat label={text("压缩大小", "Compressed size")} value={formatBytes(session.compressedSize)} />
+        <Stat label={text("预计解压大小", "Estimated extracted size")} value={formatBytes(session.estimatedUncompressedSize)} />
+        <Stat label={text("文件数量", "Items")} value={text(`${session.entryCount} 个`, `${session.entryCount}`)} />
       </section>
 
       <section className="qzip-form-sheet">
-        <FormRow label="解压位置">
+        <FormRow label={text("解压位置", "Extract to")}>
           <Input
-            aria-label="解压位置"
+            aria-label={text("解压位置", "Extract to")}
             value={output}
             onChange={(event) => setOutput(event.target.value)}
             trailing={
-              <button type="button" className="qzip-input-action" aria-label="选择解压位置" onClick={() => void pickOutputFolder()}>
+              <button type="button" className="qzip-input-action" aria-label={text("选择解压位置", "Choose extraction folder")} onClick={() => void pickOutputFolder()}>
                 <FolderOpenRegular fontSize={20} />
               </button>
             }
           />
         </FormRow>
-        <FormRow label="冲突处理">
-          <SegmentedControl options={conflictOptions} value={conflictPolicy} onValueChange={(value) => setConflictPolicy(value as ConflictPolicy)} ariaLabel="文件冲突处理" />
+        <FormRow label={text("冲突处理", "File conflicts")}>
+          <SegmentedControl options={conflictOptions} value={conflictPolicy} onValueChange={(value) => setConflictPolicy(value as ConflictPolicy)} ariaLabel={text("文件冲突处理", "File conflicts")} />
         </FormRow>
-        <FormRow label="密码（可选）">
-          <Input aria-label="解压密码" type="password" value={password} onChange={(event) => setPassword(event.target.value)} trailing={<EyeRegular fontSize={19} />} />
+        <FormRow label={text("密码（可选）", "Password (optional)")}>
+          <Input aria-label={text("解压密码", "Extraction password")} type="password" value={password} onChange={(event) => setPassword(event.target.value)} trailing={<EyeRegular fontSize={19} />} />
         </FormRow>
       </section>
       <RiskNotice risks={session.risks} accepted={accepted} onAccepted={setAccepted} />
@@ -546,11 +549,11 @@ export function ExtractPage({
           icon={<ArrowDownloadRegular fontSize={24} />}
           onClick={() => void start()}
         >
-          开始解压
+          {text("开始解压", "Start extraction")}
         </Button>
-        <Button variant="secondary" icon={<FolderOpenRegular fontSize={24} />} onClick={onBrowse}>查看压缩包内容</Button>
+        <Button variant="secondary" icon={<FolderOpenRegular fontSize={24} />} onClick={onBrowse}>{text("查看压缩包内容", "Browse archive")}</Button>
       </div>
-      <p className="qzip-page-note"><ShieldCheckmarkRegular fontSize={20} /> 轻压保障解压安全，不上传您的文件到任何服务器</p>
+      <p className="qzip-page-note"><ShieldCheckmarkRegular fontSize={20} /> {text("轻压保障解压安全，不上传您的文件到任何服务器", "QZip extracts locally and never uploads your files")}</p>
     </DetailWorkspace>
   );
 }
@@ -566,6 +569,7 @@ export function BatchExtractPage({
   onStarted: (tasks: TaskSnapshot[], failures: { archive: string; message: string }[]) => void;
   defaultConflictPolicy?: ConflictPolicy;
 }) {
+  const { text } = useI18n();
   const [busy, setBusy] = useState(false);
   const [completed, setCompleted] = useState(0);
   const [current, setCurrent] = useState("");
@@ -580,7 +584,7 @@ export function BatchExtractPage({
       setCurrent(target);
       try {
         const prepared = await archiveClient.prepare(target);
-        if (prepared.risks.length) throw new Error("需要单独打开并确认安全风险");
+        if (prepared.risks.length) throw new Error(text("需要单独打开并确认安全风险", "Open separately to review security risks"));
         const output = await archiveClient.suggestExtractOutput(target, true);
         tasks.push(await archiveClient.extract({
           archive: target,
@@ -599,24 +603,24 @@ export function BatchExtractPage({
   }
 
   return (
-    <DetailWorkspace title="批量解压" onBack={onBack} className="qzip-batch-extract-page">
+    <DetailWorkspace title={text("批量解压", "Batch extraction")} onBack={onBack} className="qzip-batch-extract-page">
       <div className="qzip-batch-summary">
         <ArchiveRegular fontSize={36} />
-        <div><strong>{archives.length} 个压缩包</strong><span>每个压缩包将解压到所在位置的同名文件夹</span></div>
+        <div><strong>{text(`${archives.length} 个压缩包`, `${archives.length} archives`)}</strong><span>{text("每个压缩包将解压到所在位置的同名文件夹", "Each archive will be extracted to a same-name folder beside it")}</span></div>
       </div>
       <div className="qzip-batch-list">
         {archives.map((target, index) => (
           <div key={target} data-current={busy && target === current}>
             <ArchiveRegular fontSize={21} />
             <span>{fileName(target)}</span>
-            <em>{index < completed ? "已处理" : busy && target === current ? "正在检查" : "等待"}</em>
+            <em>{index < completed ? text("已处理", "Processed") : busy && target === current ? text("正在检查", "Checking") : text("等待", "Waiting")}</em>
           </div>
         ))}
       </div>
       <Button className="qzip-primary-action qzip-primary-action--wide" loading={busy} disabled={!archives.length} icon={<ArrowDownloadRegular fontSize={22} />} onClick={() => void start()}>
-        开始批量解压
+        {text("开始批量解压", "Start batch extraction")}
       </Button>
-      <p className="qzip-page-note"><ShieldCheckmarkRegular fontSize={20} /> 加密包或需要风险确认的压缩包会跳过，请随后单独打开处理</p>
+      <p className="qzip-page-note"><ShieldCheckmarkRegular fontSize={20} /> {text("加密包或需要风险确认的压缩包会跳过，请随后单独打开处理", "Encrypted archives and archives requiring risk confirmation are skipped for individual review")}</p>
     </DetailWorkspace>
   );
 }
@@ -636,6 +640,7 @@ export function BrowserPage({
   onExtract: (selectedEntries?: string[]) => void;
   onCreated: (task: TaskSnapshot) => void;
 }) {
+  const { locale, text } = useI18n();
   const [search, setSearch] = useState("");
   const [directory, setDirectory] = useState("");
   const [entries, setEntries] = useState<ArchiveEntry[]>(archiveClient.isTauri ? [] : demoEntries);
@@ -736,7 +741,7 @@ export function BrowserPage({
       ? folder
         ? [await archiveClient.pickInputFolder()].filter((value): value is string => Boolean(value))
         : await archiveClient.pickInputPaths(false)
-      : [folder ? "D:\\新增文件夹" : "D:\\新增文件.txt"];
+      : [folder ? text("D:\\新增文件夹", "D:\\New folder") : text("D:\\新增文件.txt", "D:\\New file.txt")];
     if (!inputs.length) return;
     const task = archiveClient.isTauri
       ? await archiveClient.update({ archive, inputs })
@@ -753,31 +758,31 @@ export function BrowserPage({
   return (
     <section className="qzip-browser-page">
       <header className="qzip-browser-page__topbar">
-        <button type="button" className="qzip-square-action" aria-label="返回快速解压" onClick={onBack}>
+        <button type="button" className="qzip-square-action" aria-label={text("返回快速解压", "Back to quick extract")} onClick={onBack}>
           <ArrowLeftRegular fontSize={24} />
         </button>
         <div className="qzip-browser-page__title-icon"><ArchiveRegular fontSize={28} /><span>{formatLabels[session.format]}</span></div>
         <h1>{fileName(archive)}</h1>
         <div className="qzip-browser-actions">
-          <button type="button" onClick={() => void addToArchive(false)}><AddCircleRegular fontSize={22} /> 添加 <ChevronDownRegular fontSize={16} /></button>
-          <button type="button" onClick={() => onExtract([...selected])}><ArrowDownloadRegular fontSize={22} /> 解压 <ChevronDownRegular fontSize={16} /></button>
-          <button type="button" onClick={() => void testArchive()}><ShieldCheckmarkRegular fontSize={22} /> 测试 <ChevronDownRegular fontSize={16} /></button>
-          <button type="button" aria-expanded={propertiesOpen} onClick={() => setPropertiesOpen((value) => !value)}><MoreHorizontalRegular fontSize={22} /> 更多 <ChevronDownRegular fontSize={16} /></button>
+          <button type="button" onClick={() => void addToArchive(false)}><AddCircleRegular fontSize={22} /> {text("添加", "Add")} <ChevronDownRegular fontSize={16} /></button>
+          <button type="button" onClick={() => onExtract([...selected])}><ArrowDownloadRegular fontSize={22} /> {text("解压", "Extract")} <ChevronDownRegular fontSize={16} /></button>
+          <button type="button" onClick={() => void testArchive()}><ShieldCheckmarkRegular fontSize={22} /> {text("测试", "Test")} <ChevronDownRegular fontSize={16} /></button>
+          <button type="button" aria-expanded={propertiesOpen} onClick={() => setPropertiesOpen((value) => !value)}><MoreHorizontalRegular fontSize={22} /> {text("更多", "More")} <ChevronDownRegular fontSize={16} /></button>
         </div>
         {propertiesOpen ? (
           <div className="qzip-browser-properties">
-            <strong>压缩包属性</strong>
-            <span>{formatLabels[session.format]} · {session.entryCount} 项</span>
-            <button type="button" onClick={() => void addToArchive(true)}><FolderAddRegular fontSize={18} /> 添加文件夹</button>
-            <button type="button" onClick={onClose}><DismissRegular fontSize={18} /> 关闭压缩包</button>
+            <strong>{text("压缩包属性", "Archive properties")}</strong>
+            <span>{formatLabels[session.format]} · {text(`${session.entryCount} 项`, `${session.entryCount} items`)}</span>
+            <button type="button" onClick={() => void addToArchive(true)}><FolderAddRegular fontSize={18} /> {text("添加文件夹", "Add folder")}</button>
+            <button type="button" onClick={onClose}><DismissRegular fontSize={18} /> {text("关闭压缩包", "Close archive")}</button>
           </div>
         ) : null}
       </header>
 
       <Card className="qzip-browser-card">
         <div className="qzip-browser-toolbar">
-          <nav className="qzip-breadcrumb" aria-label="压缩包路径">
-            <button type="button" aria-label="根目录" onClick={() => navigateBreadcrumb(-1)}><HomeRegular fontSize={21} /></button>
+          <nav className="qzip-breadcrumb" aria-label={text("压缩包路径", "Archive path")}>
+            <button type="button" aria-label={text("根目录", "Root folder")} onClick={() => navigateBreadcrumb(-1)}><HomeRegular fontSize={21} /></button>
             {breadcrumbs.map((part, index) => (
               <span key={`${part}-${index}`}>
                 <ChevronRightRegular fontSize={17} />
@@ -785,13 +790,13 @@ export function BrowserPage({
               </span>
             ))}
           </nav>
-          <Input aria-label="搜索压缩包内容" placeholder="搜索" value={search} onChange={(event) => setSearch(event.target.value)} trailing={<SearchRegular fontSize={20} />} />
+          <Input aria-label={text("搜索压缩包内容", "Search archive contents")} placeholder={text("搜索", "Search")} value={search} onChange={(event) => setSearch(event.target.value)} trailing={<SearchRegular fontSize={20} />} />
         </div>
         <div className="qzip-entry-table" role="table">
           <div className="qzip-entry-table__head" role="row">
-            <span>名称</span><span>大小</span><span>类型</span><span>修改时间</span>
+            <span>{text("名称", "Name")}</span><span>{text("大小", "Size")}</span><span>{text("类型", "Type")}</span><span>{text("修改时间", "Modified")}</span>
           </div>
-          {loading ? <Empty icon={<ArrowClockwiseRegular fontSize={34} className="qzip-spin" />} text="正在读取压缩包目录…" /> : shown.map((entry) => (
+          {loading ? <Empty icon={<ArrowClockwiseRegular fontSize={34} className="qzip-spin" />} text={text("正在读取压缩包目录…", "Reading archive contents…")} /> : shown.map((entry) => (
             <button
               className="qzip-entry-row"
               key={entry.path}
@@ -802,19 +807,19 @@ export function BrowserPage({
             >
               <span>{entry.isDirectory ? <FolderRegular fontSize={23} /> : <DocumentRegular fontSize={23} />}{entry.displayName}{entry.encrypted ? <LockClosedRegular fontSize={14} /> : null}</span>
               <span>{entry.isDirectory ? "—" : formatBytes(entry.size)}</span>
-              <span>{formatType(entry)}</span>
+              <span>{formatType(entry, locale)}</span>
               <span>{entry.modifiedAt?.replace("T", " ").slice(0, 16) ?? "—"}</span>
             </button>
           ))}
-          {loadError ? <div className="qzip-browser-load-error">读取列表失败：{loadError}</div> : null}
-          {nextOffset !== undefined && !loading ? <button type="button" className="qzip-load-more" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "正在加载…" : `加载更多（已显示 ${entries.length}/${total}）`}</button> : null}
-          {!shown.length && !loading ? <Empty icon={<SearchRegular fontSize={34} />} text={directory ? "此文件夹为空" : "没有匹配的文件"} /> : null}
+          {loadError ? <div className="qzip-browser-load-error">{text("读取列表失败：", "Could not read the list: ")}{loadError}</div> : null}
+          {nextOffset !== undefined && !loading ? <button type="button" className="qzip-load-more" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? text("正在加载…", "Loading…") : text(`加载更多（已显示 ${entries.length}/${total}）`, `Load more (${entries.length}/${total} shown)`)}</button> : null}
+          {!shown.length && !loading ? <Empty icon={<SearchRegular fontSize={34} />} text={directory ? text("此文件夹为空", "This folder is empty") : text("没有匹配的文件", "No matching files")} /> : null}
         </div>
         <footer className="qzip-browser-footer">
-          <span>{directory || search ? `当前结果 ${total} 项` : `共 ${session.entryCount} 项`} · 已显示 {entries.length}</span>
-          <span>原始大小：{formatBytes(session.estimatedUncompressedSize)}</span>
-          <span>压缩后大小：{formatBytes(session.compressedSize)}</span>
-          <strong>压缩率 {ratio.toFixed(1)}%</strong>
+          <span>{directory || search ? text(`当前结果 ${total} 项`, `${total} results`) : text(`共 ${session.entryCount} 项`, `${session.entryCount} items total`)} · {text(`已显示 ${entries.length}`, `${entries.length} shown`)}</span>
+          <span>{text("原始大小：", "Original size: ")}{formatBytes(session.estimatedUncompressedSize)}</span>
+          <span>{text("压缩后大小：", "Compressed size: ")}{formatBytes(session.compressedSize)}</span>
+          <strong>{text("压缩率", "Compression ratio")} {ratio.toFixed(1)}%</strong>
         </footer>
       </Card>
     </section>
@@ -834,14 +839,15 @@ export function TaskCenter({
   onCancel: (id: string) => void;
   onRetry: (id: string, password?: string) => void;
 }) {
+  const { text } = useI18n();
   const [tab, setTab] = useState<"active" | "completed" | "failed">("active");
   const active = tasks.filter((task) => ["queued", "scanning", "running", "cancelling"].includes(task.status));
   const completed = tasks.filter((task) => task.status === "completed");
   const failed = tasks.filter((task) => ["failed", "cancelled"].includes(task.status));
   const taskGroups = [
-    { id: "active", title: "进行中", tasks: active },
-    { id: "completed", title: "已完成", tasks: completed },
-    { id: "failed", title: "失败", tasks: failed }
+    { id: "active", title: text("进行中", "Active"), tasks: active },
+    { id: "completed", title: text("已完成", "Completed"), tasks: completed },
+    { id: "failed", title: text("失败", "Failed"), tasks: failed }
   ] as const;
 
   function selectGroup(group: typeof tab) {
@@ -852,19 +858,19 @@ export function TaskCenter({
   return (
     <section className="qzip-task-center">
       <aside className="qzip-task-sidebar">
-        <h1>任务中心</h1>
-        <button type="button" data-active={tab === "active"} onClick={() => selectGroup("active")}><ArrowClockwiseRegular fontSize={23} />进行中 <em>{active.length}</em></button>
-        <button type="button" data-active={tab === "completed"} onClick={() => selectGroup("completed")}><CheckmarkCircleRegular fontSize={23} />已完成 <em>{completed.length}</em></button>
-        <button type="button" data-active={tab === "failed"} onClick={() => selectGroup("failed")}><ErrorCircleRegular fontSize={23} />失败 <em>{failed.length}</em></button>
+        <h1>{text("任务中心", "Task center")}</h1>
+        <button type="button" data-active={tab === "active"} onClick={() => selectGroup("active")}><ArrowClockwiseRegular fontSize={23} />{text("进行中", "Active")} <em>{active.length}</em></button>
+        <button type="button" data-active={tab === "completed"} onClick={() => selectGroup("completed")}><CheckmarkCircleRegular fontSize={23} />{text("已完成", "Completed")} <em>{completed.length}</em></button>
+        <button type="button" data-active={tab === "failed"} onClick={() => selectGroup("failed")}><ErrorCircleRegular fontSize={23} />{text("失败", "Failed")} <em>{failed.length}</em></button>
         <div className="qzip-task-sidebar__footer">
-          <button type="button" onClick={onBack}><HomeRegular fontSize={20} /> 返回首页</button>
-          <button type="button" onClick={onClear}><DeleteRegular fontSize={20} /> 清空已完成</button>
+          <button type="button" onClick={onBack}><HomeRegular fontSize={20} /> {text("返回首页", "Back to home")}</button>
+          <button type="button" onClick={onClear}><DeleteRegular fontSize={20} /> {text("清空已完成", "Clear finished")}</button>
         </div>
       </aside>
       <section className="qzip-task-content">
         <header>
-          <h2>进行中（{active.length}）</h2>
-          {active.length ? <div><button type="button" disabled title="当前版本暂不支持暂停任务">全部暂停</button><button type="button" onClick={() => active.forEach((task) => onCancel(task.taskId))}>全部取消</button></div> : null}
+          <h2>{text(`进行中（${active.length}）`, `Active (${active.length})`)}</h2>
+          {active.length ? <div><button type="button" disabled title={text("当前版本暂不支持暂停任务", "Pausing tasks is not supported yet")}>{text("全部暂停", "Pause all")}</button><button type="button" onClick={() => active.forEach((task) => onCancel(task.taskId))}>{text("全部取消", "Cancel all")}</button></div> : null}
         </header>
         <div className="qzip-task-list">
           {taskGroups.map((group, index) => (
@@ -877,7 +883,7 @@ export function TaskCenter({
               {index > 0 ? <h2>{group.title}（{group.tasks.length}）</h2> : null}
               {group.tasks.length
                 ? group.tasks.map((task) => <TaskCard key={task.taskId} task={task} onCancel={onCancel} onRetry={onRetry} />)
-                : index === 0 ? <Card className="qzip-task-empty"><Empty icon={<ArchiveRegular fontSize={40} />} text="暂无进行中任务" /></Card> : null}
+                : index === 0 ? <Card className="qzip-task-empty"><Empty icon={<ArchiveRegular fontSize={40} />} text={text("暂无进行中任务", "No active tasks")} /></Card> : null}
             </section>
           ))}
         </div>
@@ -895,6 +901,7 @@ function TaskCard({
   onCancel: (id: string) => void;
   onRetry: (id: string, password?: string) => void;
 }) {
+  const { locale, text } = useI18n();
   const active = ["queued", "scanning", "running", "cancelling"].includes(task.status);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -902,16 +909,18 @@ function TaskCard({
   const needsPassword = task.error?.code === "WRONG_PASSWORD";
   const percent = task.progress?.percent ?? (task.status === "completed" ? 100 : 0);
   const status = task.status === "completed"
-    ? "已完成"
+    ? text("已完成", "Completed")
     : task.status === "failed"
-      ? `失败：${task.error?.message ?? "处理失败"}`
+      ? needsPassword
+        ? text("失败：密码错误", "Failed: incorrect password")
+        : text(`失败：${task.error?.message ?? "处理失败"}`, `Failed: ${task.error?.message ?? "Processing failed"}`)
       : task.status === "cancelled"
-        ? "已取消"
+        ? text("已取消", "Cancelled")
         : task.operation === "extract"
-          ? "正在解压"
+          ? text("正在解压", "Extracting")
           : task.status === "queued"
-            ? "等待中"
-            : "正在压缩";
+            ? text("等待中", "Waiting")
+            : text("正在压缩", "Compressing");
 
   return (
     <Card className="qzip-task-card" data-status={task.status}>
@@ -924,24 +933,24 @@ function TaskCard({
         </div>
         {active ? <Progress value={Math.max(percent, task.status === "queued" ? 4 : 0)} /> : null}
         <p className="qzip-task-card__meta">
-          {active ? <>当前文件：{task.progress?.currentEntry ?? "准备处理"} <i /> 已用时间：{formatElapsed(task.progress?.elapsedSeconds)}</> : null}
-          {task.status === "completed" ? <>完成时间：{formatTaskTimestamp(task.updatedAt)}</> : null}
-          {task.status === "failed" || task.status === "cancelled" ? <>失败时间：{formatTaskTimestamp(task.updatedAt)}</> : null}
+          {active ? <>{text("当前文件：", "Current file: ")}{task.progress?.currentEntry ?? text("准备处理", "Preparing")} <i /> {text("已用时间：", "Elapsed: ")}{formatElapsed(task.progress?.elapsedSeconds)}</> : null}
+          {task.status === "completed" ? <>{text("完成时间：", "Completed: ")}{formatTaskTimestamp(task.updatedAt, locale)}</> : null}
+          {task.status === "failed" || task.status === "cancelled" ? <>{text("结束时间：", "Ended: ")}{formatTaskTimestamp(task.updatedAt, locale)}</> : null}
         </p>
         {detailsOpen ? (
           <div className="qzip-task-card__details">
-            <span><strong>任务 ID</strong>{task.taskId}</span>
-            <span><strong>操作</strong>{task.operation}</span>
-            {task.output ? <span><strong>目标位置</strong>{task.output}</span> : null}
-            {task.error ? <span><strong>错误代码</strong>{task.error.code}</span> : null}
-            {task.warnings.length ? <span><strong>警告</strong>{task.warnings.join("；")}</span> : null}
+            <span><strong>{text("任务 ID", "Task ID")}</strong>{task.taskId}</span>
+            <span><strong>{text("操作", "Operation")}</strong>{task.operation}</span>
+            {task.output ? <span><strong>{text("目标位置", "Destination")}</strong>{task.output}</span> : null}
+            {task.error ? <span><strong>{text("错误代码", "Error code")}</strong>{task.error.code}</span> : null}
+            {task.warnings.length ? <span><strong>{text("警告", "Warnings")}</strong>{task.warnings.join(text("；", "; "))}</span> : null}
           </div>
         ) : null}
-        {needsPassword && showPassword ? <Input aria-label="重试密码" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="请输入正确密码" /> : null}
+        {needsPassword && showPassword ? <Input aria-label={text("重试密码", "Retry password")} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={text("请输入正确密码", "Enter the correct password")} /> : null}
       </div>
       <div className="qzip-task-card__actions">
-        {active ? <Button variant="icon" aria-label="暂停任务（暂不支持）" disabled title="当前版本暂不支持暂停任务" icon={<PauseRegular fontSize={22} />} /> : null}
-        {active ? <Button variant="icon" aria-label="取消任务" icon={<DismissRegular fontSize={22} />} onClick={() => onCancel(task.taskId)} /> : null}
+        {active ? <Button variant="icon" aria-label={text("暂停任务（暂不支持）", "Pause task (not supported)")} disabled title={text("当前版本暂不支持暂停任务", "Pausing tasks is not supported yet")} icon={<PauseRegular fontSize={22} />} /> : null}
+        {active ? <Button variant="icon" aria-label={text("取消任务", "Cancel task")} icon={<DismissRegular fontSize={22} />} onClick={() => onCancel(task.taskId)} /> : null}
         {task.status === "failed" && task.retryable ? (
           <Button
             variant="danger"
@@ -949,12 +958,12 @@ function TaskCard({
             disabled={showPassword && needsPassword && !password}
             onClick={() => showPassword ? onRetry(task.taskId, password || undefined) : setShowPassword(true)}
           >
-            {showPassword ? "确认重试" : needsPassword ? "重新输入密码" : "重试"}
+            {showPassword ? text("确认重试", "Retry") : needsPassword ? text("重新输入密码", "Enter password") : text("重试", "Retry")}
           </Button>
         ) : null}
-        {!active ? <Button variant="secondary" icon={<MoreHorizontalRegular fontSize={19} />} onClick={() => setDetailsOpen((current) => !current)}>{detailsOpen ? "收起详情" : "查看详情"}</Button> : null}
-        {task.status === "completed" && task.output ? <Button variant="secondary" icon={<OpenRegular fontSize={19} />} onClick={() => void archiveClient.open(task.output!)}>打开结果</Button> : null}
-        {task.output ? <Button variant="secondary" onClick={() => void archiveClient.reveal(task.output!)}>打开位置</Button> : null}
+        {!active ? <Button variant="secondary" icon={<MoreHorizontalRegular fontSize={19} />} onClick={() => setDetailsOpen((current) => !current)}>{detailsOpen ? text("收起详情", "Hide details") : text("查看详情", "View details")}</Button> : null}
+        {task.status === "completed" && task.output ? <Button variant="secondary" icon={<OpenRegular fontSize={19} />} onClick={() => void archiveClient.open(task.output!)}>{text("打开结果", "Open result")}</Button> : null}
+        {task.output ? <Button variant="secondary" onClick={() => void archiveClient.reveal(task.output!)}>{text("打开位置", "Open location")}</Button> : null}
       </div>
     </Card>
   );
@@ -971,11 +980,12 @@ function DetailWorkspace({
   className?: string;
   children: React.ReactNode;
 }) {
+  const { text } = useI18n();
   return (
     <section className={`qzip-detail-page ${className ?? ""}`}>
       <Card className="qzip-detail-panel">
         <header className="qzip-detail-panel__header">
-          <button type="button" aria-label="返回首页" onClick={onBack}><ArrowLeftRegular fontSize={26} /></button>
+          <button type="button" aria-label={text("返回首页", "Back to home")} onClick={onBack}><ArrowLeftRegular fontSize={26} /></button>
           <h1>{title}</h1>
         </header>
         {children}

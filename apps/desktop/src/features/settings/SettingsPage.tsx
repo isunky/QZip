@@ -13,6 +13,7 @@ import {
 import { Button, Card, SegmentedControl } from "@qzip/ui";
 import type { AppSettings, AppSettingsPatch, IntegrationStatus } from "../../contracts/settings";
 import { settingsClient } from "../../lib/settingsClient";
+import { useI18n } from "../../lib/i18n";
 
 interface SettingsPageProps {
   settings: AppSettings;
@@ -45,6 +46,7 @@ function Toggle({ checked, onChange, label, hint, disabled = false }: {
 }
 
 export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsPageProps) {
+  const { brandName, text } = useI18n();
   const [status, setStatus] = useState<IntegrationStatus | null>(null);
   const [checking, setChecking] = useState(false);
   const [activeSection, setActiveSection] = useState("appearance");
@@ -65,11 +67,11 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
       try {
         const { isPermissionGranted, requestPermission } = await import("@tauri-apps/plugin-notification");
         if (!(await isPermissionGranted()) && (await requestPermission()) !== "granted") {
-          onToast("未获得系统通知权限，设置未更改。");
+          onToast(text("未获得系统通知权限，设置未更改。", "Notification permission was not granted. The setting was not changed."));
           return;
         }
       } catch {
-        onToast("当前系统不支持请求通知权限。");
+        onToast(text("当前系统不支持请求通知权限。", "This system does not support notification permission requests."));
         return;
       }
     }
@@ -79,7 +81,9 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
     setChecking(true);
     try {
       const result = await settingsClient.checkForUpdates();
-      onToast(result.configured ? "更新服务已配置，将开始检查。" : "当前发行包未配置官方更新服务。");
+      onToast(result.configured
+        ? text("更新服务已配置，将开始检查。", "The update service is configured. Checking for updates.")
+        : text("当前发行包未配置官方更新服务。", "The official update service is not configured for this build."));
     } finally {
       setChecking(false);
     }
@@ -92,58 +96,59 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
   return (
     <section className="qzip-settings">
       <aside className="qzip-settings__nav">
-        <h1>设置</h1>
-        <button type="button" data-active={activeSection === "appearance"} onClick={() => showSection("appearance")}><ColorRegular fontSize={22} />外观</button>
-        <button type="button" data-active={activeSection === "archive"} onClick={() => showSection("archive")}><ArchiveRegular fontSize={22} />压缩与解压</button>
-        <button type="button" data-active={activeSection === "notifications"} onClick={() => showSection("notifications")}><AlertRegular fontSize={22} />通知</button>
-        <button type="button" data-active={activeSection === "system"} onClick={() => showSection("system")}><ShieldCheckmarkRegular fontSize={22} />系统与隐私</button>
-        <button type="button" data-active={activeSection === "about"} onClick={() => showSection("about")}><InfoRegular fontSize={22} />关于</button>
-        <button type="button" className="qzip-settings__back" onClick={onBack}><ArrowLeftRegular fontSize={20} /> 返回首页</button>
+        <h1>{text("设置", "Settings")}</h1>
+        <button type="button" data-active={activeSection === "appearance"} onClick={() => showSection("appearance")}><ColorRegular fontSize={22} />{text("外观", "Appearance")}</button>
+        <button type="button" data-active={activeSection === "archive"} onClick={() => showSection("archive")}><ArchiveRegular fontSize={22} />{text("压缩与解压", "Compression & extraction")}</button>
+        <button type="button" data-active={activeSection === "notifications"} onClick={() => showSection("notifications")}><AlertRegular fontSize={22} />{text("通知", "Notifications")}</button>
+        <button type="button" data-active={activeSection === "system"} onClick={() => showSection("system")}><ShieldCheckmarkRegular fontSize={22} />{text("系统与隐私", "System & privacy")}</button>
+        <button type="button" data-active={activeSection === "about"} onClick={() => showSection("about")}><InfoRegular fontSize={22} />{text("关于", "About")}</button>
+        <button type="button" className="qzip-settings__back" onClick={onBack}><ArrowLeftRegular fontSize={20} /> {text("返回首页", "Back to home")}</button>
       </aside>
 
       <main className="qzip-settings__content">
         <header className="qzip-settings__header">
-          <h2>偏好设置</h2>
-          <Button variant="tertiary" icon={<ArrowResetRegular fontSize={19} />} onClick={() => void settingsClient.reset().then(onChanged).then(() => onToast("设置已恢复默认值。"))}>恢复默认设置</Button>
+          <h2>{text("偏好设置", "Preferences")}</h2>
+          <Button variant="tertiary" icon={<ArrowResetRegular fontSize={19} />} onClick={() => void settingsClient.reset().then(onChanged).then(() => onToast(text("设置已恢复默认值。", "Settings have been restored to defaults.")))}>{text("恢复默认设置", "Restore defaults")}</Button>
         </header>
 
         <Card className="qzip-settings-panel">
-          <SettingsSection id="appearance" icon={<ColorRegular fontSize={23} />} title="外观">
-            <Row title="主题模式"><SegmentedControl options={[{ value: "light", label: "浅色" }, { value: "dark", label: "暗夜" }, { value: "system", label: "跟随系统" }]} value={settings.themeMode} onValueChange={(value) => void patch({ themeMode: value as AppSettings["themeMode"] })} ariaLabel="主题模式" /></Row>
-            <Row title="强调色"><SegmentedControl options={[{ value: "mint", label: "薄荷" }, { value: "ocean", label: "海洋" }, { value: "lavender", label: "薰衣草" }, { value: "amber", label: "琥珀" }, { value: "coral", label: "珊瑚" }, { value: "cyan-slate", label: "青灰" }]} value={settings.accentTheme} onValueChange={(value) => void patch({ accentTheme: value as AppSettings["accentTheme"] })} ariaLabel="强调色" /></Row>
-            <Row title="界面缩放"><SegmentedControl options={[{ value: "scale90", label: "90%" }, { value: "scale100", label: "100%" }, { value: "scale110", label: "110%" }, { value: "scale125", label: "125%" }]} value={settings.uiScale} onValueChange={(value) => void patch({ uiScale: value as AppSettings["uiScale"] })} ariaLabel="界面缩放" /></Row>
-            <Row title="列表密度"><SegmentedControl options={[{ value: "comfortable", label: "舒适" }, { value: "compact", label: "紧凑" }]} value={settings.listDensity} onValueChange={(value) => void patch({ listDensity: value as AppSettings["listDensity"] })} ariaLabel="列表密度" /></Row>
-            <Toggle checked={settings.reduceMotion} onChange={(reduceMotion) => void patch({ reduceMotion })} label="减少动效" hint="降低界面动画和过渡效果。" />
+          <SettingsSection id="appearance" icon={<ColorRegular fontSize={23} />} title={text("外观", "Appearance")}>
+            <Row title={text("界面语言", "Language")}><SegmentedControl options={[{ value: "zh-CN", label: "简体中文" }, { value: "en-US", label: "English" }, { value: "system", label: text("跟随系统", "System") }]} value={settings.language} onValueChange={(value) => void patch({ language: value as AppSettings["language"] })} ariaLabel={text("界面语言", "Language")} /></Row>
+            <Row title={text("主题模式", "Theme mode")}><SegmentedControl options={[{ value: "light", label: text("浅色", "Light") }, { value: "dark", label: text("暗夜", "Dark") }, { value: "system", label: text("跟随系统", "System") }]} value={settings.themeMode} onValueChange={(value) => void patch({ themeMode: value as AppSettings["themeMode"] })} ariaLabel={text("主题模式", "Theme mode")} /></Row>
+            <Row title={text("强调色", "Accent color")}><SegmentedControl options={[{ value: "mint", label: text("薄荷", "Mint") }, { value: "ocean", label: text("海洋", "Ocean") }, { value: "lavender", label: text("薰衣草", "Lavender") }, { value: "amber", label: text("琥珀", "Amber") }, { value: "coral", label: text("珊瑚", "Coral") }, { value: "cyan-slate", label: text("青灰", "Cyan slate") }]} value={settings.accentTheme} onValueChange={(value) => void patch({ accentTheme: value as AppSettings["accentTheme"] })} ariaLabel={text("强调色", "Accent color")} /></Row>
+            <Row title={text("界面缩放", "Interface scale")}><SegmentedControl options={[{ value: "scale90", label: "90%" }, { value: "scale100", label: "100%" }, { value: "scale110", label: "110%" }, { value: "scale125", label: "125%" }]} value={settings.uiScale} onValueChange={(value) => void patch({ uiScale: value as AppSettings["uiScale"] })} ariaLabel={text("界面缩放", "Interface scale")} /></Row>
+            <Row title={text("列表密度", "List density")}><SegmentedControl options={[{ value: "comfortable", label: text("舒适", "Comfortable") }, { value: "compact", label: text("紧凑", "Compact") }]} value={settings.listDensity} onValueChange={(value) => void patch({ listDensity: value as AppSettings["listDensity"] })} ariaLabel={text("列表密度", "List density")} /></Row>
+            <Toggle checked={settings.reduceMotion} onChange={(reduceMotion) => void patch({ reduceMotion })} label={text("减少动效", "Reduce motion")} hint={text("降低界面动画和过渡效果。", "Reduce interface animations and transitions.")} />
           </SettingsSection>
 
-          <SettingsSection id="archive" icon={<ArchiveRegular fontSize={23} />} title="压缩与解压">
-            <Row title="默认压缩格式"><SegmentedControl options={formatOptions} value={settings.defaultFormat} onValueChange={(value) => void patch({ defaultFormat: value as AppSettings["defaultFormat"] })} ariaLabel="默认压缩格式" /></Row>
-            <Row title="压缩等级"><SegmentedControl options={[{ value: "fast", label: "快速" }, { value: "balanced", label: "均衡" }, { value: "small", label: "更小" }]} value={settings.compressionProfile} onValueChange={(value) => void patch({ compressionProfile: value as AppSettings["compressionProfile"] })} ariaLabel="默认压缩等级" /></Row>
-            <Row title="冲突文件处理"><SegmentedControl options={[{ value: "rename", label: "自动重命名" }, { value: "overwrite", label: "覆盖" }, { value: "skip", label: "跳过" }]} value={settings.conflictPolicy} onValueChange={(value) => void patch({ conflictPolicy: value as AppSettings["conflictPolicy"] })} ariaLabel="冲突文件处理" /></Row>
-            <Toggle checked={settings.testAfterCreate} onChange={(testAfterCreate) => void patch({ testAfterCreate })} label="创建完成后测试压缩包" />
-            <Toggle checked={settings.extractToNamedFolder} onChange={(extractToNamedFolder) => void patch({ extractToNamedFolder })} label="解压到同名文件夹" />
-            <Toggle checked={settings.avoidDuplicateRootFolder} onChange={(avoidDuplicateRootFolder) => void patch({ avoidDuplicateRootFolder })} label="避免重复根目录" />
-            <Toggle checked={settings.openFolderAfterExtract} onChange={(openFolderAfterExtract) => void patch({ openFolderAfterExtract })} label="解压完成后打开文件夹" />
+          <SettingsSection id="archive" icon={<ArchiveRegular fontSize={23} />} title={text("压缩与解压", "Compression & extraction")}>
+            <Row title={text("默认压缩格式", "Default archive format")}><SegmentedControl options={formatOptions} value={settings.defaultFormat} onValueChange={(value) => void patch({ defaultFormat: value as AppSettings["defaultFormat"] })} ariaLabel={text("默认压缩格式", "Default archive format")} /></Row>
+            <Row title={text("压缩等级", "Compression level")}><SegmentedControl options={[{ value: "fast", label: text("快速", "Fast") }, { value: "balanced", label: text("均衡", "Balanced") }, { value: "small", label: text("更小", "Smaller") }]} value={settings.compressionProfile} onValueChange={(value) => void patch({ compressionProfile: value as AppSettings["compressionProfile"] })} ariaLabel={text("默认压缩等级", "Default compression level")} /></Row>
+            <Row title={text("冲突文件处理", "File conflicts")}><SegmentedControl options={[{ value: "rename", label: text("自动重命名", "Auto rename") }, { value: "overwrite", label: text("覆盖", "Overwrite") }, { value: "skip", label: text("跳过", "Skip") }]} value={settings.conflictPolicy} onValueChange={(value) => void patch({ conflictPolicy: value as AppSettings["conflictPolicy"] })} ariaLabel={text("冲突文件处理", "File conflicts")} /></Row>
+            <Toggle checked={settings.testAfterCreate} onChange={(testAfterCreate) => void patch({ testAfterCreate })} label={text("创建完成后测试压缩包", "Test archive after creation")} />
+            <Toggle checked={settings.extractToNamedFolder} onChange={(extractToNamedFolder) => void patch({ extractToNamedFolder })} label={text("解压到同名文件夹", "Extract to a folder with the same name")} />
+            <Toggle checked={settings.avoidDuplicateRootFolder} onChange={(avoidDuplicateRootFolder) => void patch({ avoidDuplicateRootFolder })} label={text("避免重复根目录", "Avoid duplicate root folders")} />
+            <Toggle checked={settings.openFolderAfterExtract} onChange={(openFolderAfterExtract) => void patch({ openFolderAfterExtract })} label={text("解压完成后打开文件夹", "Open folder after extraction")} />
           </SettingsSection>
 
-          <SettingsSection id="notifications" icon={<AlertRegular fontSize={23} />} title="通知">
-            <Toggle checked={settings.taskNotificationsEnabled} onChange={(enabled) => void updateNotifications(enabled)} label="任务完成通知" hint="启用时会请求操作系统通知权限。" />
-            <Toggle checked={settings.notifyOnSuccess} onChange={(notifyOnSuccess) => void patch({ notifyOnSuccess })} disabled={!settings.taskNotificationsEnabled} label="成功时通知" />
-            <Toggle checked={settings.notifyOnFailure} onChange={(notifyOnFailure) => void patch({ notifyOnFailure })} disabled={!settings.taskNotificationsEnabled} label="失败时通知" />
+          <SettingsSection id="notifications" icon={<AlertRegular fontSize={23} />} title={text("通知", "Notifications")}>
+            <Toggle checked={settings.taskNotificationsEnabled} onChange={(enabled) => void updateNotifications(enabled)} label={text("任务完成通知", "Task notifications")} hint={text("启用时会请求操作系统通知权限。", "Enabling this requests operating system notification permission.")} />
+            <Toggle checked={settings.notifyOnSuccess} onChange={(notifyOnSuccess) => void patch({ notifyOnSuccess })} disabled={!settings.taskNotificationsEnabled} label={text("成功时通知", "Notify on success")} />
+            <Toggle checked={settings.notifyOnFailure} onChange={(notifyOnFailure) => void patch({ notifyOnFailure })} disabled={!settings.taskNotificationsEnabled} label={text("失败时通知", "Notify on failure")} />
           </SettingsSection>
 
-          <SettingsSection id="system" icon={<ShieldCheckmarkRegular fontSize={23} />} title="系统、更新与隐私">
-            <div className="qzip-setting-status"><span>文件关联</span><strong>{status?.fileAssociationsDeclared ? "安装包已声明常见压缩格式" : "当前平台未声明"}</strong><Button variant="tertiary" icon={<OpenRegular fontSize={18} />} onClick={() => void settingsClient.openDefaultApps().catch((reason) => onToast(String(reason)))}>默认应用设置</Button></div>
-            <div className="qzip-setting-status"><span>Windows 11 右键菜单</span><strong>{status?.modernContextMenuRegistered ? "已注册" : "未注册或当前安装包不包含系统集成"}</strong></div>
-            <Toggle checked={settings.checkUpdatesOnStartup} onChange={(checkUpdatesOnStartup) => void patch({ checkUpdatesOnStartup })} label="启动时检查更新" disabled={!status?.updaterConfigured} hint={status?.updaterConfigured ? "仅官方签名发行包可用。" : "当前发行包尚未配置官方更新服务。"} />
-            <div className="qzip-setting-status"><span>更新服务</span><strong>{status?.updaterConfigured ? "已配置" : "未配置"}</strong><Button variant="secondary" loading={checking} disabled={!status?.updaterConfigured} onClick={() => void checkUpdates()}>检查更新</Button></div>
-            <Toggle checked={false} onChange={() => undefined} disabled label="使用情况遥测" hint="QZip 不收集遥测数据，此项永久关闭。" />
+          <SettingsSection id="system" icon={<ShieldCheckmarkRegular fontSize={23} />} title={text("系统、更新与隐私", "System, updates & privacy")}>
+            <div className="qzip-setting-status"><span>{text("文件关联", "File associations")}</span><strong>{status?.fileAssociationsDeclared ? text("安装包已声明常见压缩格式", "Common archive formats are declared by the installer") : text("当前平台未声明", "Not declared on this platform")}</strong><Button variant="tertiary" icon={<OpenRegular fontSize={18} />} onClick={() => void settingsClient.openDefaultApps().catch((reason) => onToast(String(reason)))}>{text("默认应用设置", "Default apps")}</Button></div>
+            <div className="qzip-setting-status"><span>Windows 11 {text("右键菜单", "context menu")}</span><strong>{status?.modernContextMenuRegistered ? text("已注册", "Registered") : text("未注册或当前安装包不包含系统集成", "Not registered or unavailable in this build")}</strong></div>
+            <Toggle checked={settings.checkUpdatesOnStartup} onChange={(checkUpdatesOnStartup) => void patch({ checkUpdatesOnStartup })} label={text("启动时检查更新", "Check for updates at startup")} disabled={!status?.updaterConfigured} hint={status?.updaterConfigured ? text("仅官方签名发行包可用。", "Available only in officially signed releases.") : text("当前发行包尚未配置官方更新服务。", "The official update service is not configured for this build.")} />
+            <div className="qzip-setting-status"><span>{text("更新服务", "Update service")}</span><strong>{status?.updaterConfigured ? text("已配置", "Configured") : text("未配置", "Not configured")}</strong><Button variant="secondary" loading={checking} disabled={!status?.updaterConfigured} onClick={() => void checkUpdates()}>{text("检查更新", "Check for updates")}</Button></div>
+            <Toggle checked={false} onChange={() => undefined} disabled label={text("使用情况遥测", "Usage telemetry")} hint={text("轻压不收集遥测数据，此项永久关闭。", "QZip does not collect telemetry. This setting is permanently off.")} />
           </SettingsSection>
 
-          <SettingsSection id="about" icon={<InfoRegular fontSize={23} />} title="关于">
+          <SettingsSection id="about" icon={<InfoRegular fontSize={23} />} title={text("关于", "About")}>
             <div className="qzip-about">
-              <span>QZip {status?.appVersion ?? "1.0.0-rc.2"}</span>
-              <span>本地优先的压缩与解压工具</span>
+              <span>{brandName} {status?.appVersion ?? "1.0.0-rc.2"}</span>
+              <span>{text("本地优先的压缩与解压工具", "A local-first compression and extraction tool")}</span>
               <a href="https://github.com/isunky/QZip" target="_blank" rel="noreferrer">GitHub <ChevronRightRegular fontSize={17} /></a>
             </div>
           </SettingsSection>

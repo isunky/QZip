@@ -22,6 +22,7 @@ TAURI_ICONS = ROOT / "apps/desktop/src-tauri/icons"
 FILE_ICON_DIR = TAURI_ICONS / "file-types"
 RUNTIME_ICON_DIR = ROOT / "apps/desktop/src/assets/app-icons"
 ICO_SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
+APP_FOREGROUND_OCCUPANCY = 0.94
 
 ACCENTS: dict[str, tuple[str, str]] = {
     "mint": ("#42b883", "#7edfcc"),
@@ -79,6 +80,21 @@ def save_ico(image: Image.Image, destination: Path) -> None:
     image.convert("RGBA").save(destination, format="ICO", sizes=[(size, size) for size in ICO_SIZES])
 
 
+def normalize_app_foreground(image: Image.Image, occupancy: float = APP_FOREGROUND_OCCUPANCY) -> Image.Image:
+    """Center the visible app mark and remove excess transparent source padding."""
+    rgba = image.convert("RGBA")
+    bounds = rgba.getchannel("A").getbbox()
+    if bounds is None:
+        return rgba
+    foreground = rgba.crop(bounds)
+    target = max(1, round(min(rgba.size) * occupancy))
+    foreground = ImageOps.contain(foreground, (target, target), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", rgba.size, (0, 0, 0, 0))
+    position = ((rgba.width - foreground.width) // 2, (rgba.height - foreground.height) // 2)
+    canvas.alpha_composite(foreground, position)
+    return canvas
+
+
 def recolor_master(master: Image.Image, accent: str, mode: str) -> Image.Image:
     base, highlight = map(hex_rgb, ACCENTS[accent])
     graphite = (29, 34, 40)
@@ -107,8 +123,11 @@ def recolor_master(master: Image.Image, accent: str, mode: str) -> Image.Image:
     return image
 
 
-def app_variant(master: Image.Image, accent: str, mode: str, size: int = 256) -> Image.Image:
-    return recolor_master(master, accent, mode).resize((size, size), Image.Resampling.LANCZOS)
+def app_variant(master: Image.Image, accent: str, mode: str, size: int = 256, *, normalize: bool = True) -> Image.Image:
+    image = recolor_master(master, accent, mode)
+    if normalize:
+        image = normalize_app_foreground(image)
+    return image.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def draw_glyph(draw: ImageDraw.ImageDraw, kind: str, box: tuple[int, int, int, int], color: tuple[int, int, int]) -> None:
@@ -225,6 +244,7 @@ def write_manifest(paths: Iterable[Path]) -> None:
         "source": MASTER_PATH.relative_to(ROOT).as_posix(),
         "sourceSha256": sha256(MASTER_PATH),
         "icoSizes": list(ICO_SIZES),
+        "appForegroundOccupancy": APP_FOREGROUND_OCCUPANCY,
         "themes": list(ACCENTS),
         "files": records,
     }
@@ -264,7 +284,7 @@ def main() -> None:
             app_variant(master, accent, mode).save(target)
             generated.append(target)
 
-    sticker = app_variant(master, "mint", "light", 64)
+    sticker = app_variant(master, "mint", "light", 64, normalize=False)
     for slug, label, color, glyph in FILE_TYPES:
         icon = file_icon(label, color, glyph, sticker)
         target = FILE_ICON_DIR / f"{slug}.ico"

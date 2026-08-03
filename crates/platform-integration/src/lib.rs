@@ -62,10 +62,23 @@ pub enum ListDensity {
     Compact,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LanguagePreference {
+    System,
+    #[default]
+    #[serde(rename = "zh-CN")]
+    ZhCn,
+    #[serde(rename = "en-US")]
+    EnUs,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub schema_version: u32,
+    #[serde(default)]
+    pub language: LanguagePreference,
     pub theme_mode: ThemeMode,
     pub accent_theme: AccentTheme,
     pub ui_scale: UiScale,
@@ -90,6 +103,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             schema_version: SETTINGS_SCHEMA_VERSION,
+            language: LanguagePreference::ZhCn,
             theme_mode: ThemeMode::Light,
             accent_theme: AccentTheme::Mint,
             ui_scale: UiScale::Scale100,
@@ -114,6 +128,7 @@ impl Default for AppSettings {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettingsPatch {
+    pub language: Option<LanguagePreference>,
     pub theme_mode: Option<ThemeMode>,
     pub accent_theme: Option<AccentTheme>,
     pub ui_scale: Option<UiScale>,
@@ -155,6 +170,9 @@ impl AppSettings {
     }
 
     pub fn apply(&mut self, patch: AppSettingsPatch) -> Result<(), SettingsError> {
+        if let Some(value) = patch.language {
+            self.language = value;
+        }
         if let Some(value) = patch.default_format {
             if !value.is_writable() {
                 return Err(SettingsError::ReadOnlyDefaultFormat);
@@ -278,5 +296,23 @@ mod tests {
     fn serialized_settings_have_no_password_field() {
         let document = serde_json::to_string(&AppSettings::default()).unwrap();
         assert!(!document.to_ascii_lowercase().contains("password"));
+    }
+
+    #[test]
+    fn language_preference_serializes_for_the_frontend() {
+        let mut settings = AppSettings::default();
+        settings.language = LanguagePreference::System;
+        let document = serde_json::to_value(settings).unwrap();
+        assert_eq!(document["language"], "system");
+    }
+
+    #[test]
+    fn settings_without_a_language_keep_existing_preferences() {
+        let mut document = serde_json::to_value(AppSettings::default()).unwrap();
+        document.as_object_mut().unwrap().remove("language");
+        document["themeMode"] = serde_json::json!("dark");
+        let migrated = AppSettings::migrated(document);
+        assert_eq!(migrated.language, LanguagePreference::ZhCn);
+        assert_eq!(migrated.theme_mode, ThemeMode::Dark);
     }
 }

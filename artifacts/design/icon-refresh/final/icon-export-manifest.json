@@ -12,6 +12,7 @@
     128,
     256
   ],
+  "appForegroundOccupancy": 0.94,
   "themes": [
     "mint",
     "ocean",
@@ -23,8 +24,8 @@
   "files": [
     {
       "path": "apps/desktop/src/assets/app-icons/dark-amber.png",
-      "sha256": "a02bb7ffd8920d76ef1fa36a400ea5d0a4b6605038e74beddd4179110147e932",
-      "bytes": 43185,
+      "sha256": "cab45c8f41bbcf3be12da6703bc22bcd2e405b919b6e1ae61e35db692c9774a3",
+      "bytes": 54194,
       "size": [
         256,
         256
@@ -33,8 +34,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/dark-coral.png",
-      "sha256": "ded8812af6aa915607608e6ce8c98731f2a9b61883564fcc0c29042d22781f7d",
-      "bytes": 42189,
+      "sha256": "aa0b72239924466cbbea621265e4a6f14f4c2724b93e57ca39d9017142b5ef77",
+      "bytes": 52887,
       "size": [
         256,
         256
@@ -43,8 +44,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/dark-cyan-slate.png",
-      "sha256": "f2dcc13fccc971fb93ba65d227bf40c0bba94bd6d8ee693a62162f4f247a4e87",
-      "bytes": 40572,
+      "sha256": "9aa96e49f095812c554a4105a14ce1acf3c6ca737177551422d23aca9a1e64f8",
+      "bytes": 50462,
       "size": [
         256,
         256
@@ -53,8 +54,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/dark-lavender.png",
-      "sha256": "07e764ec9d5db81c200259fa75dea5d80f43b6ab5ec5f13811fe945ab644675d",
-      "bytes": 42599,
+      "sha256": "8eb44df5e0150df83f706b06256069bee8acdde06ad0bc2369a7ca5705b5521f",
+      "bytes": 53193,
       "size": [
         256,
         256
@@ -63,8 +64,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/dark-mint.png",
-      "sha256": "8380b2285547a42b003ceaaf1087a97fc8dba5569093c62a5e8221a6366e3ffb",
-      "bytes": 40975,
+      "sha256": "c6155e7ffa4bc89e1bb78922289c2d07e5ab9c3467d2c52e79fc5508dd0910da",
+      "bytes": 51002,
       "size": [
         256,
         256
@@ -73,8 +74,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/dark-ocean.png",
-      "sha256": "3bc723b792e1f4713b0a831d9b0d913a268215baac53aca842af117a1bb117a6",
-      "bytes": 41897,
+      "sha256": "6c4fdb5c0d4b564daf232c3776d8e74f74be7fb02b179cff4de0c348e1971215",
+      "bytes": 52448,
       "size": [
         256,
         256
@@ -83,8 +84,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/light-amber.png",
-      "sha256": "b73faf664baf0a1a622457136efd8929ab1307183804005f3570e1209d064142",
-      "bytes": 43078,
+      "sha256": "8f002f2bf32d805cb1960d5bd306e3315aa1d4da5230192a9f0f57dc3d50e684",
+      "bytes": 54508,
       "size": [
         256,
         256
@@ -93,8 +94,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/light-coral.png",
-      "sha256": "0d539d4c3d60476425cf4d71655bbef6e51f5d6d4b6748d65675b4b40b4ca69b",
-      "bytes": 40326,
+      "sha256": "c8b033b69b937534344e08b5721b390d2c5dab276de8f91fcc309de9c776abdc",
+      "bytes": 50598,
       "size": [
         256,
         256
@@ -103,8 +104,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/light-cyan-slate.png",
-      "sha256": "98169d336dbbf738665840bbc02e93b07273d291ca917a3acb36db3a2b53ea66",
-      "bytes": 41651,
+      "sha256": "39b21c173f4946cd2b47bba312ea5a2b55fb1f0309f14dc91d40812fbe1a53ff",
+      "bytes": 53090,
       "size": [
         256,
         256
@@ -113,8 +114,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/light-lavender.png",
-      "sha256": "4fcbe2c6b2b2df83de0e0a553ec76be4437ed0dc186903d3398193e1ccbedfa0",
-      "bytes": 40565,
+      "sha256": "3c2db0a5260e2e64411d73293a3ae21f431c9d2aa747df23c0a22570f7274d22",
+      "bytes": 51009,
       "size": [
         256,
         256
@@ -123,8 +124,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/light-mint.png",
-      "sha256": "fe92f5318e315d2d59dcb0a75e1e21e2923e7164e51ef536a7cd6d2851cfbea6",
-      "bytes": 42815,
+      "sha256": "8cdc6b791d309aa84260c0f60e4bc8370f4ca173bb78b0bb1136ca0128b8a137",
+      "bytes": 54151,
       "size": [
         256,
         256
@@ -133,8 +134,8 @@
     },
     {
       "path": "apps/desktop/src/assets/app-icons/light-ocean.png",
-      "sha256": "5be7811e4c21bcba8a3449c8095f0f239040cde1e118d87235c5650c9bd6e7f0",
-      "bytes": 43335,
+      "sha256": "ace90056f882d597153d8bbc8adb9cefc716675f87dc2d2362cc6190f51faa6a",
+      "bytes": 54908,
       "size": [
         256,
         256
@@ -143,8 +144,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/128x128.png",
-      "sha256": "09e139c11710d717e0a8485d6dab3e3f4bd7ad728938b02baa4b86e7d74695f9",
-      "bytes": 15312,
+      "sha256": "2ff1265353ceaab4b74d5ca5796f6f9e1067875a452b44a6c684bd79ecf89d7b",
+      "bytes": 18549,
       "size": [
         128,
         128
@@ -153,8 +154,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/128x128@2x.png",
-      "sha256": "7942e3ccc8f47e7715ec245f531b62318eca8a2f317bdc862761ae34ae35e9ae",
-      "bytes": 44689,
+      "sha256": "96ccdd74beb4e36811b3f0945e03d05b3e9aaa7b407faf5a0a821b65c1dca846",
+      "bytes": 56498,
       "size": [
         256,
         256
@@ -163,8 +164,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/32x32.png",
-      "sha256": "55b19af727943232593e1c6c82e954744bf3f1b7fa83866c5e8a511d40ad2fdb",
-      "bytes": 2084,
+      "sha256": "cf6bc704aa3d785197459ea8a1af9aded20284ee309030638be2e03dc165374e",
+      "bytes": 2367,
       "size": [
         32,
         32
@@ -173,8 +174,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/64x64.png",
-      "sha256": "c83d586740672ae95f7ad5a83d1c6e46cfab27756dd45305daa34277047f9940",
-      "bytes": 5503,
+      "sha256": "921633f59fec8018934d2cf6d933d36b2622de9a8f1a8df7668dd415c59584dc",
+      "bytes": 6613,
       "size": [
         64,
         64
@@ -248,13 +249,13 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/icon.ico",
-      "sha256": "a380050a18a30b91ae3365cb8509ef35b55136906867979cda4fcfdfe312a1af",
-      "bytes": 77378
+      "sha256": "5912b5d8f778f348577394d5be80b7f8e51d5b4917e63255e7953ac04341b0f9",
+      "bytes": 95340
     },
     {
       "path": "apps/desktop/src-tauri/icons/icon.png",
-      "sha256": "38ae8d9a348cf85a6e3cf3a7cc9a68a9f3762f28602cb7d4faf90d3976eac1c7",
-      "bytes": 142535,
+      "sha256": "7123efa65850d56f36e225d3cb0e14ca44e91b075fc628e673cdd9769d87f70a",
+      "bytes": 190722,
       "size": [
         512,
         512
@@ -263,8 +264,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/Square107x107Logo.png",
-      "sha256": "d5d0e8ec53a8dad246fd1649a80971a411fba041ecd6c9c2a6c064f5f98968c2",
-      "bytes": 11727,
+      "sha256": "7509bdca38a784e3cbdd5061b8ca91e178b0e10d97c3235aec98444ac77d6758",
+      "bytes": 13900,
       "size": [
         107,
         107
@@ -273,8 +274,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/Square142x142Logo.png",
-      "sha256": "f27bc93d0bd9edcd46a70a9ee5af48f4483e1e2078e0f58d9a7b409c3342fa40",
-      "bytes": 17698,
+      "sha256": "8abdfb78d77f24319fad5d1c5c48f42ac26129229e21794ed6ebce9d04dd7600",
+      "bytes": 21420,
       "size": [
         142,
         142
@@ -283,8 +284,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/Square150x150Logo.png",
-      "sha256": "f961ea31e756c6f52434f27350d1c38f0467a4199456f2150d8d8eb387c272fe",
-      "bytes": 19302,
+      "sha256": "ec32b92f9c3abb1d367901cc24391c3e00deaf33f17d2fc8672d56ee20ed0852",
+      "bytes": 23526,
       "size": [
         150,
         150
@@ -293,8 +294,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/Square284x284Logo.png",
-      "sha256": "5581e3787f2735887bc76ef587b12d360b023531ee2ffb74dad35b5abea32540",
-      "bytes": 54546,
+      "sha256": "f3513c34d1e4ee2b3d84df637b9efec64fcb0b8080b0002e4d693f4197e80842",
+      "bytes": 70236,
       "size": [
         284,
         284
@@ -303,8 +304,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/Square30x30Logo.png",
-      "sha256": "34b669d140ae46bd7b8e13fa966fee36b98e67cba3aea4f38da131fa933a0cde",
-      "bytes": 1926,
+      "sha256": "0294fd6a75e9bdbdbb71f2a19cd433b1bba497d403729dab435902f0d3968e15",
+      "bytes": 2180,
       "size": [
         30,
         30
@@ -313,8 +314,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/Square310x310Logo.png",
-      "sha256": "203ea21a5f32687adecfa9b79ab739e16cadbe33f9f2a80e31b2cd0c7696293a",
-      "bytes": 64312,
+      "sha256": "311c192d6ce79a641bd4acc1272ffdb8302ca407be01ac4d2a341c72ec0f4bdf",
+      "bytes": 84185,
       "size": [
         310,
         310
@@ -323,8 +324,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/Square44x44Logo.png",
-      "sha256": "193de8f1ed5d6b5a2cb3d7524e6f82c40a2301e67c321d62484830dfce8e6648",
-      "bytes": 3326,
+      "sha256": "643d963306a68cfa1b61509b3104112331eb11283c877dace5484464c2940fb6",
+      "bytes": 3741,
       "size": [
         44,
         44
@@ -333,8 +334,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/Square71x71Logo.png",
-      "sha256": "566662b728a6d9a6aa4dbc7e491c669de35181244ae9787fca0c570607bbe9ff",
-      "bytes": 6367,
+      "sha256": "fe755689e7f357bd821d9731cc184a3991b80b85b35c0a12724f0fd44f6f3e32",
+      "bytes": 7681,
       "size": [
         71,
         71
@@ -343,8 +344,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/Square89x89Logo.png",
-      "sha256": "f192f40f5f0a364e3b4ae419cdf817893c2a5c082cc476656613aea7ea1f9893",
-      "bytes": 8934,
+      "sha256": "1f85533bfb9eba37ccd79d86bbe6a81463adc72d821bb7baf376b38201f8fa73",
+      "bytes": 10675,
       "size": [
         89,
         89
@@ -353,8 +354,8 @@
     },
     {
       "path": "apps/desktop/src-tauri/icons/StoreLogo.png",
-      "sha256": "ce313a1fa6000191371fc0082c6cbc0559c55d5e99646859b0cf644da40ce0a8",
-      "bytes": 3828,
+      "sha256": "51c94f948287197a3a0c49b86ec82995aef131c32034875448f975b7d3c83a99",
+      "bytes": 4637,
       "size": [
         50,
         50

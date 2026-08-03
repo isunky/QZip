@@ -6,6 +6,7 @@ import {
   SubtractRegular
 } from "@fluentui/react-icons";
 import { Button } from "@qzip/ui";
+import { useI18n } from "../lib/i18n";
 
 interface HeaderProps {
   activePage?: string;
@@ -26,20 +27,21 @@ async function withCurrentWindow(
 }
 
 export function Header({ activePage, iconSrc, onHomeClick, onTasksClick, onSettingsClick }: HeaderProps) {
+  const { brandName, text } = useI18n();
   return (
     <header className="qzip-titlebar">
-      <button type="button" className="qzip-brand" aria-label="返回首页" onClick={onHomeClick}>
+      <button type="button" className="qzip-brand" aria-label={text("返回首页", "Back to home")} onClick={onHomeClick}>
         <span className="qzip-brand__icon" aria-hidden="true">
           <img src={iconSrc} alt="" />
         </span>
-        <span className="qzip-brand__name">轻压</span>
+        <span className="qzip-brand__name">{brandName}</span>
       </button>
       <div
         className="qzip-titlebar__drag-region"
         data-tauri-drag-region
         onDoubleClick={() => void withCurrentWindow((window) => window.toggleMaximize())}
       />
-      <nav className="qzip-titlebar__actions" aria-label="应用导航">
+      <nav className="qzip-titlebar__actions" aria-label={text("应用导航", "App navigation")}>
         <Button
           variant="tertiary"
           className="qzip-titlebar__nav-button"
@@ -47,7 +49,7 @@ export function Header({ activePage, iconSrc, onHomeClick, onTasksClick, onSetti
           icon={<AppsListRegular fontSize={22} />}
           onClick={onTasksClick}
         >
-          任务
+          {text("任务", "Tasks")}
         </Button>
         <Button
           variant="tertiary"
@@ -56,21 +58,21 @@ export function Header({ activePage, iconSrc, onHomeClick, onTasksClick, onSetti
           icon={<SettingsRegular fontSize={22} />}
           onClick={onSettingsClick}
         >
-          设置
+          {text("设置", "Settings")}
         </Button>
       </nav>
       <span className="qzip-titlebar__separator" aria-hidden="true" />
-      <div className="qzip-window-controls" aria-label="窗口控制">
+      <div className="qzip-window-controls" aria-label={text("窗口控制", "Window controls")}>
         <button
           type="button"
-          aria-label="最小化"
+          aria-label={text("最小化", "Minimize")}
           onClick={() => void withCurrentWindow((window) => window.minimize())}
         >
           <SubtractRegular fontSize={18} />
         </button>
         <button
           type="button"
-          aria-label="最大化或还原"
+          aria-label={text("最大化或还原", "Maximize or restore")}
           onClick={() => void withCurrentWindow((window) => window.toggleMaximize())}
         >
           <MaximizeRegular fontSize={16} />
@@ -78,7 +80,7 @@ export function Header({ activePage, iconSrc, onHomeClick, onTasksClick, onSetti
         <button
           type="button"
           className="qzip-window-controls__close"
-          aria-label="关闭"
+          aria-label={text("关闭", "Close")}
           onClick={() => void withCurrentWindow((window) => window.close())}
         >
           <DismissRegular fontSize={19} />

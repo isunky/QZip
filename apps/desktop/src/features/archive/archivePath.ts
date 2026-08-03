@@ -1,4 +1,5 @@
 import type { ArchiveFormat } from "../../contracts/archive";
+import { localize, type AppLocale } from "../../lib/i18n";
 
 export function splitOutputPath(path: string) {
   const index = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
@@ -24,14 +25,14 @@ function createExtension(format: ArchiveFormat) {
   }
 }
 
-export function suggestCreateOutputLocally(inputs: string[], format: ArchiveFormat) {
+export function suggestCreateOutputLocally(inputs: string[], format: ArchiveFormat, locale: AppLocale = "zh-CN") {
   const first = inputs[0]?.replace(/[\\/]+$/, "");
   if (!first) return null;
   const split = splitOutputPath(first);
-  const leaf = split.name || "新建压缩包";
+  const leaf = split.name || localize(locale, "新建压缩包", "New archive");
   const lastDot = leaf.lastIndexOf(".");
   const stem = inputs.length > 1
-    ? "压缩文件"
+    ? localize(locale, "压缩文件", "Archive")
     : lastDot > 0
       ? leaf.slice(0, lastDot)
       : leaf;

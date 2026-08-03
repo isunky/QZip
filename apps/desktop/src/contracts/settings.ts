@@ -4,9 +4,11 @@ export type ThemeMode = "light" | "dark" | "system";
 export type AccentTheme = "mint" | "ocean" | "lavender" | "amber" | "coral" | "cyan-slate";
 export type UiScale = "scale90" | "scale100" | "scale110" | "scale125";
 export type ListDensity = "comfortable" | "compact";
+export type LanguagePreference = "system" | "zh-CN" | "en-US";
 
 export interface AppSettings {
   schemaVersion: number;
+  language: LanguagePreference;
   themeMode: ThemeMode;
   accentTheme: AccentTheme;
   uiScale: UiScale;
@@ -42,6 +44,7 @@ export interface UpdateCheckResult { configured: boolean; status: "ready" | "unc
 
 export const defaultAppSettings: AppSettings = {
   schemaVersion: 1,
+  language: "zh-CN",
   themeMode: "light",
   accentTheme: "mint",
   uiScale: "scale100",
