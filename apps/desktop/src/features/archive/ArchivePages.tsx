@@ -114,6 +114,48 @@ function formatTaskTimestamp(value: number, locale: AppLocale) {
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(locale);
 }
 
+const taskFormatSuffixes = [
+  [".tar.gz", "TAR.GZ"],
+  [".tar.xz", "TAR.XZ"],
+  [".tgz", "TAR.GZ"],
+  [".txz", "TAR.XZ"],
+  [".7z", "7Z"],
+  [".zip", "ZIP"],
+  [".rar", "RAR"],
+  [".tar", "TAR"],
+  [".gz", "GZ"],
+  [".xz", "XZ"],
+  [".bz2", "BZ2"],
+  [".iso", "ISO"],
+  [".cab", "CAB"],
+  [".wim", "WIM"]
+] as const;
+
+function taskFormatLabel(task: TaskSnapshot) {
+  const candidates = task.operation === "create"
+    ? [task.output, task.displayName]
+    : [task.displayName, task.output];
+  for (const candidate of candidates) {
+    const normalized = candidate?.toLowerCase();
+    if (!normalized) continue;
+    const match = taskFormatSuffixes.find(([suffix]) => normalized.endsWith(suffix));
+    if (match) return match[1];
+  }
+  return "—";
+}
+
+function taskOperationLabel(operation: TaskSnapshot["operation"], locale: AppLocale) {
+  const labels: Record<TaskSnapshot["operation"], [string, string]> = {
+    create: ["创建压缩包", "Create archive"],
+    extract: ["解压", "Extract"],
+    list: ["读取内容", "List contents"],
+    test: ["完整性测试", "Test integrity"],
+    update: ["更新压缩包", "Update archive"]
+  };
+  const [chinese, english] = labels[operation];
+  return localize(locale, chinese, english);
+}
+
 function makeDemoTask(operation: "create" | "extract" | "test" | "update", name: string, output?: string): TaskSnapshot {
   return {
     taskId: crypto.randomUUID(),
@@ -924,7 +966,7 @@ function TaskCard({
 
   return (
     <Card className="qzip-task-card" data-status={task.status}>
-      <div className="qzip-task-card__icon"><ArchiveRegular fontSize={30} /><span>{task.operation === "extract" ? "ZIP" : "7Z"}</span></div>
+      <div className="qzip-task-card__icon"><ArchiveRegular fontSize={30} /><span>{taskFormatLabel(task)}</span></div>
       <div className="qzip-task-card__body">
         <div className="qzip-task-card__heading">
           <strong>{task.displayName}</strong>
@@ -940,7 +982,7 @@ function TaskCard({
         {detailsOpen ? (
           <div className="qzip-task-card__details">
             <span><strong>{text("任务 ID", "Task ID")}</strong>{task.taskId}</span>
-            <span><strong>{text("操作", "Operation")}</strong>{task.operation}</span>
+            <span><strong>{text("操作", "Operation")}</strong>{taskOperationLabel(task.operation, locale)}</span>
             {task.output ? <span><strong>{text("目标位置", "Destination")}</strong>{task.output}</span> : null}
             {task.error ? <span><strong>{text("错误代码", "Error code")}</strong>{task.error.code}</span> : null}
             {task.warnings.length ? <span><strong>{text("警告", "Warnings")}</strong>{task.warnings.join(text("；", "; "))}</span> : null}

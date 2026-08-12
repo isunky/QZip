@@ -153,8 +153,26 @@ describe("archive core flow controls", () => {
     render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "查看详情" }));
     expect(screen.getByText("task-detail")).toBeInTheDocument();
+    expect(screen.getByText("解压")).toBeInTheDocument();
     expect(screen.getByText("CORRUPT_ARCHIVE")).toBeInTheDocument();
     expect(screen.getByText("临时目录已清理")).toBeInTheDocument();
+  });
+
+  it("shows the actual archive format on create task cards", () => {
+    const task: TaskSnapshot = {
+      taskId: "task-create-zip",
+      operation: "create",
+      status: "completed",
+      displayName: "ui-smoke.zip",
+      output: "D:\\output\\ui-smoke.zip",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      warnings: [],
+      retryable: false
+    };
+    render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={vi.fn()} />);
+    expect(screen.getByText("ZIP")).toBeInTheDocument();
+    expect(screen.queryByText("7Z")).not.toBeInTheDocument();
   });
 
   it("starts safe batch extracts and reports archives that need individual handling", async () => {
