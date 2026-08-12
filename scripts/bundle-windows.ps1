@@ -8,6 +8,26 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$packageManifest = Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
+$packageManager = [string]$packageManifest.packageManager
+if ($packageManager -notmatch '^pnpm@\d+\.\d+\.\d+(?:-.+)?$') {
+  throw "package.json must declare a pinned pnpm packageManager, got '$packageManager'."
+}
+$corepack = Get-Command corepack -ErrorAction SilentlyContinue
+if (-not $corepack) {
+  throw "Corepack is required to run the pinned workspace package manager ($packageManager). Install a supported Node.js version with Corepack."
+}
+
+function Invoke-WorkspacePnpm {
+  param([Parameter(Mandatory)][string[]]$CommandArguments)
+
+  & $corepack.Source $packageManager @CommandArguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "$packageManager failed with exit code $LASTEXITCODE."
+  }
+}
+
 if ($PSVersionTable.PSEdition -eq 'Desktop') {
   $windowsPowerShellModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
   if (-not [string]::IsNullOrWhiteSpace($windowsPowerShellModulePath)) { $env:PSModulePath = $windowsPowerShellModulePath }
@@ -27,8 +47,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & (Join-Path $PSScriptRoot 'build-windows-shell-integration.ps1') -InstallDevCertificate:$InstallDevCertificate -CiDevelopmentSigning:$CiDevelopmentSigning -Release:$Release
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-pnpm --filter @qzip/desktop tauri build --no-bundle --config tauri.windows.bundle.json
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Host "Using workspace package manager $packageManager via Corepack..." -ForegroundColor DarkCyan
+Invoke-WorkspacePnpm -CommandArguments @('--filter', '@qzip/desktop', 'tauri', 'build', '--no-bundle', '--config', 'tauri.windows.bundle.json')
 
 if ($Release) {
   $signTool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } | Sort-Object FullName -Descending | Select-Object -First 1
@@ -42,8 +62,7 @@ if ($Release) {
   }
 }
 
-pnpm --filter @qzip/desktop tauri bundle --bundles ($Bundles -join ',') --config tauri.windows.bundle.json
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Invoke-WorkspacePnpm -CommandArguments @('--filter', '@qzip/desktop', 'tauri', 'bundle', '--bundles', ($Bundles -join ','), '--config', 'tauri.windows.bundle.json')
 
 if ($Release) {
   $bundleRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'target\release\bundle'
