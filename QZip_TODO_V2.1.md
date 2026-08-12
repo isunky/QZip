@@ -53,6 +53,14 @@
 - [x] 压缩包浏览接入服务端搜索和每页 500 项追加加载，任务卡增加技术详情、错误代码、警告及失败目标位置入口。
 - [x] `pnpm check`、Windows 核心回归和 RC2 release/NSIS 构建通过；当前安装包 SHA-256 为 `393A87FD46D02EF35D154DDE63B525D90B721FEB7D773DE704C948C59BB4E1F5`。
 
+### NSIS 文件关联安装体验（2026-08-12）
+
+- [x] NSIS 新增“文件关联”安装步骤，可逐项选择 7Z、ZIP、RAR、TAR、GZ、TGZ、XZ、TXZ、BZ2、ISO、CAB 与 WIM；全新安装默认勾选 7Z、ZIP、RAR。
+- [x] 选择结果写入当前用户注册表，覆盖安装会保留原选择；取消勾选或卸载时会恢复安装前由 QZip 接管的扩展名默认值并清理能力注册。
+- [x] 安装完成页默认勾选“打开 Windows 默认应用设置”。安装器只注册 `Capabilities`/`RegisteredApplications`，不修改 Windows 受保护的 `UserChoice`；需要用户确认的格式由系统设置完成。
+- [x] 应用设置页改为读取实际文件关联能力注册状态，并可直达 QZip 的 Windows 默认应用设置页。
+- [x] 自定义中英文 NSIS 模板已通过真实打包；已目视确认中文文件关联页的标题、说明、全选和 12 个格式标签正常显示。开发签名构建产物为 `target/release/bundle/nsis/QZip_1.0.0_x64-setup.exe`，SHA-256 为 `2FE4DF31C709A375BCBF6324B07E8AC4481DF1EAF0061865C72924BC85C707D8`。升级保留和卸载恢复仍需人工安装验收。
+
 ## M0：仓库和设计系统（完成）
 
 - [x] 建立 pnpm Monorepo、Rust Workspace、Tauri 2 桌面壳与五个领域 crate。
@@ -134,7 +142,7 @@
 - [~] M6-01 实现 `AppSettings` 持久化、默认值、迁移和“不得持久化密码”单元测试；需补充损坏 Store 文件端到端测试。
 - [x] M6-02 完成所有设置页：常规、压缩、解压、外观、隐私安全、更新、关于。
 - [x] M6-03 持久化主题、缩放、密度、减少动态与压缩/解压偏好。
-- [x] M6-04 实现单实例、文件关联声明、双击打开路由和系统通知；NSIS 已注册 `QZip.Archive`、`RegisteredApplications` 与 7Z/ZIP/RAR/TAR/GZ/XZ/BZ2 能力映射，本机安装态已验证。
+- [x] M6-04 实现单实例、双击打开路由和系统通知；NSIS 提供 12 种格式的逐项关联选择、全选、全新安装默认值与升级选择保留，并注册对应独立 ProgID、`Capabilities` 和 `RegisteredApplications`。Windows 受保护的默认应用选择仍由用户在系统设置中确认。
 - [x] M6-05 已实现 Windows 右键高频操作 DLL、受限 token 交接、`desktop5` 稀疏 MSIX 清单、标准 COM 导出和 NSIS 注册/卸载钩子；已在真实 Windows 11 Explorer 验收文件及文件夹的一级 QZip 菜单，并在文件菜单中确认六个子命令可见。MSI 仍不提供现代右键菜单，作为 RC1 已知问题披露。
 - [~] M6-06 已通过本机 NSIS 安装、Shell 包注册、文件关联能力注册、应用启动/关闭和真实 Explorer 右键菜单验收；干净 Windows 环境的升级、卸载、文件关联清理、长路径及 100%/150%/200% DPI 验收待完成。
 

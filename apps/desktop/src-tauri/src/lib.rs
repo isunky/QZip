@@ -823,9 +823,20 @@ fn get_integration_status() -> IntegrationStatus {
         .is_ok_and(|status| status.success());
     #[cfg(not(target_os = "windows"))]
     let registered = false;
+    #[cfg(target_os = "windows")]
+    let file_associations_declared = Command::new("reg.exe")
+        .args(["query", r"HKCU\Software\QZip\Capabilities\FileAssociations"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+        .is_ok_and(|status| status.success());
+    #[cfg(not(target_os = "windows"))]
+    let file_associations_declared = false;
     IntegrationStatus {
         platform: std::env::consts::OS.to_owned(),
-        file_associations_declared: cfg!(target_os = "windows"),
+        file_associations_declared,
         modern_context_menu_available: cfg!(target_os = "windows"),
         modern_context_menu_registered: registered,
         updater_configured: cfg!(feature = "official-updater"),
@@ -842,7 +853,7 @@ fn open_default_apps_settings() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         Command::new("explorer.exe")
-            .arg("ms-settings:defaultapps")
+            .arg("ms-settings:defaultapps?registeredAppUser=QZip")
             .spawn()
             .map(|_| ())
             .map_err(|_| "无法打开 Windows 默认应用设置".to_owned())

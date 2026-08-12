@@ -34,24 +34,12 @@
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },
       "nsis": {
+        "template": "./windows/installer.nsi",
         "installerHooks": "./windows/qzip-shell-hooks.nsh",
         "installerIcon": "icons/icon.ico",
-        "uninstallerIcon": "icons/icon.ico"
+        "uninstallerIcon": "icons/icon.ico",
+        "languages": ["English", "SimpChinese"]
       }
-    },
-    "fileAssociations": [
-      { "ext": ["7z"], "name": "QZip.Archive.7z", "description": "7-Zip Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["zip"], "name": "QZip.Archive.zip", "description": "ZIP Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["rar"], "name": "QZip.Archive.rar", "description": "RAR Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["tar"], "name": "QZip.Archive.tar", "description": "TAR Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["gz"], "name": "QZip.Archive.gz", "description": "GZip Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["tgz"], "name": "QZip.Archive.tgz", "description": "TAR.GZ Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["xz"], "name": "QZip.Archive.xz", "description": "XZ Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["txz"], "name": "QZip.Archive.txz", "description": "TAR.XZ Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["bz2"], "name": "QZip.Archive.bz2", "description": "BZip2 Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["iso"], "name": "QZip.Archive.iso", "description": "ISO Image", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["cab"], "name": "QZip.Archive.cab", "description": "Windows Cabinet Archive", "role": "Viewer", "rank": "Alternate" },
-      { "ext": ["wim"], "name": "QZip.Archive.wim", "description": "Windows Imaging Format", "role": "Viewer", "rank": "Alternate" }
-    ]
+    }
   }
 }
