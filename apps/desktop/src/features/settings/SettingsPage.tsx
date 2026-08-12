@@ -113,31 +113,12 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
 
         <Card className="qzip-settings-panel">
           <SettingsSection id="appearance" icon={<ColorRegular fontSize={23} />} title={text("外观", "Appearance")}>
-            <div className="qzip-appearance-layout">
-              <section className="qzip-appearance-group">
-                <header className="qzip-appearance-group__header">
-                  <div><strong>{text("界面风格", "Interface style")}</strong><span>{text("选择语言、明暗模式与界面主色", "Choose the language, theme and interface color")}</span></div>
-                  <span className="qzip-appearance-group__mark" aria-hidden="true"><i /><i /><i /></span>
-                </header>
-                <div className="qzip-appearance-group__body">
-                  <Row title={text("界面语言", "Language")} hint={text("应用菜单和提示文字", "Menus and interface text")}><SegmentedControl className="qzip-appearance-control" options={[{ value: "zh-CN", label: "简体中文" }, { value: "en-US", label: "English" }, { value: "system", label: text("跟随系统", "System") }]} value={settings.language} onValueChange={(value) => void patch({ language: value as AppSettings["language"] })} ariaLabel={text("界面语言", "Language")} /></Row>
-                  <Row title={text("主题模式", "Theme mode")} hint={text("调整窗口明暗外观", "Adjust the window appearance")}><SegmentedControl className="qzip-appearance-control" options={[{ value: "light", label: text("浅色", "Light") }, { value: "dark", label: text("暗夜", "Dark") }, { value: "system", label: text("跟随系统", "System") }]} value={settings.themeMode} onValueChange={(value) => void patch({ themeMode: value as AppSettings["themeMode"] })} ariaLabel={text("主题模式", "Theme mode")} /></Row>
-                  <Row title={text("强调色", "Accent color")} hint={text("用于按钮与选中状态", "Used for buttons and selections")}><SegmentedControl className="qzip-appearance-control qzip-appearance-accent" options={[{ value: "mint", label: text("薄荷", "Mint") }, { value: "ocean", label: text("海洋", "Ocean") }, { value: "lavender", label: text("薰衣草", "Lavender") }, { value: "amber", label: text("琥珀", "Amber") }, { value: "coral", label: text("珊瑚", "Coral") }, { value: "cyan-slate", label: text("青灰", "Cyan slate") }]} value={settings.accentTheme} onValueChange={(value) => void patch({ accentTheme: value as AppSettings["accentTheme"] })} ariaLabel={text("强调色", "Accent color")} /></Row>
-                </div>
-              </section>
-
-              <section className="qzip-appearance-group">
-                <header className="qzip-appearance-group__header">
-                  <div><strong>{text("显示体验", "Display experience")}</strong><span>{text("根据屏幕和使用习惯调整内容呈现", "Tune content for your screen and workflow")}</span></div>
-                  <span className="qzip-appearance-scale-preview" aria-hidden="true"><i>90</i><i>100</i><i>125</i></span>
-                </header>
-                <div className="qzip-appearance-group__body">
-                  <Row title={text("界面缩放", "Interface scale")} hint={text("放大或缩小界面内容", "Resize interface content")}><SegmentedControl className="qzip-appearance-control" options={[{ value: "scale90", label: "90%" }, { value: "scale100", label: "100%" }, { value: "scale110", label: "110%" }, { value: "scale125", label: "125%" }]} value={settings.uiScale} onValueChange={(value) => void patch({ uiScale: value as AppSettings["uiScale"] })} ariaLabel={text("界面缩放", "Interface scale")} /></Row>
-                  <Row title={text("列表密度", "List density")} hint={text("控制任务和文件列表间距", "Control spacing in task and file lists")}><SegmentedControl className="qzip-appearance-control" options={[{ value: "comfortable", label: text("舒适", "Comfortable") }, { value: "compact", label: text("紧凑", "Compact") }]} value={settings.listDensity} onValueChange={(value) => void patch({ listDensity: value as AppSettings["listDensity"] })} ariaLabel={text("列表密度", "List density")} /></Row>
-                  <Toggle checked={settings.reduceMotion} onChange={(reduceMotion) => void patch({ reduceMotion })} label={text("减少动效", "Reduce motion")} hint={text("降低界面动画和过渡效果。", "Reduce interface animations and transitions.")} />
-                </div>
-              </section>
-            </div>
+            <Row title={text("界面语言", "Language")}><SegmentedControl options={[{ value: "zh-CN", label: "简体中文" }, { value: "en-US", label: "English" }, { value: "system", label: text("跟随系统", "System") }]} value={settings.language} onValueChange={(value) => void patch({ language: value as AppSettings["language"] })} ariaLabel={text("界面语言", "Language")} /></Row>
+            <Row title={text("主题模式", "Theme mode")}><SegmentedControl options={[{ value: "light", label: text("浅色", "Light") }, { value: "dark", label: text("暗夜", "Dark") }, { value: "system", label: text("跟随系统", "System") }]} value={settings.themeMode} onValueChange={(value) => void patch({ themeMode: value as AppSettings["themeMode"] })} ariaLabel={text("主题模式", "Theme mode")} /></Row>
+            <Row title={text("强调色", "Accent color")}><SegmentedControl options={[{ value: "mint", label: text("薄荷", "Mint") }, { value: "ocean", label: text("海洋", "Ocean") }, { value: "lavender", label: text("薰衣草", "Lavender") }, { value: "amber", label: text("琥珀", "Amber") }, { value: "coral", label: text("珊瑚", "Coral") }, { value: "cyan-slate", label: text("青灰", "Cyan slate") }]} value={settings.accentTheme} onValueChange={(value) => void patch({ accentTheme: value as AppSettings["accentTheme"] })} ariaLabel={text("强调色", "Accent color")} /></Row>
+            <Row title={text("界面缩放", "Interface scale")}><SegmentedControl options={[{ value: "scale90", label: "90%" }, { value: "scale100", label: "100%" }, { value: "scale110", label: "110%" }, { value: "scale125", label: "125%" }]} value={settings.uiScale} onValueChange={(value) => void patch({ uiScale: value as AppSettings["uiScale"] })} ariaLabel={text("界面缩放", "Interface scale")} /></Row>
+            <Row title={text("列表密度", "List density")}><SegmentedControl options={[{ value: "comfortable", label: text("舒适", "Comfortable") }, { value: "compact", label: text("紧凑", "Compact") }]} value={settings.listDensity} onValueChange={(value) => void patch({ listDensity: value as AppSettings["listDensity"] })} ariaLabel={text("列表密度", "List density")} /></Row>
+            <Toggle checked={settings.reduceMotion} onChange={(reduceMotion) => void patch({ reduceMotion })} label={text("减少动效", "Reduce motion")} hint={text("降低界面动画和过渡效果。", "Reduce interface animations and transitions.")} />
           </SettingsSection>
 
           <SettingsSection id="archive" icon={<ArchiveRegular fontSize={23} />} title={text("压缩与解压", "Compression & extraction")}>
@@ -191,6 +172,6 @@ function SettingsSection({ id, icon, title, children }: {
   );
 }
 
-function Row({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
-  return <div className="qzip-setting-row"><span className="qzip-setting-row__label"><strong>{title}</strong>{hint ? <small>{hint}</small> : null}</span>{children}</div>;
+function Row({ title, children }: { title: string; children: React.ReactNode }) {
+  return <div className="qzip-setting-row"><strong>{title}</strong>{children}</div>;
 }
