@@ -300,8 +300,10 @@ mod tests {
 
     #[test]
     fn language_preference_serializes_for_the_frontend() {
-        let mut settings = AppSettings::default();
-        settings.language = LanguagePreference::System;
+        let settings = AppSettings {
+            language: LanguagePreference::System,
+            ..Default::default()
+        };
         let document = serde_json::to_value(settings).unwrap();
         assert_eq!(document["language"], "system");
     }
