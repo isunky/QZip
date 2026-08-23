@@ -982,10 +982,13 @@
   align-items: center;
   display: flex;
   gap: 10px;
+  min-width: 0;
 }
 
 .qzip-task-card__heading strong {
+  flex: 1 1 auto;
   font-size: 16px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1000,7 +1003,12 @@
 
 .qzip-status {
   color: var(--qzip-color-accent-strong);
+  flex: 0 1 auto;
   font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .qzip-status--failed,
@@ -1050,7 +1058,10 @@
 .qzip-task-card__actions {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .qzip-task-card__actions .qzip-button {
@@ -1066,6 +1077,17 @@
 
 @keyframes qzip-spin {
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1000px) {
+  .qzip-task-card {
+    align-items: start;
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .qzip-task-card__actions {
+    grid-column: 2;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1112,14 +1134,6 @@
     padding-inline: 22px;
   }
 
-  .qzip-task-card {
-    grid-template-columns: 48px minmax(0, 1fr);
-  }
-
-  .qzip-task-card__actions {
-    grid-column: 2;
-    justify-content: flex-end;
-  }
 }
 
 @media (max-height: 760px) {

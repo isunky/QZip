@@ -119,14 +119,14 @@ Var QZipStateWim
   WriteRegStr HKCU "Software\Classes\QZip.Archive.${SLUG}" "" "${DISPLAY_NAME}"
   WriteRegStr HKCU "Software\Classes\QZip.Archive.${SLUG}\DefaultIcon" "" "$INSTDIR\file-icons\${SLUG}.ico"
   WriteRegStr HKCU "Software\Classes\QZip.Archive.${SLUG}\shell" "" "open"
-  WriteRegStr HKCU "Software\Classes\QZip.Archive.${SLUG}\shell\open\command" "" '$"$INSTDIR\qzip-desktop.exe$" $"%1$"'
+  WriteRegStr HKCU "Software\Classes\QZip.Archive.${SLUG}\shell\open\command" "" '"$INSTDIR\qzip-desktop.exe" "%1"'
 !macroend
 
 !macro QZipRegisterLegacyClass FILECLASS SLUG DISPLAY_NAME
   WriteRegStr HKCU "Software\Classes\${FILECLASS}" "" "${DISPLAY_NAME}"
   WriteRegStr HKCU "Software\Classes\${FILECLASS}\DefaultIcon" "" "$INSTDIR\file-icons\${SLUG}.ico"
   WriteRegStr HKCU "Software\Classes\${FILECLASS}\shell" "" "open"
-  WriteRegStr HKCU "Software\Classes\${FILECLASS}\shell\open\command" "" '$"$INSTDIR\qzip-desktop.exe$" $"%1$"'
+  WriteRegStr HKCU "Software\Classes\${FILECLASS}\shell\open\command" "" '"$INSTDIR\qzip-desktop.exe" "%1"'
 !macroend
 
 !macro QZipBackupCurrentAssociation SLUG EXTENSION PROGID
@@ -438,7 +438,7 @@ FunctionEnd
   ${EndIf}
   WriteRegStr HKCU "Software\Classes\QZip.Archive" "" "QZip Archive"
   WriteRegStr HKCU "Software\Classes\QZip.Archive\DefaultIcon" "" "$INSTDIR\file-icons\archive.ico"
-  WriteRegStr HKCU "Software\Classes\QZip.Archive\shell\open\command" "" '$"$INSTDIR\qzip-desktop.exe$" $"%1$"'
+  WriteRegStr HKCU "Software\Classes\QZip.Archive\shell\open\command" "" '"$INSTDIR\qzip-desktop.exe" "%1"'
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
   DetailPrint "QZip Explorer commands will register when QZip first starts"
 !macroend
