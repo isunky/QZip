@@ -8,7 +8,7 @@ export interface BackendCapabilities { backendId: string; version: string; writa
 export interface ArchiveEntry { path: string; displayName: string; size: number; compressedSize?: number; isDirectory: boolean; modifiedAt?: string; crc?: string; attributes?: string; encrypted: boolean; isSymlink: boolean; isHardlink: boolean; }
 export interface ArchiveRisk { code: string; message: string; overridable: boolean; }
 export interface ArchiveSession { sessionId: string; format: ArchiveFormat; compressedSize: number; estimatedUncompressedSize: number; entryCount: number; encrypted: boolean; risks: ArchiveRisk[]; }
-export interface EntryPage { entries: ArchiveEntry[]; total: number; nextOffset?: number; }
+export interface EntryPage { entries: ArchiveEntry[]; total: number; nextOffset?: number | null; }
 export interface TaskProgress { phase: string; percent?: number; currentEntry?: string; elapsedSeconds: number; }
 export interface ArchiveError { code: ArchiveErrorCode; message: string; recoverable: boolean; }
 export interface TaskSnapshot { taskId: string; operation: ArchiveOperation; status: TaskStatus; displayName: string; output?: string; createdAt: number; updatedAt: number; progress?: TaskProgress; error?: ArchiveError; warnings: string[]; retryable: boolean; }

@@ -126,7 +126,7 @@ describe("archive core flow controls", () => {
     const session: ArchiveSession = { sessionId: "session", format: "sevenZip", compressedSize: 10, estimatedUncompressedSize: 20, entryCount: 2, encrypted: false, risks: [] };
     const entries = vi.spyOn(archiveClient, "entries")
       .mockResolvedValueOnce({ entries: [first], total: 2, nextOffset: 1 })
-      .mockResolvedValueOnce({ entries: [first, second], total: 2 });
+      .mockResolvedValueOnce({ entries: [first, second], total: 2, nextOffset: null });
     vi.spyOn(archiveClient, "recordPerformanceMarker").mockResolvedValue(undefined);
     render(<BrowserPage archive="D:\\large.7z" session={session} onBack={vi.fn()} onClose={vi.fn()} onExtract={vi.fn()} onCreated={vi.fn()} />);
 
@@ -135,6 +135,7 @@ describe("archive core flow controls", () => {
     await screen.findByText("second.txt");
     expect(screen.getAllByText("first.txt")).toHaveLength(1);
     expect(entries).toHaveBeenLastCalledWith("session", undefined, undefined, 1);
+    await waitFor(() => expect(screen.queryByRole("button", { name: /加载更多/ })).not.toBeInTheDocument());
   });
 
   it("shows technical task details on demand", () => {

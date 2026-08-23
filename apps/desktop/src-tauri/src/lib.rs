@@ -143,7 +143,123 @@ struct PerformanceMarker {
 struct EntryPage {
     entries: Vec<ArchiveEntry>,
     total: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
     next_offset: Option<usize>,
+}
+
+fn entries_in_directory(
+    archive_entries: &[ArchiveEntry],
+    directory: &str,
+    search: &str,
+) -> Vec<ArchiveEntry> {
+    let directory = directory.replace('\\', "/");
+    let directory = directory.trim_matches('/');
+    let prefix = if directory.is_empty() {
+        String::new()
+    } else {
+        format!("{directory}/")
+    };
+    let needle = search.to_ascii_lowercase();
+    let mut entries = HashMap::<String, ArchiveEntry>::new();
+
+    for entry in archive_entries {
+        let Some(relative_path) = entry.path.strip_prefix(&prefix) else {
+            continue;
+        };
+        if relative_path.is_empty() {
+            continue;
+        }
+
+        if let Some((folder_name, _)) = relative_path.split_once('/') {
+            if folder_name.is_empty() {
+                continue;
+            }
+            let path = format!("{prefix}{folder_name}");
+            entries.entry(path.clone()).or_insert_with(|| ArchiveEntry {
+                path,
+                display_name: folder_name.to_owned(),
+                size: 0,
+                compressed_size: None,
+                is_directory: true,
+                modified_at: None,
+                crc: None,
+                attributes: Some("D".to_owned()),
+                encrypted: entry.encrypted,
+                is_symlink: false,
+                is_hardlink: false,
+            });
+        } else {
+            entries.insert(entry.path.clone(), entry.clone());
+        }
+    }
+
+    let mut entries = entries
+        .into_values()
+        .filter(|entry| {
+            needle.is_empty() || entry.display_name.to_ascii_lowercase().contains(&needle)
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| {
+        left.is_directory
+            .cmp(&right.is_directory)
+            .reverse()
+            .then_with(|| left.display_name.cmp(&right.display_name))
+    });
+    entries
+}
+
+#[cfg(test)]
+mod archive_entry_tests {
+    use super::*;
+
+    fn file(path: &str) -> ArchiveEntry {
+        ArchiveEntry {
+            path: path.to_owned(),
+            display_name: path.rsplit('/').next().unwrap_or(path).to_owned(),
+            size: 12,
+            compressed_size: Some(9),
+            is_directory: false,
+            modified_at: None,
+            crc: None,
+            attributes: Some("A".to_owned()),
+            encrypted: false,
+            is_symlink: false,
+            is_hardlink: false,
+        }
+    }
+
+    #[test]
+    fn creates_navigable_folders_for_archives_without_directory_entries() {
+        let archive_entries = vec![
+            file("附件/封面.docx"),
+            file("附件/投标人承诺函.docx"),
+            file("招标文件.pdf"),
+        ];
+
+        let root = entries_in_directory(&archive_entries, "", "");
+        assert_eq!(root.len(), 2);
+        assert_eq!(root[0].path, "附件");
+        assert!(root[0].is_directory);
+        assert_eq!(root[1].path, "招标文件.pdf");
+
+        let attachment = entries_in_directory(&archive_entries, "附件", "");
+        assert_eq!(attachment.len(), 2);
+        assert!(attachment.iter().all(|entry| !entry.is_directory));
+        assert!(
+            attachment
+                .iter()
+                .any(|entry| entry.display_name == "封面.docx")
+        );
+    }
+
+    #[test]
+    fn directory_matching_does_not_include_similar_prefixes() {
+        let archive_entries = vec![file("附件/inside.txt"), file("附件二/outside.txt")];
+
+        let entries = entries_in_directory(&archive_entries, "附件", "");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "附件/inside.txt");
+    }
 }
 
 #[derive(Serialize)]
@@ -656,26 +772,11 @@ fn list_archive_entries(
             recoverable: true,
         });
     }
-    let prefix = directory.unwrap_or_default();
-    let needle = search.unwrap_or_default().to_ascii_lowercase();
-    let mut entries: Vec<_> = session
-        .entries
-        .iter()
-        .filter(|entry| {
-            entry
-                .path
-                .strip_prefix(&prefix)
-                .is_some_and(|rest| !rest.is_empty() && !rest.trim_matches('/').contains('/'))
-                && (needle.is_empty() || entry.display_name.to_ascii_lowercase().contains(&needle))
-        })
-        .cloned()
-        .collect();
-    entries.sort_by(|left, right| {
-        left.is_directory
-            .cmp(&right.is_directory)
-            .reverse()
-            .then_with(|| left.display_name.cmp(&right.display_name))
-    });
+    let entries = entries_in_directory(
+        &session.entries,
+        directory.as_deref().unwrap_or_default(),
+        search.as_deref().unwrap_or_default(),
+    );
     let total = entries.len();
     let page_size = limit.unwrap_or(500).min(500);
     let end = (offset + page_size).min(total);

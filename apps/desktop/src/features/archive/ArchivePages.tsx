@@ -713,7 +713,7 @@ export function BrowserPage({
           if (cancelled || generation !== listGenerationRef.current) return;
           setEntries(page.entries);
           setTotal(page.total);
-          setNextOffset(page.nextOffset);
+          setNextOffset(page.nextOffset ?? undefined);
         })
         .catch((reason) => {
           if (!cancelled && generation === listGenerationRef.current) setLoadError(errorMessage(reason));
@@ -759,7 +759,7 @@ export function BrowserPage({
     setSelected(new Set());
   }
   async function loadMore() {
-    if (!archiveClient.isTauri || nextOffset === undefined || loadingMore) return;
+    if (!archiveClient.isTauri || nextOffset == null || loadingMore) return;
     const generation = listGenerationRef.current;
     setLoadingMore(true);
     setLoadError(null);
@@ -771,7 +771,7 @@ export function BrowserPage({
         return [...current, ...page.entries.filter((entry) => !known.has(entry.path))];
       });
       setTotal(page.total);
-      setNextOffset(page.nextOffset);
+      setNextOffset(page.nextOffset ?? undefined);
     } catch (reason) {
       if (generation === listGenerationRef.current) setLoadError(errorMessage(reason));
     } finally {
@@ -854,7 +854,7 @@ export function BrowserPage({
             </button>
           ))}
           {loadError ? <div className="qzip-browser-load-error">{text("读取列表失败：", "Could not read the list: ")}{loadError}</div> : null}
-          {nextOffset !== undefined && !loading ? <button type="button" className="qzip-load-more" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? text("正在加载…", "Loading…") : text(`加载更多（已显示 ${entries.length}/${total}）`, `Load more (${entries.length}/${total} shown)`)}</button> : null}
+          {nextOffset != null && !loading ? <button type="button" className="qzip-load-more" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? text("正在加载…", "Loading…") : text(`加载更多（已显示 ${entries.length}/${total}）`, `Load more (${entries.length}/${total} shown)`)}</button> : null}
           {!shown.length && !loading ? <Empty icon={<SearchRegular fontSize={34} />} text={directory ? text("此文件夹为空", "This folder is empty") : text("没有匹配的文件", "No matching files")} /> : null}
         </div>
         <footer className="qzip-browser-footer">

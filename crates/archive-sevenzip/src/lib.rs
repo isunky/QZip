@@ -713,6 +713,7 @@ impl SevenZipArgumentMapper {
         let mut args = vec![
             "l".into(),
             "-slt".into(),
+            "-sccUTF-8".into(),
             request.archive.to_string_lossy().into_owned(),
         ];
         if let Some(password) = &request.password {
@@ -759,6 +760,7 @@ impl SevenZipListParser {
         }
         fn flush(entries: &mut Vec<ArchiveEntry>, pending: &mut Pending) {
             if let (Some(path), Some(size)) = (pending.path.take(), pending.size.take()) {
+                let path = path.replace('\\', "/");
                 let display_name = path.rsplit('/').next().unwrap_or(&path).to_owned();
                 entries.push(ArchiveEntry {
                     display_name,
@@ -912,6 +914,27 @@ mod tests {
                 is_symlink: false,
                 is_hardlink: false,
             }]
+        );
+    }
+    #[test]
+    fn normalizes_windows_separators_in_technical_listing() {
+        let text = "Path = 附件\\封面.docx\nSize = 12\nAttributes = A\n\n";
+        let entries = SevenZipListParser::parse(text);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "附件/封面.docx");
+        assert_eq!(entries[0].display_name, "封面.docx");
+    }
+    #[test]
+    fn list_requests_utf8_console_output() {
+        let request = ListArchiveRequest {
+            archive: PathBuf::from("中文.zip"),
+            password: None,
+        };
+
+        assert_eq!(
+            SevenZipArgumentMapper::list(&request),
+            vec!["l", "-slt", "-sccUTF-8", "中文.zip"]
         );
     }
     #[test]
