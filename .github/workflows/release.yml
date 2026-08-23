@@ -39,6 +39,7 @@ jobs:
       release_label: ${{ steps.metadata.outputs.release_label }}
       tag: ${{ steps.metadata.outputs.tag }}
       prerelease: ${{ steps.metadata.outputs.prerelease }}
+      trusted_signing: ${{ steps.signing.outputs.enabled }}
     env:
       WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
       WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
@@ -81,20 +82,35 @@ jobs:
         run: pnpm check
       - name: Run core compression regression
         run: pnpm test:core:windows
-      - name: Prepare trusted signing credentials
-        if: inputs.mode == 'publish'
+      - id: signing
+        name: Prepare trusted signing credentials when available
         shell: pwsh
+        env:
+          RELEASE_MODE: ${{ inputs.mode }}
         run: |
+          if ($env:RELEASE_MODE -ne 'publish') {
+            "enabled=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+            exit 0
+          }
           $required = @('WINDOWS_PFX_BASE64', 'WINDOWS_PFX_PASSWORD', 'QZIP_WINDOWS_PUBLISHER')
           $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
-          if ($missing) { throw "Public publishing is disabled until these values are configured: $($missing -join ', ')." }
+          if ($missing) {
+            $message = "Trusted Windows signing is unavailable because these values are not configured: $($missing -join ', '). Building an internal development-signed artifact and skipping GitHub Release publishing."
+            Write-Warning $message
+            "### Trusted signing skipped`n`n$message" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+            "enabled=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+            exit 0
+          }
           $pfx = Join-Path $env:RUNNER_TEMP 'qzip-signing.pfx'
           [System.IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
           "QZIP_WINDOWS_PFX_PATH=$pfx" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+          "enabled=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
       - name: Build NSIS installer
         shell: pwsh
+        env:
+          TRUSTED_SIGNING: ${{ steps.signing.outputs.enabled }}
         run: |
-          if ('${{ inputs.mode }}' -eq 'publish') {
+          if ($env:TRUSTED_SIGNING -eq 'true') {
             powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -Release
           } else {
             powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -CiDevelopmentSigning
@@ -103,10 +119,10 @@ jobs:
         shell: pwsh
         env:
           RELEASE_LABEL: ${{ steps.metadata.outputs.release_label }}
-          RELEASE_MODE: ${{ inputs.mode }}
+          TRUSTED_SIGNING: ${{ steps.signing.outputs.enabled }}
         run: |
           powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version $env:RELEASE_LABEL -SkipBundle
-          if ($env:RELEASE_MODE -eq 'publish') {
+          if ($env:TRUSTED_SIGNING -eq 'true') {
             powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
           } else {
             powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL
@@ -122,7 +138,7 @@ jobs:
 
   publish:
     name: publish-github-release
-    if: inputs.mode == 'publish'
+    if: inputs.mode == 'publish' && needs.build-nsis.outputs.trusted_signing == 'true'
     needs: build-nsis
     runs-on: windows-2022
     steps:

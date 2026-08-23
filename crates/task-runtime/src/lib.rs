@@ -991,7 +991,10 @@ mod tests {
         async fn enter(&self) {
             let active = self.state.active.fetch_add(1, Ordering::SeqCst) + 1;
             self.state.peak.fetch_max(active, Ordering::SeqCst);
-            self.state.started.notify_waiters();
+            // Keep a permit when the backend starts before the test begins
+            // awaiting the signal. `notify_waiters` would lose that event and
+            // make cancellation tests intermittently time out on fast workers.
+            self.state.started.notify_one();
         }
 
         fn leave(&self) {
