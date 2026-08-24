@@ -1,6 +1,6 @@
 {
   "name": "qzip-desktop",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.9.0",
@@ -29,8 +29,8 @@
     "tauri:build:debug": "pnpm --filter @qzip/desktop tauri build --debug --no-bundle",
     "tauri:bundle:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bundle-windows.ps1",
     "tauri:bundle:nsis": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-nsis.ps1",
-    "release:prepare:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version v1.1.0",
-    "release:verify": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version v1.1.0"
+    "release:prepare:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version v1.1.1",
+    "release:verify": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version v1.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
