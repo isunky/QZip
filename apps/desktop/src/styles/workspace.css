@@ -944,12 +944,13 @@
 }
 
 .qzip-task-card {
+  align-content: center;
   align-items: start;
   display: grid;
   gap: 16px;
   grid-template-columns: 60px minmax(0, 1fr) auto;
-  min-height: 156px;
-  padding: 18px 22px;
+  min-height: 132px;
+  padding: 16px 22px;
   transition: border-color var(--qzip-motion-base) var(--qzip-motion-ease), box-shadow var(--qzip-motion-base) var(--qzip-motion-ease);
 }
 

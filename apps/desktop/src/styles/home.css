@@ -78,12 +78,27 @@ html[data-mode="dark"] .qzip-app-shell {
 }
 
 .qzip-titlebar__nav-button {
+  align-items: center;
   border-radius: 8px;
   color: var(--qzip-color-text-primary);
+  display: inline-flex;
   font-size: 16px;
   font-weight: 500;
+  justify-content: center;
   min-height: 40px;
   padding: 0 12px;
+}
+
+.qzip-titlebar__nav-button > svg {
+  display: block;
+  flex: 0 0 22px;
+}
+
+.qzip-titlebar__nav-button .qzip-button__label {
+  align-items: center;
+  display: inline-flex;
+  height: 22px;
+  line-height: 1;
 }
 
 .qzip-titlebar__nav-button[data-active="true"] {
@@ -92,6 +107,7 @@ html[data-mode="dark"] .qzip-app-shell {
 }
 
 .qzip-titlebar__task-count {
+  align-self: center;
   align-items: center;
   background: var(--qzip-color-accent);
   border-radius: 999px;
