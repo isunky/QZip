@@ -1,25 +1,20 @@
-name: Build and release NSIS
+name: Build and release QZip
 
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: Release tag or build label, for example rc2, preview-20260731, or v1.0.0-rc.2
+      version_increment:
+        description: Version increment
         required: true
-        type: string
-      prerelease:
-        description: Mark the GitHub Release as a prerelease when mode is publish
-        required: true
-        default: true
-        type: boolean
-      mode:
-        description: build-only uploads an artifact; publish creates a GitHub Release, using unsigned feature degradation when trusted signing is unavailable
-        required: true
-        default: build-only
+        default: patch
         type: choice
         options:
-          - build-only
-          - publish
+          - patch
+          - minor
+          - major
+  repository_dispatch:
+    types:
+      - qzip-release-build
 
 permissions:
   contents: write
@@ -27,41 +22,123 @@ permissions:
   id-token: write
 
 concurrency:
-  group: release-${{ inputs.tag }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.client_payload.branch }}
   cancel-in-progress: false
 
 jobs:
+  prepare-release:
+    name: prepare-${{ inputs.version_increment }}-release
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - name: Require the default branch
+        shell: pwsh
+        env:
+          SELECTED_BRANCH: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if ($env:REF_TYPE -ne 'branch' -or $env:SELECTED_BRANCH -ne $env:DEFAULT_BRANCH) {
+            throw "Stable releases must be started from the default branch '$env:DEFAULT_BRANCH'."
+          }
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+      - name: Fetch stable release tags
+        run: git fetch --force --tags origin
+      - id: version
+        name: Calculate and synchronize version
+        shell: pwsh
+        env:
+          VERSION_INCREMENT: ${{ inputs.version_increment }}
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bump-version.ps1 -Increment $env:VERSION_INCREMENT
+      - id: commit
+        name: Create the release commit
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          $allowed = @(
+            'Cargo.toml',
+            'Cargo.lock',
+            'package.json',
+            'apps/desktop/package.json',
+            'apps/desktop/src-tauri/tauri.conf.json',
+            'packages/ui/package.json'
+          )
+          $changed = @(& git status --porcelain=v1 | ForEach-Object { $_.Substring(3) })
+          $unexpected = @($changed | Where-Object { $_ -notin $allowed })
+          if ($unexpected.Count -ne 0) {
+            throw "Version preparation changed unexpected files: $($unexpected -join ', ')"
+          }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          & git add -- $allowed
+          & git diff --cached --quiet
+          $diffExitCode = $LASTEXITCODE
+          if ($diffExitCode -gt 1) { throw 'Unable to inspect the staged version changes.' }
+          if ($diffExitCode -eq 1) {
+            & git commit -m "chore(release): $env:RELEASE_TAG"
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to create the release commit.' }
+          }
+          if (@(& git status --porcelain=v1).Count -ne 0) { throw 'Release commit did not leave a clean working tree.' }
+          $releaseSha = (& git rev-parse HEAD).Trim()
+          "release_sha=$releaseSha" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding UTF8
+      - name: Push the release commit
+        shell: pwsh
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          & git push origin "HEAD:refs/heads/$env:BRANCH"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to push the release commit. The branch may have advanced or be protected.' }
+      - name: Start the verified build and publish run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_SHA: ${{ steps.commit.outputs.release_sha }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          $body = [ordered]@{
+            event_type = 'qzip-release-build'
+            client_payload = [ordered]@{
+              version = $env:RELEASE_VERSION
+              tag = $env:RELEASE_TAG
+              release_sha = $env:RELEASE_SHA
+              branch = $env:BRANCH
+            }
+          } | ConvertTo-Json -Depth 4 -Compress
+          $body | gh api --method POST "repos/$env:GITHUB_REPOSITORY/dispatches" --input -
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to start the release build.' }
+          "### Release prepared`n`n$env:RELEASE_TAG was committed at $env:RELEASE_SHA. The build and publish run has been queued." | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8
+
   build-nsis:
-    name: build-nsis-${{ inputs.mode }}
+    name: build-${{ github.event.client_payload.tag }}
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'qzip-release-build'
     runs-on: windows-2022
     timeout-minutes: 45
     outputs:
-      release_label: ${{ steps.metadata.outputs.release_label }}
-      tag: ${{ steps.metadata.outputs.tag }}
-      prerelease: ${{ steps.metadata.outputs.prerelease }}
       signing_mode: ${{ steps.build.outputs.signing_mode }}
     env:
       WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
       WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
       QZIP_WINDOWS_PUBLISHER: ${{ vars.QZIP_WINDOWS_PUBLISHER }}
+      RELEASE_VERSION: ${{ github.event.client_payload.version }}
+      RELEASE_TAG: ${{ github.event.client_payload.tag }}
+      RELEASE_SHA: ${{ github.event.client_payload.release_sha }}
+      RELEASE_BRANCH: ${{ github.event.client_payload.branch }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - id: metadata
-        name: Prepare release metadata
-        shell: pwsh
-        env:
-          RELEASE_LABEL_INPUT: ${{ inputs.tag }}
-          PRERELEASE_INPUT: ${{ inputs.prerelease }}
-        run: |
-          $tag = $env:RELEASE_LABEL_INPUT.Trim()
-          if ([string]::IsNullOrWhiteSpace($tag) -or $tag -match '[\r\n]' -or $tag.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {
-            throw 'Release tag or build label must be non-empty and safe for a Windows filename.'
-          }
-          "release_label=$tag" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
-          "tag=$tag" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
-          "prerelease=$env:PRERELEASE_INPUT" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          ref: ${{ github.event.client_payload.release_sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 11.9.0
@@ -74,6 +151,25 @@ jobs:
           toolchain: 1.96.0
           components: clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
+      - name: Validate release source and version
+        shell: pwsh
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$' -or $env:RELEASE_TAG -ne "v$env:RELEASE_VERSION") {
+            throw 'Release dispatch contains invalid stable SemVer metadata.'
+          }
+          if ($env:RELEASE_BRANCH -ne $env:DEFAULT_BRANCH) { throw 'Release dispatch must target the default branch.' }
+          $head = (& git rev-parse HEAD).Trim()
+          if ($head -ne $env:RELEASE_SHA -or $env:GITHUB_SHA -ne $env:RELEASE_SHA) {
+            throw 'Release checkout, dispatch source, and provenance source do not reference the same commit.'
+          }
+          & git fetch origin "refs/heads/$env:RELEASE_BRANCH`:refs/remotes/origin/$env:RELEASE_BRANCH" --no-tags
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to fetch the release branch.' }
+          $remoteHead = (& git rev-parse "refs/remotes/origin/$env:RELEASE_BRANCH").Trim()
+          if ($remoteHead -ne $env:RELEASE_SHA) { throw 'The release commit is no longer the head of the default branch.' }
+          if (@(& git tag --list $env:RELEASE_TAG).Count -ne 0) { throw "Release tag already exists: $env:RELEASE_TAG" }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/bump-version.ps1 -ExpectedVersion $env:RELEASE_VERSION -CheckOnly
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Fetch and verify official 7-Zip sidecar
@@ -86,19 +182,14 @@ jobs:
         name: Prepare trusted signing credentials when available
         continue-on-error: true
         shell: pwsh
-        env:
-          RELEASE_MODE: ${{ inputs.mode }}
         run: |
-          "enabled=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
-          if ($env:RELEASE_MODE -ne 'publish') {
-            exit 0
-          }
+          "enabled=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding UTF8
           $required = @('WINDOWS_PFX_BASE64', 'WINDOWS_PFX_PASSWORD', 'QZIP_WINDOWS_PUBLISHER')
           $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
           if ($missing) {
-            $message = "Trusted Windows signing is unavailable because these values are not configured: $($missing -join ', '). Building a clean unsigned-degraded artifact; publish mode will still create a GitHub Release with a warning."
+            $message = "Trusted Windows signing is unavailable because these values are not configured: $($missing -join ', '). Building a clean unsigned-degraded release."
             Write-Warning $message
-            "### Trusted signing skipped`n`n$message" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+            "### Trusted signing skipped`n`n$message" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8
             exit 0
           }
           try {
@@ -109,21 +200,20 @@ jobs:
             if (-not $certificate -or $certificate.Subject -notlike "*$env:QZIP_WINDOWS_PUBLISHER*") {
               throw 'The PFX certificate does not match QZIP_WINDOWS_PUBLISHER.'
             }
-            "QZIP_WINDOWS_PFX_PATH=$pfx" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
-            "enabled=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+            "QZIP_WINDOWS_PFX_PATH=$pfx" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
+            "enabled=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding UTF8
           }
           catch {
-            $message = "Trusted Windows signing credentials could not be prepared: $($_.Exception.Message). The workflow will build an unsigned-degraded release."
+            $message = "Trusted Windows signing credentials could not be prepared: $($_.Exception.Message). Building an unsigned-degraded release."
             Write-Warning $message
-            "### Trusted signing unavailable`n`n$message" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+            "### Trusted signing unavailable`n`n$message" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8
           }
       - id: signed_build
         name: Attempt trusted NSIS build
         if: steps.signing.outputs.enabled == 'true'
         continue-on-error: true
         shell: pwsh
-        run: |
-          powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -Release
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -Release
       - id: build
         name: Finalize trusted or unsigned-degraded NSIS build
         shell: pwsh
@@ -132,13 +222,13 @@ jobs:
           SIGNED_BUILD_OUTCOME: ${{ steps.signed_build.outcome }}
         run: |
           if ($env:SIGNING_ENABLED -eq 'true' -and $env:SIGNED_BUILD_OUTCOME -eq 'success') {
-            "signing_mode=trusted" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+            "signing_mode=trusted" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding UTF8
             exit 0
           }
           if ($env:SIGNING_ENABLED -eq 'true') {
             $message = 'The trusted signing build failed. Rebuilding a clean unsigned-degraded installer instead.'
             Write-Warning $message
-            "### Trusted build fallback`n`n$message" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+            "### Trusted build fallback`n`n$message" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8
           }
           $staleSignedOutputs = @(
             (Join-Path $env:GITHUB_WORKSPACE 'target\release\bundle'),
@@ -151,67 +241,65 @@ jobs:
             if (-not $resolved.StartsWith($workspace, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe signed-output cleanup path: $resolved" }
             Remove-Item -LiteralPath $resolved -Recurse -Force
           }
-          powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -UnsignedRelease
-          "signing_mode=unsigned-degraded" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -UnsignedRelease
+          "signing_mode=unsigned-degraded" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding UTF8
       - name: Assemble and verify NSIS release assets
         shell: pwsh
         env:
-          RELEASE_LABEL: ${{ steps.metadata.outputs.release_label }}
           SIGNING_MODE: ${{ steps.build.outputs.signing_mode }}
         run: |
-          powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version $env:RELEASE_LABEL -SkipBundle -SigningMode $env:SIGNING_MODE -Publisher $env:QZIP_WINDOWS_PUBLISHER
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version $env:RELEASE_TAG -SkipBundle -SigningMode $env:SIGNING_MODE -Publisher $env:QZIP_WINDOWS_PUBLISHER
           if ($env:SIGNING_MODE -eq 'trusted') {
-            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -ExpectedSigningMode trusted -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_TAG -ExpectedSigningMode trusted -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
           } else {
-            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -ExpectedSigningMode unsigned-degraded
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_TAG -ExpectedSigningMode unsigned-degraded
           }
-      - uses: actions/attest-build-provenance@v2
+      - name: Attest release assets
+        uses: actions/attest@v4
         with:
-          subject-path: artifacts/release/${{ steps.metadata.outputs.release_label }}/**
+          subject-path: artifacts/release/${{ github.event.client_payload.tag }}/**
       - uses: actions/upload-artifact@v4
         with:
-          name: qzip-nsis
-          path: artifacts/release/${{ steps.metadata.outputs.release_label }}/**
+          name: qzip-windows-${{ github.event.client_payload.tag }}
+          path: artifacts/release/${{ github.event.client_payload.tag }}/**
           if-no-files-found: error
 
   publish:
-    name: publish-github-release
-    if: inputs.mode == 'publish'
+    name: publish-${{ github.event.client_payload.tag }}
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'qzip-release-build'
     needs: build-nsis
     runs-on: windows-2022
+    env:
+      RELEASE_TAG: ${{ github.event.client_payload.tag }}
+      RELEASE_SHA: ${{ github.event.client_payload.release_sha }}
+      SIGNING_MODE: ${{ needs.build-nsis.outputs.signing_mode }}
+      QZIP_WINDOWS_PUBLISHER: ${{ vars.QZIP_WINDOWS_PUBLISHER }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.release_sha }}
       - uses: actions/download-artifact@v4
         with:
-          name: qzip-nsis
-          path: artifacts/release/${{ needs.build-nsis.outputs.release_label }}
+          name: qzip-windows-${{ github.event.client_payload.tag }}
+          path: artifacts/release/${{ github.event.client_payload.tag }}
       - name: Fetch release payload verifier
         shell: pwsh
-        run: powershell -ExecutionPolicy Bypass -File scripts/fetch-sevenzip.ps1
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-sevenzip.ps1
       - name: Verify release assets
         shell: pwsh
-        env:
-          QZIP_WINDOWS_PUBLISHER: ${{ vars.QZIP_WINDOWS_PUBLISHER }}
-          RELEASE_LABEL: ${{ needs.build-nsis.outputs.release_label }}
-          SIGNING_MODE: ${{ needs.build-nsis.outputs.signing_mode }}
         run: |
           if ($env:SIGNING_MODE -eq 'trusted') {
-            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -ExpectedSigningMode trusted -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_TAG -ExpectedSigningMode trusted -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
           } else {
-            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -ExpectedSigningMode unsigned-degraded
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_TAG -ExpectedSigningMode unsigned-degraded
           }
-      - name: Create GitHub Release
+      - name: Create stable GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.build-nsis.outputs.tag }}
-          RELEASE_LABEL: ${{ needs.build-nsis.outputs.release_label }}
-          PRERELEASE: ${{ needs.build-nsis.outputs.prerelease }}
-          TARGET_SHA: ${{ github.sha }}
-          SIGNING_MODE: ${{ needs.build-nsis.outputs.signing_mode }}
         run: |
-          $arguments = @('release', 'create', $env:TAG, "artifacts/release/$env:RELEASE_LABEL/*", '--target', $env:TARGET_SHA, '--generate-notes', '--title', "QZip $env:TAG")
-          if ($env:PRERELEASE -eq 'true') { $arguments += '--prerelease' }
+          $assets = "artifacts/release/$env:RELEASE_TAG/*"
+          $arguments = @('release', 'create', $env:RELEASE_TAG, $assets, '--target', $env:RELEASE_SHA, '--generate-notes', '--latest', '--title', "QZip $env:RELEASE_TAG")
           if ($env:SIGNING_MODE -eq 'unsigned-degraded') {
             $warning = @'
           > [!WARNING]
@@ -225,3 +313,4 @@ jobs:
           }
           & gh @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "### Release published`n`n[$env:RELEASE_TAG](https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:RELEASE_TAG) was published from $env:RELEASE_SHA using signing mode ``$env:SIGNING_MODE``." | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8

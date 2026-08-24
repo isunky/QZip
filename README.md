@@ -97,7 +97,7 @@ docs/                 补充文档
 ## 质量与发布
 
 - `pnpm check` 会依次运行 ESLint、TypeScript、前端测试、Web 构建、Rust 格式检查、Clippy 与 Rust 测试。
-- 普通提交只运行 Windows CI。NSIS 安装包通过 GitHub Actions 手动构建；`build-only` 仅上传内测产物，`publish` 在签名凭据有效时发布可信签名版，否则自动发布干净的 `unsigned-degraded` 降级版。
+- 普通提交只运行 Windows CI。正式发布时在 GitHub Actions 中选择 `patch`、`minor` 或 `major`；工作流会自动同步版本号、创建版本提交、构建 NSIS 安装包并发布稳定 Release。签名凭据有效时发布可信签名版，否则自动发布干净的 `unsigned-degraded` 降级版。
 - 取得代码签名 PFX 后，可在本机运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/configure-github-signing.ps1 -PfxPath <PFX 路径>` 配置 GitHub Secrets。自签名证书仅用于内测，不可用于公开可信发布。
 - `unsigned-degraded` 版本保留应用界面、核心压缩功能、“打开方式/QZip”和文件关联，但不安装 Windows 11 一级现代右键菜单；具体限制请参阅[已知问题](KNOWN_ISSUES.md)。
 - 需求、验收与后续里程碑以[产品需求文档](QZip_PRD_V2.1.md)为权威来源。
