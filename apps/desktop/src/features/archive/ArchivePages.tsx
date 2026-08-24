@@ -981,19 +981,19 @@ function TaskCard({
                 : task.operation === "extract"
                   ? text("正在解压", "Extracting")
                   : text("正在压缩", "Compressing");
-  const status = task.status === "completed"
+  const statusLabel = task.status === "completed"
     ? text("已完成", "Completed")
     : task.status === "failed"
       ? needsPassword
-        ? text("失败：密码错误", "Failed: incorrect password")
-        : text(`失败：${task.error?.message ?? "处理失败"}`, `Failed: ${task.error?.message ?? "Processing failed"}`)
+        ? text("密码错误", "Password error")
+        : text("失败", "Failed")
       : task.status === "cancelled"
         ? text("已取消", "Cancelled")
-        : task.operation === "extract"
-          ? text("正在解压", "Extracting")
-          : task.status === "queued"
-            ? text("等待中", "Waiting")
-            : text("正在压缩", "Compressing");
+        : task.status === "queued"
+          ? text("等待中", "Waiting")
+          : task.operation === "extract"
+            ? text("解压中", "Extracting")
+            : text("压缩中", "Compressing");
   const outputLabel = task.operation === "extract"
     ? text("解压位置", "Extracted to")
     : task.operation === "create"
@@ -1003,11 +1003,13 @@ function TaskCard({
 
   return (
     <Card className="qzip-task-card" data-status={task.status} data-focused={focused || undefined}>
-      <div className="qzip-task-card__icon"><img src={taskFormatIcon(task)} alt={text(`${taskFormatLabel(task)} 文件图标`, `${taskFormatLabel(task)} file icon`)} /></div>
+      <div className="qzip-task-card__identity">
+        <img className="qzip-task-card__icon" src={taskFormatIcon(task)} alt={text(`${taskFormatLabel(task)} 文件图标`, `${taskFormatLabel(task)} file icon`)} />
+        <span className="qzip-task-card__status">{statusLabel}</span>
+      </div>
       <div className="qzip-task-card__body" id={`qzip-task-${task.taskId}`}>
         <div className="qzip-task-card__heading">
           <strong>{task.displayName}</strong>
-          <span className={`qzip-status qzip-status--${task.status}`}>{status}</span>
           {active && task.progress?.percent != null ? <b>{percent}%</b> : null}
         </div>
         {active ? <Progress value={Math.max(percent, task.status === "queued" ? 4 : task.status === "scanning" ? 8 : 0)} /> : null}
