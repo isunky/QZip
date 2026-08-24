@@ -33,31 +33,7 @@
 
 ## 支持的文件类型
 
-以下图标与 QZip 的 Windows 文件关联和任务中心保持一致。标有“创建”的格式可用于新建压缩包；其余格式支持读取、浏览与解压。
-
-<table>
-  <tr align="center">
-    <td width="25%"><img src="./PIC/file-types/readme/7z.png" alt="QZip 7Z 文件类型图标" width="72" height="72" /><br /><b>7Z</b><br /><code>.7z</code><br /><sub>创建 · 浏览 · 解压</sub></td>
-    <td width="25%"><img src="./PIC/file-types/readme/zip.png" alt="QZip ZIP 文件类型图标" width="72" height="72" /><br /><b>ZIP</b><br /><code>.zip</code><br /><sub>创建 · 浏览 · 解压</sub></td>
-    <td width="25%"><img src="./PIC/file-types/readme/tar.png" alt="QZip TAR 文件类型图标" width="72" height="72" /><br /><b>TAR</b><br /><code>.tar</code><br /><sub>创建 · 浏览 · 解压</sub></td>
-    <td width="25%"><img src="./PIC/file-types/readme/tgz.png" alt="QZip TGZ 和 TAR.GZ 文件类型图标" width="72" height="72" /><br /><b>TGZ / TAR.GZ</b><br /><code>.tgz</code> · <code>.tar.gz</code><br /><sub>创建 · 浏览 · 解压</sub></td>
-  </tr>
-  <tr align="center">
-    <td><img src="./PIC/file-types/readme/txz.png" alt="QZip TXZ 和 TAR.XZ 文件类型图标" width="72" height="72" /><br /><b>TXZ / TAR.XZ</b><br /><code>.txz</code> · <code>.tar.xz</code><br /><sub>创建 · 浏览 · 解压</sub></td>
-    <td><img src="./PIC/file-types/readme/rar.png" alt="QZip RAR 文件类型图标" width="72" height="72" /><br /><b>RAR</b><br /><code>.rar</code><br /><sub>浏览 · 解压</sub></td>
-    <td><img src="./PIC/file-types/readme/gz.png" alt="QZip GZ 文件类型图标" width="72" height="72" /><br /><b>GZ</b><br /><code>.gz</code><br /><sub>浏览 · 解压</sub></td>
-    <td><img src="./PIC/file-types/readme/xz.png" alt="QZip XZ 文件类型图标" width="72" height="72" /><br /><b>XZ</b><br /><code>.xz</code><br /><sub>浏览 · 解压</sub></td>
-  </tr>
-  <tr align="center">
-    <td><img src="./PIC/file-types/readme/bz2.png" alt="QZip BZ2 文件类型图标" width="72" height="72" /><br /><b>BZ2</b><br /><code>.bz2</code><br /><sub>浏览 · 解压</sub></td>
-    <td><img src="./PIC/file-types/readme/iso.png" alt="QZip ISO 光盘镜像文件类型图标" width="72" height="72" /><br /><b>ISO</b><br /><code>.iso</code><br /><sub>浏览 · 解压</sub></td>
-    <td><img src="./PIC/file-types/readme/cab.png" alt="QZip CAB 文件类型图标" width="72" height="72" /><br /><b>CAB</b><br /><code>.cab</code><br /><sub>浏览 · 解压</sub></td>
-    <td><img src="./PIC/file-types/readme/wim.png" alt="QZip WIM Windows 映像文件类型图标" width="72" height="72" /><br /><b>WIM</b><br /><code>.wim</code><br /><sub>浏览 · 解压</sub></td>
-  </tr>
-  <tr align="center">
-    <td colspan="4"><img src="./PIC/file-types/readme/archive.png" alt="QZip 通用归档回退文件类型图标" width="72" height="72" /><br /><b>通用归档</b><br /><sub>未知或其他归档格式的回退图标</sub></td>
-  </tr>
-</table>
+<p align="center"><img src="./apps/desktop/public/file-types/7z.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/zip.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/rar.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/tar.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/tgz.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/gz.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/xz.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/txz.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/bz2.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/iso.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/cab.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/wim.ico" alt="" width="76" height="76" /><img src="./apps/desktop/public/file-types/archive.ico" alt="" width="76" height="76" /></p>
 
 ## 界面一览
 

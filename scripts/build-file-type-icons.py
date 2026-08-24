@@ -6,13 +6,11 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "PIC" / "file-types" / "source"
 PNG_DIR = ROOT / "PIC" / "file-types" / "png"
-README_PNG_DIR = ROOT / "PIC" / "file-types" / "readme"
 ICO_DIR = ROOT / "apps" / "desktop" / "public" / "file-types"
 NATIVE_ICO_DIR = ROOT / "apps" / "desktop" / "src-tauri" / "icons" / "file-types"
 
 CANVAS_SIZE = 1024
 CONTENT_SIZE = 932
-README_SIZE = 128
 ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
 
 
@@ -49,7 +47,6 @@ def normalize_icon(source: Path) -> Image.Image:
 
 def main() -> None:
     PNG_DIR.mkdir(parents=True, exist_ok=True)
-    README_PNG_DIR.mkdir(parents=True, exist_ok=True)
     ICO_DIR.mkdir(parents=True, exist_ok=True)
     NATIVE_ICO_DIR.mkdir(parents=True, exist_ok=True)
     sources = sorted(SOURCE_DIR.glob("*.png"))
@@ -59,21 +56,12 @@ def main() -> None:
     for source in sources:
         icon = normalize_icon(source)
         png_path = PNG_DIR / source.name
-        readme_png_path = README_PNG_DIR / source.name
         ico_path = ICO_DIR / f"{source.stem}.ico"
         native_ico_path = NATIVE_ICO_DIR / ico_path.name
         icon.save(png_path, "PNG", optimize=True)
-        icon.resize((README_SIZE, README_SIZE), Image.Resampling.LANCZOS).save(
-            readme_png_path,
-            "PNG",
-            optimize=True,
-        )
         icon.save(ico_path, "ICO", sizes=ICO_SIZES)
         icon.save(native_ico_path, "ICO", sizes=ICO_SIZES)
-        print(
-            f"built {source.stem}: {png_path.name}, readme/{readme_png_path.name}, "
-            f"{ico_path.name}, native/{native_ico_path.name}"
-        )
+        print(f"built {source.stem}: {png_path.name}, {ico_path.name}, native/{native_ico_path.name}")
 
 
 if __name__ == "__main__":
