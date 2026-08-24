@@ -4,11 +4,11 @@
 
 # 轻压 · QZip
 
-**一款本地优先、Windows 优先的轻量桌面压缩工具。**
+**免费无广告，好用也好看。**
 
-拖入文件，即刻完成压缩、解压与压缩包浏览；将复杂选项留给需要它们的人。
+从压缩到解压，每一步都简单清爽。
 
-`Windows 10 / 11 x64` · `v1.0.0` · `Apache-2.0`
+`Windows 10 / 11 x64` · `免费开源` · `无广告`
 
 [**下载最新版本**](https://github.com/isunky/QZip/releases/latest) · [查看更新记录](CHANGELOG.md) · [阅读已知问题](KNOWN_ISSUES.md)
 
@@ -18,22 +18,24 @@
   <img src="./PIC/ChatGPT%20Image%202026%E5%B9%B47%E6%9C%8827%E6%97%A5%2010_36_35%20(1).png" alt="QZip 首页：拖放文件、压缩文件或打开压缩包" width="92%" />
 </p>
 
-> QZip `v1.0.0` 正式支持 Windows 10/11 x64。若当前 Release 标记为 `unsigned-degraded`，Windows 可能显示“未知发布者”或 SmartScreen 提示，但应用界面、核心压缩功能、“打开方式/QZip”和文件关联仍可正常使用。
-
 ## 为什么是 QZip
 
-| 简单开始 | 安心处理 | 一目了然 |
+| 免费无广告 | 好看，也容易辨认 | 简单上手 |
 | :-- | :-- | :-- |
-| 拖放文件或选择压缩包即可进入流程；常用场景使用合理默认值。 | 压缩采用临时文件提交，解压使用暂存目录合并，降低中断后留下损坏结果的风险。 | 从任务中心查看实时进度、完成结果与失败原因，并支持取消或重试。 |
+| 所有核心功能均可免费使用，项目开源，没有广告和付费功能墙。 | 现代化界面搭配独立文件图标，让不同压缩格式一眼就能分清。 | 拖入文件即可开始，常用操作使用合适的默认设置，不必先研究复杂参数。 |
+| **文件留在本机** | **解压前先看内容** | **任务进度更清楚** |
+| 文件直接在电脑上处理，不需要上传到云端，更适合个人资料和办公文件。 | 可以先浏览、搜索压缩包中的文件，确认内容后再决定解压到哪里。 | 压缩和解压任务集中展示，进度、结果和失败原因都能随时查看。 |
 
-- **本地优先**：文件在本机处理，不上传至服务端。
-- **格式覆盖**：支持创建 `7Z`、`ZIP`、`TAR`、`TAR.GZ`、`TAR.XZ`，并读取、浏览和解压 `7Z`、`ZIP`、`RAR`、`TAR`、`TAR.GZ`、`TAR.XZ`、`GZ`、`XZ`、`BZ2`、`ISO`、`CAB`、`WIM`。
-- **安全处理**：支持密码压缩/解压、7Z 文件名加密、完整性测试与安全写入。
-- **Windows 集成**：面向 Windows 10/11 x64，提供文件关联与安装/卸载链路；受信任签名版本额外提供 Windows 11 Explorer 高频右键菜单。
+轻压还支持密码保护、7Z 文件名加密和压缩包完整性测试。任务中断或失败时，会尽量避免留下损坏的压缩包和不完整文件。
 
 ## 支持的文件类型
 
+每种常见格式都有独立设计的文件图标。关联轻压后，在资源管理器中也能快速区分 ZIP、7Z、RAR、TAR、ISO 等文件。
+
 <p align="center"><img src="./PIC/file-types/png/7z.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/zip.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/rar.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/tar.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/tgz.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/gz.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/xz.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/txz.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/bz2.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/iso.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/cab.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/wim.png" alt="" width="7.6%" /><img src="./PIC/file-types/png/archive.png" alt="" width="7.6%" /></p>
+
+- **创建压缩包**：`7Z`、`ZIP`、`TAR`、`TAR.GZ`、`TAR.XZ`
+- **查看和解压**：`7Z`、`ZIP`、`RAR`、`TAR`、`TAR.GZ`、`TAR.XZ`、`GZ`、`XZ`、`BZ2`、`ISO`、`CAB`、`WIM`
 
 ## 界面一览
 
@@ -48,7 +50,16 @@
   </tr>
 </table>
 
-## 快速开始
+## 下载与安装
+
+轻压支持 Windows 10/11 x64，可以从 [GitHub Releases](https://github.com/isunky/QZip/releases/latest) 下载最新安装包。
+
+> 如果当前 Release 标记为 `unsigned-degraded`，Windows 可能显示“未知发布者”或 SmartScreen 提示。应用界面、压缩解压、“打开方式/QZip”和文件关联仍可正常使用，但 Windows 11 一级现代右键菜单暂不可用。
+
+## 开发者指南
+
+<details>
+<summary>展开开发、构建与发布说明</summary>
 
 ### 开发环境
 
@@ -69,7 +80,7 @@ pnpm dev
 pnpm dev:web
 ```
 
-## 常用命令
+### 常用命令
 
 | 目标 | 命令 |
 | :-- | :-- |
@@ -82,7 +93,7 @@ pnpm dev:web
 
 Windows 打包前须先执行 `pnpm sidecar:fetch`。普通开发和 CI 构建不会启用该二进制资源映射，因此无需下载 Sidecar。
 
-## 项目结构
+### 项目结构
 
 ```text
 apps/                 桌面端与开发者 CLI
@@ -94,13 +105,15 @@ PIC/                  产品界面设计图
 docs/                 补充文档
 ```
 
-## 质量与发布
+### 质量与发布
 
 - `pnpm check` 会依次运行 ESLint、TypeScript、前端测试、Web 构建、Rust 格式检查、Clippy 与 Rust 测试。
 - 普通提交只运行 Windows CI。正式发布时在 GitHub Actions 中选择 `patch`、`minor` 或 `major`；工作流会自动同步版本号、创建版本提交、构建 NSIS 安装包并发布稳定 Release。签名凭据有效时发布可信签名版，否则自动发布干净的 `unsigned-degraded` 降级版。
 - 取得代码签名 PFX 后，可在本机运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/configure-github-signing.ps1 -PfxPath <PFX 路径>` 配置 GitHub Secrets。自签名证书仅用于内测，不可用于公开可信发布。
 - `unsigned-degraded` 版本保留应用界面、核心压缩功能、“打开方式/QZip”和文件关联，但不安装 Windows 11 一级现代右键菜单；具体限制请参阅[已知问题](KNOWN_ISSUES.md)。
 - 需求、验收与后续里程碑以[产品需求文档](QZip_PRD_V2.1.md)为权威来源。
+
+</details>
 
 ## 文档
 
