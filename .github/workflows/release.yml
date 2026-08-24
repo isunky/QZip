@@ -185,6 +185,9 @@ jobs:
         with:
           name: qzip-nsis
           path: artifacts/release/${{ needs.build-nsis.outputs.release_label }}
+      - name: Fetch release payload verifier
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/fetch-sevenzip.ps1
       - name: Verify release assets
         shell: pwsh
         env:
