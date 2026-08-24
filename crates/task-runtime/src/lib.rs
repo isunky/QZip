@@ -1039,7 +1039,7 @@ mod tests {
     struct ScriptedState {
         mode: BackendMode,
         started: Notify,
-        release: Notify,
+        release: CancellationToken,
         active: AtomicUsize,
         peak: AtomicUsize,
     }
@@ -1053,7 +1053,7 @@ mod tests {
             let state = Arc::new(ScriptedState {
                 mode,
                 started: Notify::new(),
-                release: Notify::new(),
+                release: CancellationToken::new(),
                 active: AtomicUsize::new(0),
                 peak: AtomicUsize::new(0),
             });
@@ -1083,7 +1083,7 @@ mod tests {
             cancellation: CancellationToken,
         ) -> Result<(), ArchiveError> {
             tokio::select! {
-                _ = self.state.release.notified() => Ok(()),
+                _ = self.state.release.cancelled() => Ok(()),
                 _ = cancellation.cancelled() => Err(ArchiveError::new(ArchiveErrorCode::Cancelled, "任务已取消")),
             }
         }
@@ -1525,10 +1525,10 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(state.peak.load(Ordering::SeqCst), 2);
-        for _ in 0..4 {
-            state.release.notify_waiters();
-            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        }
+        // A cancelled token remains observable by tasks that acquire a runtime
+        // permit later. Unlike `Notify::notify_waiters`, the release signal
+        // cannot be lost while the next queued tasks are being scheduled.
+        state.release.cancel();
         for task in tasks {
             assert_eq!(
                 wait_for_terminal(&manager, &task.task_id).await.status,
@@ -1559,7 +1559,7 @@ mod tests {
             ArchiveErrorCode::InvalidRequest
         );
         manager.cancel(&running.task_id).unwrap();
-        state.release.notify_waiters();
+        state.release.cancel();
         let cancelled = wait_for_terminal(&manager, &running.task_id).await;
         assert_eq!(cancelled.status, TaskStatus::Cancelled);
         assert!(cancelled.retryable);
