@@ -91,6 +91,22 @@ html[data-mode="dark"] .qzip-app-shell {
   color: var(--qzip-color-accent-strong);
 }
 
+.qzip-titlebar__task-count {
+  align-items: center;
+  background: var(--qzip-color-accent);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  justify-content: center;
+  line-height: 1;
+  margin-left: 2px;
+  min-width: 19px;
+  padding: 4px 6px;
+}
+
 .qzip-titlebar__separator {
   background: var(--qzip-color-border-default);
   height: 24px;
@@ -291,7 +307,17 @@ html[data-mode="dark"] .qzip-app-shell {
   }
 
   .qzip-titlebar__nav-button .qzip-button__label {
-    display: none;
+    align-items: center;
+    display: inline-flex;
+    font-size: 0;
+    gap: 0;
+  }
+
+  .qzip-titlebar__task-count {
+    font-size: 10px;
+    margin-left: -7px;
+    min-width: 16px;
+    padding: 3px 5px;
   }
 
   .qzip-window-controls button {

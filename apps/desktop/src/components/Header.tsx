@@ -10,6 +10,7 @@ import { useI18n } from "../lib/i18n";
 
 interface HeaderProps {
   activePage?: string;
+  activeTaskCount?: number;
   iconSrc: string;
   onHomeClick: () => void;
   onTasksClick: () => void;
@@ -26,7 +27,7 @@ async function withCurrentWindow(
   await action(getCurrentWindow());
 }
 
-export function Header({ activePage, iconSrc, onHomeClick, onTasksClick, onSettingsClick }: HeaderProps) {
+export function Header({ activePage, activeTaskCount = 0, iconSrc, onHomeClick, onTasksClick, onSettingsClick }: HeaderProps) {
   const { brandName, text } = useI18n();
   return (
     <header className="qzip-titlebar">
@@ -50,6 +51,7 @@ export function Header({ activePage, iconSrc, onHomeClick, onTasksClick, onSetti
           onClick={onTasksClick}
         >
           {text("任务", "Tasks")}
+          {activeTaskCount ? <span className="qzip-titlebar__task-count" aria-label={text(`${activeTaskCount} 个进行中任务`, `${activeTaskCount} active tasks`)}>{activeTaskCount}</span> : null}
         </Button>
         <Button
           variant="tertiary"

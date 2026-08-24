@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BatchExtractPage, BrowserPage, CreatePage, TaskCenter } from "./ArchivePages";
+import { BatchExtractPage, BrowserPage, CreatePage, ExtractPage, TaskCenter } from "./ArchivePages";
 import { archiveClient } from "../../lib/archiveClient";
 import type { ArchiveEntry, ArchiveSession, TaskSnapshot } from "../../contracts/archive";
 
@@ -57,7 +57,9 @@ describe("archive core flow controls", () => {
     };
     const onCancel = vi.fn();
     render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={onCancel} onRetry={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "取消任务" }));
+    const cancel = screen.getByRole("button", { name: "取消任务" });
+    expect(cancel).toHaveClass("qzip-button--danger");
+    fireEvent.click(cancel);
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onCancel).toHaveBeenCalledWith("task-running");
   });
@@ -76,7 +78,9 @@ describe("archive core flow controls", () => {
     };
     const onRetry = vi.fn();
     render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={onRetry} />);
-    fireEvent.click(screen.getByRole("button", { name: "重新输入密码" }));
+    const retry = screen.getByRole("button", { name: "重新输入密码" });
+    expect(retry).toHaveClass("qzip-button--warning");
+    fireEvent.click(retry);
     const input = screen.getByLabelText("重试密码");
     fireEvent.change(input, { target: { value: "correct" } });
     fireEvent.click(screen.getByRole("button", { name: "确认重试" }));
@@ -96,7 +100,7 @@ describe("archive core flow controls", () => {
       retryable: false
     };
     render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={vi.fn()} />);
-    expect(screen.getByText(/完成时间：/).textContent).not.toContain("1970");
+    expect(screen.getByText(/2023/).textContent).not.toContain("1970");
   });
 
   it("disables formats that the active backend cannot create", async () => {
@@ -138,6 +142,21 @@ describe("archive core flow controls", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: /加载更多/ })).not.toBeInTheDocument());
   });
 
+  it("opens an archive file with the system-associated app on double-click", async () => {
+    Object.defineProperty(archiveClient, "isTauri", { configurable: true, value: true });
+    const file: ArchiveEntry = { path: "资料/report.txt", displayName: "report.txt", size: 12, isDirectory: false, encrypted: false, isSymlink: false, isHardlink: false };
+    const folder: ArchiveEntry = { path: "资料", displayName: "资料", size: 0, isDirectory: true, encrypted: false, isSymlink: false, isHardlink: false };
+    const session: ArchiveSession = { sessionId: "session-open", format: "zip", compressedSize: 10, estimatedUncompressedSize: 12, entryCount: 2, encrypted: false, risks: [] };
+    vi.spyOn(archiveClient, "entries").mockResolvedValue({ entries: [folder, file], total: 2, nextOffset: null });
+    vi.spyOn(archiveClient, "recordPerformanceMarker").mockResolvedValue(undefined);
+    const openEntry = vi.spyOn(archiveClient, "openEntry").mockResolvedValue(undefined);
+    render(<BrowserPage archive="D:\\docs.zip" session={session} onBack={vi.fn()} onClose={vi.fn()} onExtract={vi.fn()} onCreated={vi.fn()} />);
+
+    const row = await screen.findByRole("row", { name: /report\.txt/ });
+    fireEvent.doubleClick(row);
+    await waitFor(() => expect(openEntry).toHaveBeenCalledWith("session-open", "资料/report.txt"));
+  });
+
   it("shows technical task details on demand", () => {
     const task: TaskSnapshot = {
       taskId: "task-detail",
@@ -153,7 +172,7 @@ describe("archive core flow controls", () => {
     };
     render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "查看详情" }));
-    expect(screen.getByText("task-detail")).toBeInTheDocument();
+    expect(screen.queryByText("task-detail")).not.toBeInTheDocument();
     expect(screen.getByText("解压")).toBeInTheDocument();
     expect(screen.getByText("CORRUPT_ARCHIVE")).toBeInTheDocument();
     expect(screen.getByText("临时目录已清理")).toBeInTheDocument();
@@ -172,8 +191,66 @@ describe("archive core flow controls", () => {
       retryable: false
     };
     render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={vi.fn()} />);
-    expect(screen.getByText("ZIP")).toBeInTheDocument();
-    expect(screen.queryByText("7Z")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "ZIP 文件图标" })).toHaveAttribute("src", "/file-types/zip.ico");
+    expect(screen.queryByRole("img", { name: "7Z 文件图标" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开结果" })).toHaveClass("qzip-button--primary");
+  });
+
+  it("shows one list with active tasks first and highlights the focused task", () => {
+    const active: TaskSnapshot = {
+      taskId: "task-active",
+      operation: "extract",
+      status: "scanning",
+      displayName: "incoming.zip",
+      output: "D:\\output",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      progress: { phase: "scanning", elapsedSeconds: 3 },
+      warnings: [],
+      retryable: true
+    };
+    const completed: TaskSnapshot = {
+      ...active,
+      taskId: "task-completed",
+      status: "completed",
+      displayName: "done.zip",
+      progress: { phase: "committing", percent: 100, elapsedSeconds: 4 }
+    };
+    render(<TaskCenter tasks={[completed, active]} focusTaskId="task-completed" onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={vi.fn()} />);
+    expect(screen.getByText("共 2 个任务")).toBeInTheDocument();
+    expect(screen.getAllByText("解压位置")).toHaveLength(2);
+    expect(screen.getAllByText("D:\\output")).toHaveLength(2);
+    expect(screen.getByText("正在检查压缩包")).toBeInTheDocument();
+    expect(screen.queryByText("0%")).not.toBeInTheDocument();
+    const cards = document.querySelectorAll(".qzip-task-card");
+    expect(cards[0]).toHaveAttribute("data-status", "scanning");
+    expect(document.querySelector('[data-focused="true"]')).toHaveAttribute("data-status", "completed");
+    expect(screen.queryByText("进行中（1）")).not.toBeInTheDocument();
+  });
+
+  it("keeps the extraction result visible after a task is created", async () => {
+    const task: TaskSnapshot = {
+      taskId: "extract-visible",
+      operation: "extract",
+      status: "queued",
+      displayName: "visible.zip",
+      output: "D:\\visible",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      warnings: [],
+      retryable: true
+    };
+    const onCreated = vi.fn();
+    const onBack = vi.fn();
+    Object.defineProperty(archiveClient, "isTauri", { configurable: true, value: true });
+    vi.spyOn(archiveClient, "extract").mockResolvedValue(task);
+    const session: ArchiveSession = { sessionId: "visible", format: "zip", compressedSize: 10, estimatedUncompressedSize: 20, entryCount: 1, encrypted: false, risks: [] };
+    render(<ExtractPage archive="D:\\visible.zip" session={session} onBack={onBack} onBrowse={vi.fn()} onCreated={onCreated} defaultConflictPolicy="rename" />);
+    fireEvent.change(screen.getByLabelText("解压位置"), { target: { value: "D:\\visible" } });
+    fireEvent.click(screen.getByRole("button", { name: "开始解压" }));
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(task));
+    expect(onBack).not.toHaveBeenCalled();
   });
 
   it("starts safe batch extracts and reports archives that need individual handling", async () => {

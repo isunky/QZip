@@ -9,6 +9,7 @@ export type ButtonVariant =
   | "primary"
   | "secondary"
   | "tertiary"
+  | "warning"
   | "danger"
   | "icon";
 

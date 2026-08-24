@@ -14,6 +14,7 @@ export const archiveClient = {
   scan: (paths: string[]) => command<ScanResult>("scan_input_paths", { paths }),
   prepare: (archive: string, password?: string) => command<ArchiveSession>("prepare_archive_session", { archive, password }),
   entries: (sessionId: string, directory?: string, search?: string, offset = 0) => command<EntryPage>("list_archive_entries", { sessionId, directory, search, offset }),
+  openEntry: (sessionId: string, entryPath: string) => command<void>("open_archive_entry", { sessionId, entryPath }),
   close: (sessionId: string) => command<void>("close_archive_session", { sessionId }),
   create: (request: CreateTaskRequest) => command<TaskSnapshot>("create_archive_task", { request }),
   extract: (request: ExtractTaskRequest) => command<TaskSnapshot>("extract_archive_task", { request }),

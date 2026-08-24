@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 .vite/
+.playwright-cli/
 *.tsbuildinfo
 target/
 target-rc1-verify/

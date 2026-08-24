@@ -77,6 +77,16 @@
   color: var(--qzip-color-danger);
 }
 
+.qzip-button--warning {
+  background: var(--qzip-color-bg-elevated);
+  border-color: var(--qzip-color-warning);
+  color: var(--qzip-color-warning);
+}
+
+.qzip-button--warning:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--qzip-color-warning) 12%, var(--qzip-color-bg-elevated));
+}
+
 .qzip-button--icon {
   min-height: 36px;
   min-width: 36px;

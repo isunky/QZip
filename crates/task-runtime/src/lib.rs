@@ -286,7 +286,17 @@ impl TaskManager {
             self.persist_history();
             return;
         }
-        self.set_status(&task_id, TaskStatus::Scanning, None);
+        let started_at = now();
+        self.set_status(
+            &task_id,
+            TaskStatus::Scanning,
+            Some(RuntimeProgress {
+                phase: "scanning".into(),
+                percent: None,
+                current_entry: None,
+                elapsed_seconds: 0,
+            }),
+        );
         let (spec, cancellation) = match self.tasks.lock().expect("task lock").get(&task_id) {
             Some(record) => (record.spec.clone(), record.cancellation.clone()),
             None => return,
@@ -294,10 +304,17 @@ impl TaskManager {
         let reporter: Arc<dyn ProgressReporter> = Arc::new(RuntimeReporter {
             manager: Arc::clone(&self),
             task_id: task_id.clone(),
-            started_at: now(),
+            started_at,
         });
         let result = self
-            .execute(&task_id, &spec, password, reporter, cancellation.clone())
+            .execute(
+                &task_id,
+                &spec,
+                password,
+                reporter,
+                cancellation.clone(),
+                started_at,
+            )
             .await;
         match result {
             Ok(_) if cancellation.is_cancelled() => self.finish(
@@ -329,8 +346,8 @@ impl TaskManager {
         password: Option<SecretString>,
         reporter: Arc<dyn ProgressReporter>,
         cancellation: CancellationToken,
+        started_at: u64,
     ) -> Result<Vec<String>, ArchiveError> {
-        self.set_status(task_id, TaskStatus::Running, None);
         match spec {
             TaskSpec::Create {
                 inputs,
@@ -347,6 +364,16 @@ impl TaskManager {
                         "当前版本尚不支持创建完成后自动删除源文件",
                     ));
                 }
+                self.set_status(
+                    task_id,
+                    TaskStatus::Running,
+                    Some(RuntimeProgress {
+                        phase: "creating".into(),
+                        percent: Some(0),
+                        current_entry: None,
+                        elapsed_seconds: now().saturating_sub(started_at),
+                    }),
+                );
                 validate_create_destination(inputs, output)?;
                 let staging = prepare_create_staging(output)?;
                 let temporary_output = staging.archive.clone();
@@ -402,6 +429,7 @@ impl TaskManager {
                     );
                     return Err(ArchiveError::new(ArchiveErrorCode::Cancelled, "任务已取消"));
                 }
+                self.set_progress(task_id, "committing", Some(100), None, started_at);
                 let committed = commit_created_archive(&temporary_output, output);
                 self.record_cleanup_warning(task_id, cleanup_create_staging(&staging.directory));
                 committed?;
@@ -452,6 +480,16 @@ impl TaskManager {
                             .unwrap_or_else(|| "压缩包风险检查失败".into()),
                     ));
                 }
+                self.set_status(
+                    task_id,
+                    TaskStatus::Running,
+                    Some(RuntimeProgress {
+                        phase: "extracting".into(),
+                        percent: Some(0),
+                        current_entry: None,
+                        elapsed_seconds: now().saturating_sub(started_at),
+                    }),
+                );
                 let staging = prepare_extraction_staging(output)?;
                 let result = self
                     .backend
@@ -478,6 +516,7 @@ impl TaskManager {
                         return Err(error);
                     }
                 };
+                self.set_progress(task_id, "committing", Some(100), None, started_at);
                 if let Err(error) = commit_extraction(&staging, output, *conflict_policy) {
                     self.record_cleanup_warning(task_id, cleanup_staging(&staging));
                     return Err(error);
@@ -486,6 +525,16 @@ impl TaskManager {
                 Ok(result.warnings)
             }
             TaskSpec::Test { archive } => {
+                self.set_status(
+                    task_id,
+                    TaskStatus::Running,
+                    Some(RuntimeProgress {
+                        phase: "testing".into(),
+                        percent: Some(0),
+                        current_entry: None,
+                        elapsed_seconds: now().saturating_sub(started_at),
+                    }),
+                );
                 let result: TestResult = self
                     .backend
                     .test(
@@ -499,6 +548,16 @@ impl TaskManager {
                 Ok(result.warnings)
             }
             TaskSpec::Update { archive, inputs } => {
+                self.set_status(
+                    task_id,
+                    TaskStatus::Running,
+                    Some(RuntimeProgress {
+                        phase: "updating".into(),
+                        percent: Some(0),
+                        current_entry: None,
+                        elapsed_seconds: now().saturating_sub(started_at),
+                    }),
+                );
                 let result: ArchiveResult = self
                     .backend
                     .update(
@@ -524,6 +583,25 @@ impl TaskManager {
             }
         }
         self.emit("task.updated", task_id);
+    }
+    fn set_progress(
+        &self,
+        task_id: &str,
+        phase: &str,
+        percent: Option<u8>,
+        current_entry: Option<String>,
+        started_at: u64,
+    ) {
+        if let Some(record) = self.tasks.lock().expect("task lock").get_mut(task_id) {
+            record.snapshot.progress = Some(RuntimeProgress {
+                phase: phase.into(),
+                percent,
+                current_entry,
+                elapsed_seconds: now().saturating_sub(started_at),
+            });
+            record.snapshot.updated_at = now();
+        }
+        self.emit("task.progress", task_id);
     }
     fn finish(
         &self,
@@ -923,17 +1001,16 @@ impl ProgressReporter for RuntimeReporter {
             .next()
             .unwrap_or(&progress.detail)
             .to_owned();
-        self.manager.set_status(
+        let current_entry = (detail != "7-Zip is working").then_some(detail);
+        self.manager.set_progress(
             &self.task_id,
-            TaskStatus::Running,
-            Some(RuntimeProgress {
-                phase: format!("{:?}", progress.operation).to_ascii_lowercase(),
-                percent: progress.percent,
-                current_entry: Some(detail),
-                elapsed_seconds: now().saturating_sub(self.started_at),
-            }),
+            format!("{:?}", progress.operation)
+                .to_ascii_lowercase()
+                .as_str(),
+            progress.percent,
+            current_entry,
+            self.started_at,
         );
-        self.manager.emit("task.progress", &self.task_id);
     }
 }
 fn now() -> u64 {
@@ -1401,6 +1478,13 @@ mod tests {
         assert_ne!(failed.task_id, retried.task_id);
         let completed = wait_for_terminal(&manager, &retried.task_id).await;
         assert_eq!(completed.status, TaskStatus::Completed);
+        assert_eq!(
+            completed
+                .progress
+                .as_ref()
+                .map(|progress| progress.phase.as_str()),
+            Some("committing")
+        );
         assert_eq!(
             fs::read_to_string(output.join("file.txt")).unwrap(),
             "extracted"
