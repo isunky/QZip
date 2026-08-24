@@ -54,9 +54,9 @@ All three files were generated with the built-in ImageGen route, processed from 
 The uploaded reference board was selected for implementation on 2026-08-01. The large left application mark is preserved as the identity source: white curled animal, mint/teal rounded tile, pointed ears, closed-eye arc, and spiral tail.
 
 - Source master: `final/qzip-fox-master.png`
-- Runtime variants: `apps/desktop/src/assets/app-icons/{light,dark}-{mint,ocean,lavender,amber,coral,cyan-slate}.png`
+- Runtime brand icon: `apps/desktop/src-tauri/icons/64x64.png`
 - Windows app icon: `apps/desktop/src-tauri/icons/icon.ico`
 - Windows file icons: `apps/desktop/src-tauri/icons/file-types/*.ico`
 - Export manifest: `final/icon-export-manifest.json`
 
-The application has 12 runtime variants (six accent themes × light/dark). Windows installation and Start-menu resources remain the light mint default because static shell icons are cached by Windows. File icons use fixed format colors and independent ProgIDs for 7Z, ZIP, RAR, TAR, GZ, TGZ, XZ, TXZ, BZ2, ISO, CAB, and WIM; the generic archive fallback is retained for upgrades.
+The application uses the same approved brand icon in every theme. Theme switching still applies to the interface and non-brand icons without bundling duplicate main-icon rasters. Windows installation and Start-menu resources use the same fixed icon because static shell icons are cached by Windows. File icons use fixed format colors and independent ProgIDs for 7Z, ZIP, RAR, TAR, GZ, TGZ, XZ, TXZ, BZ2, ISO, CAB, and WIM; the generic archive fallback is retained for upgrades.

@@ -9,7 +9,7 @@ import type { ArchiveSession, TaskSnapshot } from "../contracts/archive";
 import { defaultAppSettings, type AppSettings, uiScaleFactor } from "../contracts/settings";
 import { archiveClient } from "../lib/archiveClient";
 import { settingsClient } from "../lib/settingsClient";
-import { syncWindowIcon, windowIconUrl } from "../lib/windowIcon";
+import appIcon from "../../src-tauri/icons/64x64.png";
 import { I18nProvider } from "../components/I18nProvider";
 import { localize, resolveAppLocale } from "../lib/i18n";
 import { resolveThemeMode, useAppearanceStore } from "../stores/appearance";
@@ -155,7 +155,6 @@ export function App() {
     document.documentElement.dataset.reduceMotion = String(settings.reduceMotion);
     document.documentElement.lang = locale;
     document.title = brandName;
-    void syncWindowIcon(resolvedMode, accent).catch(() => undefined);
     if (settingsClient.isTauri) {
       void import("@tauri-apps/api/webview").then(({ getCurrentWebview }) => getCurrentWebview().setZoom(uiScaleFactor[settings.uiScale])).catch(() => undefined);
       void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().setTitle(brandName)).catch(() => undefined);
@@ -319,5 +318,5 @@ export function App() {
     return <HomePage onCreate={() => { setCreateInputs([]); setCreateFormat(undefined); setPage("create"); }} onOpenArchive={() => void openArchive()} />;
   }
   const activeTaskCount = tasks.filter((task) => ["queued", "scanning", "running", "cancelling"].includes(task.status)).length;
-  return <I18nProvider locale={locale}><main className="qzip-app-shell"><Header activePage={page} activeTaskCount={activeTaskCount} iconSrc={windowIconUrl(resolvedMode, accent)} onHomeClick={goHome} onTasksClick={() => { setFocusedTaskId(null); setPage("tasks"); }} onSettingsClick={() => setPage("settings")} /><section className="qzip-app-content" data-page={page}>{currentPage()}</section>{passwordPrompt ? <section className="qzip-password-prompt" role="dialog" aria-modal="true" aria-labelledby="qzip-password-prompt-title"><form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); const password = String(data.get("password") ?? ""); if (!password) return; void prepareArchive(passwordPrompt.archive, passwordPrompt.destination, password); }}><h2 id="qzip-password-prompt-title">{text("需要压缩包密码", "Archive password required")}</h2><p>{passwordPrompt.message}</p><input name="password" type="password" autoFocus placeholder={text("请输入密码", "Enter password")} aria-label={text("压缩包密码", "Archive password")} /><div><button type="button" onClick={() => setPasswordPrompt(null)}>{text("取消", "Cancel")}</button><button type="submit">{text("继续", "Continue")}</button></div></form></section> : null}{toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}</main></I18nProvider>;
+  return <I18nProvider locale={locale}><main className="qzip-app-shell"><Header activePage={page} activeTaskCount={activeTaskCount} iconSrc={appIcon} onHomeClick={goHome} onTasksClick={() => { setFocusedTaskId(null); setPage("tasks"); }} onSettingsClick={() => setPage("settings")} /><section className="qzip-app-content" data-page={page}>{currentPage()}</section>{passwordPrompt ? <section className="qzip-password-prompt" role="dialog" aria-modal="true" aria-labelledby="qzip-password-prompt-title"><form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); const password = String(data.get("password") ?? ""); if (!password) return; void prepareArchive(passwordPrompt.archive, passwordPrompt.destination, password); }}><h2 id="qzip-password-prompt-title">{text("需要压缩包密码", "Archive password required")}</h2><p>{passwordPrompt.message}</p><input name="password" type="password" autoFocus placeholder={text("请输入密码", "Enter password")} aria-label={text("压缩包密码", "Archive password")} /><div><button type="button" onClick={() => setPasswordPrompt(null)}>{text("取消", "Cancel")}</button><button type="submit">{text("继续", "Continue")}</button></div></form></section> : null}{toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}</main></I18nProvider>;
 }
