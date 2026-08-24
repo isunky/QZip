@@ -131,6 +131,7 @@ describe("archive core flow controls", () => {
     const entries = vi.spyOn(archiveClient, "entries")
       .mockResolvedValueOnce({ entries: [first], total: 2, nextOffset: 1 })
       .mockResolvedValueOnce({ entries: [first, second], total: 2, nextOffset: null });
+    const systemFileIcons = vi.spyOn(archiveClient, "systemFileIcons").mockResolvedValue({ txt: "data:image/png;base64,AA==" });
     vi.spyOn(archiveClient, "recordPerformanceMarker").mockResolvedValue(undefined);
     render(<BrowserPage archive="D:\\large.7z" session={session} onBack={vi.fn()} onClose={vi.fn()} onExtract={vi.fn()} onCreated={vi.fn()} />);
 
@@ -138,7 +139,10 @@ describe("archive core flow controls", () => {
     fireEvent.click(screen.getByRole("button", { name: /加载更多/ }));
     await screen.findByText("second.txt");
     expect(screen.getAllByText("first.txt")).toHaveLength(1);
-    expect(entries).toHaveBeenLastCalledWith("session", undefined, undefined, 1);
+    expect(entries).toHaveBeenLastCalledWith("session", undefined, undefined, 1, "name", "ascending");
+    expect(systemFileIcons).toHaveBeenCalledTimes(1);
+    expect(systemFileIcons).toHaveBeenCalledWith(["txt"]);
+    expect(screen.getByRole("row", { name: /first\.txt/ }).querySelector("img.qzip-entry-row__file-icon")).not.toBeNull();
     await waitFor(() => expect(screen.queryByRole("button", { name: /加载更多/ })).not.toBeInTheDocument());
   });
 
@@ -148,6 +152,7 @@ describe("archive core flow controls", () => {
     const folder: ArchiveEntry = { path: "资料", displayName: "资料", size: 0, isDirectory: true, encrypted: false, isSymlink: false, isHardlink: false };
     const session: ArchiveSession = { sessionId: "session-open", format: "zip", compressedSize: 10, estimatedUncompressedSize: 12, entryCount: 2, encrypted: false, risks: [] };
     vi.spyOn(archiveClient, "entries").mockResolvedValue({ entries: [folder, file], total: 2, nextOffset: null });
+    vi.spyOn(archiveClient, "systemFileIcons").mockResolvedValue({});
     vi.spyOn(archiveClient, "recordPerformanceMarker").mockResolvedValue(undefined);
     const openEntry = vi.spyOn(archiveClient, "openEntry").mockResolvedValue(undefined);
     render(<BrowserPage archive="D:\\docs.zip" session={session} onBack={vi.fn()} onClose={vi.fn()} onExtract={vi.fn()} onCreated={vi.fn()} />);
@@ -155,6 +160,22 @@ describe("archive core flow controls", () => {
     const row = await screen.findByRole("row", { name: /report\.txt/ });
     fireEvent.doubleClick(row);
     await waitFor(() => expect(openEntry).toHaveBeenCalledWith("session-open", "资料/report.txt"));
+  });
+
+  it("reloads the complete first page when archive sorting changes", async () => {
+    Object.defineProperty(archiveClient, "isTauri", { configurable: true, value: true });
+    const file: ArchiveEntry = { path: "report.txt", displayName: "report.txt", size: 12, isDirectory: false, encrypted: false, isSymlink: false, isHardlink: false };
+    const session: ArchiveSession = { sessionId: "session-sort", format: "zip", compressedSize: 10, estimatedUncompressedSize: 12, entryCount: 1, encrypted: false, risks: [] };
+    const entries = vi.spyOn(archiveClient, "entries").mockResolvedValue({ entries: [file], total: 1, nextOffset: null });
+    vi.spyOn(archiveClient, "systemFileIcons").mockResolvedValue({});
+    vi.spyOn(archiveClient, "recordPerformanceMarker").mockResolvedValue(undefined);
+    render(<BrowserPage archive="D:\\docs.zip" session={session} onBack={vi.fn()} onClose={vi.fn()} onExtract={vi.fn()} onCreated={vi.fn()} />);
+
+    await screen.findByText("report.txt");
+    fireEvent.click(screen.getByRole("button", { name: "大小" }));
+    await waitFor(() => expect(entries).toHaveBeenLastCalledWith("session-sort", undefined, undefined, 0, "size", "ascending"));
+    fireEvent.click(screen.getByRole("button", { name: "大小" }));
+    await waitFor(() => expect(entries).toHaveBeenLastCalledWith("session-sort", undefined, undefined, 0, "size", "descending"));
   });
 
   it("shows technical task details on demand", () => {

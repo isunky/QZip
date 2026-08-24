@@ -709,6 +709,34 @@
   z-index: 2;
 }
 
+.qzip-entry-table__head > span {
+  min-width: 0;
+}
+
+.qzip-entry-table__head button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 4px;
+  min-height: 30px;
+  padding: 4px 6px;
+}
+
+.qzip-entry-table__head button:hover {
+  background: var(--qzip-color-bg-subtle);
+  color: var(--qzip-color-text-primary);
+}
+
+.qzip-entry-table__head button:focus-visible {
+  outline: 2px solid var(--qzip-color-accent);
+  outline-offset: 1px;
+}
+
 .qzip-entry-row {
   background: transparent;
   border: 0;
@@ -743,6 +771,13 @@
 
 .qzip-entry-row > span:first-child svg {
   color: var(--qzip-color-accent-strong);
+}
+
+.qzip-entry-row__file-icon {
+  flex: 0 0 26px;
+  height: 26px;
+  object-fit: contain;
+  width: 26px;
 }
 
 .qzip-load-more {

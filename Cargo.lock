@@ -2987,6 +2987,8 @@ dependencies = [
  "archive-core",
  "archive-security",
  "archive-sevenzip",
+ "base64 0.22.1",
+ "image",
  "platform-integration",
  "rfd",
  "secrecy",
@@ -3003,6 +3005,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

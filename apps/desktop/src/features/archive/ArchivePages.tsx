@@ -5,6 +5,8 @@ import {
   ArrowClockwiseRegular,
   ArrowDownloadRegular,
   ArrowLeftRegular,
+  ArrowSortDownRegular,
+  ArrowSortUpRegular,
   ChevronDownRegular,
   ChevronRightRegular,
   DeleteRegular,
@@ -41,6 +43,8 @@ import { localize, useI18n, type AppLocale } from "../../lib/i18n";
 import { joinOutputPath, splitOutputPath, suggestCreateOutputLocally } from "./archivePath";
 
 type Page = "home" | "create" | "extract" | "batchExtract" | "browser" | "tasks";
+type EntrySortKey = "name" | "size" | "type" | "modified";
+type SortDirection = "ascending" | "descending";
 
 const primaryFormatOptions = [
   { value: "sevenZip", label: "7Z" },
@@ -84,6 +88,12 @@ function formatBytes(value: number) {
 
 function fileName(path: string) {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+function fileExtension(path: string) {
+  const name = fileName(path);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && dot < name.length - 1 ? name.slice(dot + 1).toLowerCase() : "";
 }
 
 function errorMessage(reason: unknown) {
@@ -694,6 +704,8 @@ export function BrowserPage({
   const { locale, text } = useI18n();
   const [search, setSearch] = useState("");
   const [directory, setDirectory] = useState("");
+  const [sortKey, setSortKey] = useState<EntrySortKey>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("ascending");
   const [entries, setEntries] = useState<ArchiveEntry[]>(archiveClient.isTauri ? [] : demoEntries);
   const [loading, setLoading] = useState(archiveClient.isTauri);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -704,6 +716,8 @@ export function BrowserPage({
   const [openingEntry, setOpeningEntry] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const [systemFileIcons, setSystemFileIcons] = useState<Record<string, string>>({});
+  const requestedIconExtensionsRef = useRef(new Set<string>());
   const reportedSessionRef = useRef<string | null>(null);
   const listGenerationRef = useRef(0);
 
@@ -719,7 +733,7 @@ export function BrowserPage({
       setEntries([]);
       setTotal(0);
       setNextOffset(undefined);
-      void archiveClient.entries(session.sessionId, directory || undefined, search || undefined)
+      void archiveClient.entries(session.sessionId, directory || undefined, search || undefined, 0, sortKey, sortDirection)
         .then((page) => {
           if (cancelled || generation !== listGenerationRef.current) return;
           setEntries(page.entries);
@@ -737,12 +751,31 @@ export function BrowserPage({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [directory, search, session.sessionId]);
+  }, [directory, search, session.sessionId, sortDirection, sortKey]);
   useEffect(() => {
     if (!archiveClient.isTauri || loading || loadError || reportedSessionRef.current === session.sessionId) return;
     reportedSessionRef.current = session.sessionId;
     void archiveClient.recordPerformanceMarker("archive-list-first-page");
   }, [loadError, loading, session.sessionId]);
+  useEffect(() => {
+    if (!archiveClient.isTauri) return;
+    const extensions = [...new Set(entries
+      .filter((entry) => !entry.isDirectory)
+      .map((entry) => fileExtension(entry.displayName))
+      .filter(Boolean))]
+      .filter((extension) => !requestedIconExtensionsRef.current.has(extension));
+    if (!extensions.length) return;
+    extensions.forEach((extension) => requestedIconExtensionsRef.current.add(extension));
+    let cancelled = false;
+    void archiveClient.systemFileIcons(extensions)
+      .then((icons) => {
+        if (!cancelled) setSystemFileIcons((current) => ({ ...current, ...icons }));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [entries]);
 
   const visibleEntries = !archiveClient.isTauri && directory ? [] : entries;
   const shown = archiveClient.isTauri ? visibleEntries : visibleEntries.filter((entry) => entry.displayName.toLowerCase().includes(search.toLowerCase()));
@@ -758,6 +791,10 @@ export function BrowserPage({
       else next.add(path);
       return next;
     });
+  }
+  function changeSort(nextKey: EntrySortKey) {
+    setSortDirection((current) => sortKey === nextKey && current === "ascending" ? "descending" : "ascending");
+    setSortKey(nextKey);
   }
   function openDirectory(entry: ArchiveEntry) {
     if (!entry.isDirectory) return;
@@ -791,7 +828,7 @@ export function BrowserPage({
     setLoadingMore(true);
     setLoadError(null);
     try {
-      const page = await archiveClient.entries(session.sessionId, directory || undefined, search || undefined, nextOffset);
+      const page = await archiveClient.entries(session.sessionId, directory || undefined, search || undefined, nextOffset, sortKey, sortDirection);
       if (generation !== listGenerationRef.current) return;
       setEntries((current) => {
         const known = new Set(current.map((entry) => entry.path));
@@ -863,7 +900,23 @@ export function BrowserPage({
         </div>
         <div className="qzip-entry-table" role="table">
           <div className="qzip-entry-table__head" role="row">
-            <span>{text("名称", "Name")}</span><span>{text("大小", "Size")}</span><span>{text("类型", "Type")}</span><span>{text("修改时间", "Modified")}</span>
+            {([
+              ["name", text("名称", "Name")],
+              ["size", text("大小", "Size")],
+              ["type", text("类型", "Type")],
+              ["modified", text("修改时间", "Modified")]
+            ] as const).map(([key, label]) => (
+              <span key={key} role="columnheader" aria-sort={sortKey === key ? sortDirection : "none"}>
+                <button type="button" onClick={() => changeSort(key)}>
+                  {label}
+                  {sortKey === key
+                    ? sortDirection === "ascending"
+                      ? <ArrowSortUpRegular fontSize={15} />
+                      : <ArrowSortDownRegular fontSize={15} />
+                    : null}
+                </button>
+              </span>
+            ))}
           </div>
           {loading ? <Empty icon={<ArrowClockwiseRegular fontSize={34} className="qzip-spin" />} text={text("正在读取压缩包目录…", "Reading archive contents…")} /> : shown.map((entry) => (
             <button
@@ -876,7 +929,16 @@ export function BrowserPage({
               disabled={openingEntry === entry.path}
               title={entry.isDirectory ? text("双击打开文件夹", "Double-click to open folder") : text("双击使用默认应用打开", "Double-click to open with the default app")}
             >
-              <span>{openingEntry === entry.path ? <ArrowClockwiseRegular fontSize={23} className="qzip-spin" /> : entry.isDirectory ? <FolderRegular fontSize={23} /> : <DocumentRegular fontSize={23} />}{entry.displayName}{entry.encrypted ? <LockClosedRegular fontSize={14} /> : null}</span>
+              <span>
+                {openingEntry === entry.path
+                  ? <ArrowClockwiseRegular fontSize={23} className="qzip-spin" />
+                  : entry.isDirectory
+                    ? <FolderRegular fontSize={23} />
+                    : systemFileIcons[fileExtension(entry.displayName)]
+                      ? <img className="qzip-entry-row__file-icon" src={systemFileIcons[fileExtension(entry.displayName)]} alt="" aria-hidden="true" />
+                      : <DocumentRegular fontSize={23} />}
+                {entry.displayName}{entry.encrypted ? <LockClosedRegular fontSize={14} /> : null}
+              </span>
               <span>{entry.isDirectory ? "—" : formatBytes(entry.size)}</span>
               <span>{formatType(entry, locale)}</span>
               <span>{entry.modifiedAt?.replace("T", " ").slice(0, 16) ?? "—"}</span>

@@ -33,6 +33,17 @@ tauri-plugin-single-instance = "2.4.3"
 tauri-plugin-store = "2.4.4"
 tauri-plugin-updater = { version = "2.10.1", optional = true }
 
+[target.'cfg(windows)'.dependencies]
+base64 = "0.22.1"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Storage_FileSystem",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging"
+] }
+
 [features]
 default = []
 official-updater = ["dep:tauri-plugin-updater"]
