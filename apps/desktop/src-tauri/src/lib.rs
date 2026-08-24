@@ -410,6 +410,21 @@ mod shell_request_tests {
         assert_eq!(detect(Path::new("release.tgz")), ArchiveFormat::TarGz);
         assert_eq!(detect(Path::new("release.txz")), ArchiveFormat::TarXz);
     }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn detects_whether_the_optional_shell_package_is_included() {
+        let root = std::env::temp_dir().join(format!("qzip-shell-package-{}", Uuid::new_v4()));
+        let shell_root = root.join("qzip-shell");
+        std::fs::create_dir_all(&shell_root).expect("create shell package fixture");
+
+        assert!(!shell_package_is_included_at(&root));
+        std::fs::write(shell_root.join("QZip.Shell.msix"), b"fixture")
+            .expect("write shell package fixture");
+        assert!(shell_package_is_included_at(&root));
+
+        std::fs::remove_dir_all(&root).expect("remove shell package fixture");
+    }
 }
 
 fn load_settings(app: &AppHandle) -> AppSettings {
@@ -450,6 +465,22 @@ fn sidecar_path(app: &AppHandle) -> PathBuf {
 }
 
 #[cfg(target_os = "windows")]
+fn shell_package_is_included_at(install_path: &Path) -> bool {
+    install_path
+        .join("qzip-shell")
+        .join("QZip.Shell.msix")
+        .is_file()
+}
+
+#[cfg(target_os = "windows")]
+fn shell_package_is_included() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|executable| executable.parent().map(Path::to_path_buf))
+        .is_some_and(|install_path| shell_package_is_included_at(&install_path))
+}
+
+#[cfg(target_os = "windows")]
 fn shell_registration_is_missing() -> bool {
     !Command::new("powershell.exe")
         .args([
@@ -468,6 +499,9 @@ fn shell_registration_is_missing() -> bool {
 
 #[cfg(target_os = "windows")]
 fn retry_shell_registration_after_launch() {
+    if !shell_package_is_included() {
+        return;
+    }
     if !shell_registration_is_missing() {
         return;
     }
@@ -914,14 +948,19 @@ fn reset_app_settings(state: State<'_, AppState>, app: AppHandle) -> Result<AppS
 #[tauri::command]
 fn get_integration_status() -> IntegrationStatus {
     #[cfg(target_os = "windows")]
-    let registered = Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", "if (Get-AppxPackage -Name 'app.qzip.desktop.shell' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .status()
-        .is_ok_and(|status| status.success());
+    let modern_context_menu_available = shell_package_is_included();
+    #[cfg(not(target_os = "windows"))]
+    let modern_context_menu_available = false;
+    #[cfg(target_os = "windows")]
+    let registered = modern_context_menu_available
+        && Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", "if (Get-AppxPackage -Name 'app.qzip.desktop.shell' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .is_ok_and(|status| status.success());
     #[cfg(not(target_os = "windows"))]
     let registered = false;
     #[cfg(target_os = "windows")]
@@ -938,7 +977,7 @@ fn get_integration_status() -> IntegrationStatus {
     IntegrationStatus {
         platform: std::env::consts::OS.to_owned(),
         file_associations_declared,
-        modern_context_menu_available: cfg!(target_os = "windows"),
+        modern_context_menu_available,
         modern_context_menu_registered: registered,
         updater_configured: cfg!(feature = "official-updater"),
         distribution: if cfg!(feature = "official-updater") {

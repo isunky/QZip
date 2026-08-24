@@ -13,7 +13,7 @@ on:
         default: true
         type: boolean
       mode:
-        description: build-only uploads an internal artifact; publish creates a GitHub Release after trusted-signature verification
+        description: build-only uploads an artifact; publish creates a GitHub Release, using unsigned feature degradation when trusted signing is unavailable
         required: true
         default: build-only
         type: choice
@@ -39,7 +39,7 @@ jobs:
       release_label: ${{ steps.metadata.outputs.release_label }}
       tag: ${{ steps.metadata.outputs.tag }}
       prerelease: ${{ steps.metadata.outputs.prerelease }}
-      trusted_signing: ${{ steps.signing.outputs.enabled }}
+      signing_mode: ${{ steps.build.outputs.signing_mode }}
     env:
       WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
       WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
@@ -84,48 +84,86 @@ jobs:
         run: pnpm test:core:windows
       - id: signing
         name: Prepare trusted signing credentials when available
+        continue-on-error: true
         shell: pwsh
         env:
           RELEASE_MODE: ${{ inputs.mode }}
         run: |
+          "enabled=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
           if ($env:RELEASE_MODE -ne 'publish') {
-            "enabled=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
             exit 0
           }
           $required = @('WINDOWS_PFX_BASE64', 'WINDOWS_PFX_PASSWORD', 'QZIP_WINDOWS_PUBLISHER')
           $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
           if ($missing) {
-            $message = "Trusted Windows signing is unavailable because these values are not configured: $($missing -join ', '). Building an internal development-signed artifact and skipping GitHub Release publishing."
+            $message = "Trusted Windows signing is unavailable because these values are not configured: $($missing -join ', '). Building a clean unsigned-degraded artifact; publish mode will still create a GitHub Release with a warning."
             Write-Warning $message
             "### Trusted signing skipped`n`n$message" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
-            "enabled=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
             exit 0
           }
-          $pfx = Join-Path $env:RUNNER_TEMP 'qzip-signing.pfx'
-          [System.IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
-          "QZIP_WINDOWS_PFX_PATH=$pfx" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
-          "enabled=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
-      - name: Build NSIS installer
+          try {
+            $pfx = Join-Path $env:RUNNER_TEMP 'qzip-signing.pfx'
+            [System.IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+            $securePassword = ConvertTo-SecureString $env:WINDOWS_PFX_PASSWORD -AsPlainText -Force
+            $certificate = Get-PfxCertificate -FilePath $pfx -Password $securePassword
+            if (-not $certificate -or $certificate.Subject -notlike "*$env:QZIP_WINDOWS_PUBLISHER*") {
+              throw 'The PFX certificate does not match QZIP_WINDOWS_PUBLISHER.'
+            }
+            "QZIP_WINDOWS_PFX_PATH=$pfx" | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding utf8
+            "enabled=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          }
+          catch {
+            $message = "Trusted Windows signing credentials could not be prepared: $($_.Exception.Message). The workflow will build an unsigned-degraded release."
+            Write-Warning $message
+            "### Trusted signing unavailable`n`n$message" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          }
+      - id: signed_build
+        name: Attempt trusted NSIS build
+        if: steps.signing.outputs.enabled == 'true'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -Release
+      - id: build
+        name: Finalize trusted or unsigned-degraded NSIS build
         shell: pwsh
         env:
-          TRUSTED_SIGNING: ${{ steps.signing.outputs.enabled }}
+          SIGNING_ENABLED: ${{ steps.signing.outputs.enabled }}
+          SIGNED_BUILD_OUTCOME: ${{ steps.signed_build.outcome }}
         run: |
-          if ($env:TRUSTED_SIGNING -eq 'true') {
-            powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -Release
-          } else {
-            powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -CiDevelopmentSigning
+          if ($env:SIGNING_ENABLED -eq 'true' -and $env:SIGNED_BUILD_OUTCOME -eq 'success') {
+            "signing_mode=trusted" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+            exit 0
           }
+          if ($env:SIGNING_ENABLED -eq 'true') {
+            $message = 'The trusted signing build failed. Rebuilding a clean unsigned-degraded installer instead.'
+            Write-Warning $message
+            "### Trusted build fallback`n`n$message" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          }
+          $staleSignedOutputs = @(
+            (Join-Path $env:GITHUB_WORKSPACE 'target\release\bundle'),
+            (Join-Path $env:GITHUB_WORKSPACE 'target\release\qzip-desktop.exe')
+          )
+          foreach ($output in $staleSignedOutputs) {
+            if (-not (Test-Path -LiteralPath $output)) { continue }
+            $resolved = [IO.Path]::GetFullPath($output)
+            $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd('\') + '\'
+            if (-not $resolved.StartsWith($workspace, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe signed-output cleanup path: $resolved" }
+            Remove-Item -LiteralPath $resolved -Recurse -Force
+          }
+          powershell -ExecutionPolicy Bypass -File scripts/build-nsis.ps1 -UnsignedRelease
+          "signing_mode=unsigned-degraded" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
       - name: Assemble and verify NSIS release assets
         shell: pwsh
         env:
           RELEASE_LABEL: ${{ steps.metadata.outputs.release_label }}
-          TRUSTED_SIGNING: ${{ steps.signing.outputs.enabled }}
+          SIGNING_MODE: ${{ steps.build.outputs.signing_mode }}
         run: |
-          powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version $env:RELEASE_LABEL -SkipBundle
-          if ($env:TRUSTED_SIGNING -eq 'true') {
-            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
+          powershell -ExecutionPolicy Bypass -File scripts/prepare-rc-release.ps1 -Version $env:RELEASE_LABEL -SkipBundle -SigningMode $env:SIGNING_MODE -Publisher $env:QZIP_WINDOWS_PUBLISHER
+          if ($env:SIGNING_MODE -eq 'trusted') {
+            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -ExpectedSigningMode trusted -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
           } else {
-            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL
+            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -ExpectedSigningMode unsigned-degraded
           }
       - uses: actions/attest-build-provenance@v2
         with:
@@ -138,7 +176,7 @@ jobs:
 
   publish:
     name: publish-github-release
-    if: inputs.mode == 'publish' && needs.build-nsis.outputs.trusted_signing == 'true'
+    if: inputs.mode == 'publish'
     needs: build-nsis
     runs-on: windows-2022
     steps:
@@ -147,13 +185,18 @@ jobs:
         with:
           name: qzip-nsis
           path: artifacts/release/${{ needs.build-nsis.outputs.release_label }}
-      - name: Verify signed release assets
+      - name: Verify release assets
         shell: pwsh
         env:
           QZIP_WINDOWS_PUBLISHER: ${{ vars.QZIP_WINDOWS_PUBLISHER }}
           RELEASE_LABEL: ${{ needs.build-nsis.outputs.release_label }}
+          SIGNING_MODE: ${{ needs.build-nsis.outputs.signing_mode }}
         run: |
-          powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
+          if ($env:SIGNING_MODE -eq 'trusted') {
+            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -ExpectedSigningMode trusted -RequireTrustedSignature -ExpectedPublisher $env:QZIP_WINDOWS_PUBLISHER
+          } else {
+            powershell -ExecutionPolicy Bypass -File scripts/verify-release-assets.ps1 -Version $env:RELEASE_LABEL -ExpectedSigningMode unsigned-degraded
+          }
       - name: Create GitHub Release
         shell: pwsh
         env:
@@ -162,8 +205,20 @@ jobs:
           RELEASE_LABEL: ${{ needs.build-nsis.outputs.release_label }}
           PRERELEASE: ${{ needs.build-nsis.outputs.prerelease }}
           TARGET_SHA: ${{ github.sha }}
+          SIGNING_MODE: ${{ needs.build-nsis.outputs.signing_mode }}
         run: |
           $arguments = @('release', 'create', $env:TAG, "artifacts/release/$env:RELEASE_LABEL/*", '--target', $env:TARGET_SHA, '--generate-notes', '--title', "QZip $env:TAG")
           if ($env:PRERELEASE -eq 'true') { $arguments += '--prerelease' }
+          if ($env:SIGNING_MODE -eq 'unsigned-degraded') {
+            $warning = @'
+          > [!WARNING]
+          > 此版本未使用受信任的 Authenticode 证书签名，Windows 可能显示“未知发布者”或 SmartScreen 提示。
+          > Windows 11 一级现代右键菜单已禁用；应用界面、“打开方式/QZip”和文件关联仍可正常使用。
+          > 请使用随 Release 提供的 `checksums-sha256.txt` 验证安装包。
+
+          This build is unsigned and feature-degraded. Windows may show an Unknown Publisher or SmartScreen warning. The Windows 11 modern context menu is unavailable; core archive features and file associations remain available.
+          '@
+            $arguments += @('--notes', $warning)
+          }
           & gh @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

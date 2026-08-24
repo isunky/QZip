@@ -440,13 +440,24 @@ FunctionEnd
   WriteRegStr HKCU "Software\Classes\QZip.Archive\DefaultIcon" "" "$INSTDIR\file-icons\archive.ico"
   WriteRegStr HKCU "Software\Classes\QZip.Archive\shell\open\command" "" '"$INSTDIR\qzip-desktop.exe" "%1"'
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
-  DetailPrint "QZip Explorer commands will register when QZip first starts"
+  ${If} ${FileExists} "$INSTDIR\qzip-shell\QZip.Shell.msix"
+    DetailPrint "QZip Explorer commands will register when QZip first starts"
+  ${Else}
+    ${If} ${FileExists} "$INSTDIR\qzip-shell\Unregister-QZipShell.ps1"
+      DetailPrint "Removing unavailable QZip Explorer commands for this unsigned build"
+      nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\qzip-shell\Unregister-QZipShell.ps1"'
+      Pop $0
+    ${EndIf}
+    DetailPrint "Windows 11 modern context-menu commands are unavailable in this unsigned build"
+  ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
-  DetailPrint "Removing QZip Explorer commands"
-  nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\qzip-shell\Unregister-QZipShell.ps1"'
-  Pop $0
+  ${If} ${FileExists} "$INSTDIR\qzip-shell\Unregister-QZipShell.ps1"
+    DetailPrint "Removing QZip Explorer commands"
+    nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\qzip-shell\Unregister-QZipShell.ps1"'
+    Pop $0
+  ${EndIf}
   DetailPrint "Restoring file associations previously owned by QZip"
   !insertmacro QZipUninstallAssociation "7z" ".7z" "QZip.Archive.7z" "7-Zip Archive"
   !insertmacro QZipUninstallAssociation "zip" ".zip" "QZip.Archive.zip" "ZIP Archive"

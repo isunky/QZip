@@ -139,7 +139,7 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
 
           <SettingsSection id="system" icon={<ShieldCheckmarkRegular fontSize={23} />} title={text("系统、更新与隐私", "System, updates & privacy")}>
             <div className="qzip-setting-status"><span>{text("文件关联", "File associations")}</span><strong>{status?.fileAssociationsDeclared ? text("安装时已选择文件关联", "File associations were selected during installation") : text("尚未选择文件关联", "No file associations selected")}</strong><Button variant="tertiary" icon={<OpenRegular fontSize={18} />} onClick={() => void settingsClient.openDefaultApps().catch((reason) => onToast(String(reason)))}>{text("默认应用设置", "Default apps")}</Button></div>
-            <div className="qzip-setting-status"><span>Windows 11 {text("右键菜单", "context menu")}</span><strong>{status?.modernContextMenuRegistered ? text("已注册", "Registered") : text("未注册或当前安装包不包含系统集成", "Not registered or unavailable in this build")}</strong></div>
+            <div className="qzip-setting-status"><span>Windows 11 {text("右键菜单", "context menu")}</span><strong>{!status ? text("正在检查", "Checking") : !status.modernContextMenuAvailable ? text("当前无签名版本不包含此功能", "Unavailable in this unsigned build") : status.modernContextMenuRegistered ? text("已注册", "Registered") : text("尚未注册", "Not registered")}</strong></div>
             <Toggle checked={settings.checkUpdatesOnStartup} onChange={(checkUpdatesOnStartup) => void patch({ checkUpdatesOnStartup })} label={text("启动时检查更新", "Check for updates at startup")} disabled={!status?.updaterConfigured} hint={status?.updaterConfigured ? text("仅官方签名发行包可用。", "Available only in officially signed releases.") : text("当前发行包尚未配置官方更新服务。", "The official update service is not configured for this build.")} />
             <div className="qzip-setting-status"><span>{text("更新服务", "Update service")}</span><strong>{status?.updaterConfigured ? text("已配置", "Configured") : text("未配置", "Not configured")}</strong><Button variant="secondary" loading={checking} disabled={!status?.updaterConfigured} onClick={() => void checkUpdates()}>{text("检查更新", "Check for updates")}</Button></div>
             <Toggle checked={false} onChange={() => undefined} disabled label={text("使用情况遥测", "Usage telemetry")} hint={text("轻压不收集遥测数据，此项永久关闭。", "QZip does not collect telemetry. This setting is permanently off.")} />
@@ -147,7 +147,7 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
 
           <SettingsSection id="about" icon={<InfoRegular fontSize={23} />} title={text("关于", "About")}>
             <div className="qzip-about">
-              <span>{brandName} {status?.appVersion ?? "1.0.0-rc.2"}</span>
+              <span>{brandName} {status?.appVersion ?? "1.0.0"}</span>
               <span>{text("本地优先的压缩与解压工具", "A local-first compression and extraction tool")}</span>
               <a href="https://github.com/isunky/QZip" target="_blank" rel="noreferrer">GitHub <ChevronRightRegular fontSize={17} /></a>
             </div>

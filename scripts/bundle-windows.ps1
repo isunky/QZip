@@ -3,6 +3,7 @@ param(
   [switch]$InstallDevCertificate,
   [switch]$CiDevelopmentSigning,
   [switch]$Release,
+  [switch]$UnsignedRelease,
   [ValidateSet('nsis', 'msi')]
   [string[]]$Bundles = @('nsis', 'msi')
 )
@@ -33,22 +34,22 @@ if ($PSVersionTable.PSEdition -eq 'Desktop') {
   if (-not [string]::IsNullOrWhiteSpace($windowsPowerShellModulePath)) { $env:PSModulePath = $windowsPowerShellModulePath }
 }
 if ($Release) { Import-Module Microsoft.PowerShell.Security -ErrorAction Stop }
-if ($Release -and ($InstallDevCertificate -or $CiDevelopmentSigning)) {
-  throw 'Release, InstallDevCertificate, and CiDevelopmentSigning cannot be used together.'
-}
-if ($InstallDevCertificate -and $CiDevelopmentSigning) {
-  throw 'InstallDevCertificate and CiDevelopmentSigning cannot be used together.'
+if (@($InstallDevCertificate, $CiDevelopmentSigning, $Release, $UnsignedRelease).Where({ $_ }).Count -gt 1) {
+  throw 'InstallDevCertificate, CiDevelopmentSigning, Release, and UnsignedRelease are mutually exclusive.'
 }
 if ($Release -and (-not $env:QZIP_WINDOWS_PFX_PATH -or -not $env:QZIP_WINDOWS_PFX_PASSWORD -or -not $env:QZIP_WINDOWS_PUBLISHER)) {
   throw 'Release builds require QZIP_WINDOWS_PFX_PATH, QZIP_WINDOWS_PFX_PASSWORD, and QZIP_WINDOWS_PUBLISHER.'
 }
 & (Join-Path $PSScriptRoot 'fetch-sevenzip.ps1') -VerifyOnly
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& (Join-Path $PSScriptRoot 'build-windows-shell-integration.ps1') -InstallDevCertificate:$InstallDevCertificate -CiDevelopmentSigning:$CiDevelopmentSigning -Release:$Release
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$tauriBundleConfig = if ($UnsignedRelease) { 'tauri.windows.unsigned.bundle.json' } else { 'tauri.windows.bundle.json' }
+if (-not $UnsignedRelease) {
+  & (Join-Path $PSScriptRoot 'build-windows-shell-integration.ps1') -InstallDevCertificate:$InstallDevCertificate -CiDevelopmentSigning:$CiDevelopmentSigning -Release:$Release
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 
 Write-Host "Using workspace package manager $packageManager via Corepack..." -ForegroundColor DarkCyan
-Invoke-WorkspacePnpm -CommandArguments @('--filter', '@qzip/desktop', 'tauri', 'build', '--no-bundle', '--config', 'tauri.windows.bundle.json')
+Invoke-WorkspacePnpm -CommandArguments @('--filter', '@qzip/desktop', 'tauri', 'build', '--no-bundle', '--config', $tauriBundleConfig)
 
 if ($Release) {
   $signTool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } | Sort-Object FullName -Descending | Select-Object -First 1
@@ -62,7 +63,7 @@ if ($Release) {
   }
 }
 
-Invoke-WorkspacePnpm -CommandArguments @('--filter', '@qzip/desktop', 'tauri', 'bundle', '--bundles', ($Bundles -join ','), '--config', 'tauri.windows.bundle.json')
+Invoke-WorkspacePnpm -CommandArguments @('--filter', '@qzip/desktop', 'tauri', 'bundle', '--bundles', ($Bundles -join ','), '--config', $tauriBundleConfig)
 
 if ($Release) {
   $bundleRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'target\release\bundle'

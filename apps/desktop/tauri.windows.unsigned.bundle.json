@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "../../../third_party/7zip/bin/win-x64/7z.exe": "7zip/7z.exe",
+      "../../../third_party/7zip/bin/win-x64/7z.dll": "7zip/7z.dll",
+      "../../../native/windows/qzip-shell/Unregister-QZipShell.ps1": "qzip-shell/Unregister-QZipShell.ps1",
+      "icons/file-types/7z.ico": "file-icons/7z.ico",
+      "icons/file-types/zip.ico": "file-icons/zip.ico",
+      "icons/file-types/rar.ico": "file-icons/rar.ico",
+      "icons/file-types/tar.ico": "file-icons/tar.ico",
+      "icons/file-types/gz.ico": "file-icons/gz.ico",
+      "icons/file-types/tgz.ico": "file-icons/tgz.ico",
+      "icons/file-types/xz.ico": "file-icons/xz.ico",
+      "icons/file-types/txz.ico": "file-icons/txz.ico",
+      "icons/file-types/bz2.ico": "file-icons/bz2.ico",
+      "icons/file-types/iso.ico": "file-icons/iso.ico",
+      "icons/file-types/cab.ico": "file-icons/cab.ico",
+      "icons/file-types/wim.ico": "file-icons/wim.ico",
+      "icons/file-types/archive.ico": "file-icons/archive.ico"
+    }
+  }
+}

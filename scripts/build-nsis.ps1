@@ -2,6 +2,7 @@
 param(
   [switch]$Release,
   [switch]$CiDevelopmentSigning,
+  [switch]$UnsignedRelease,
   [switch]$OpenOutput
 )
 
@@ -15,9 +16,10 @@ $bundleArguments = @{
   Bundles = @('nsis')
   Release = $Release
   CiDevelopmentSigning = $CiDevelopmentSigning
+  UnsignedRelease = $UnsignedRelease
 }
 if (-not $Release) {
-  if (-not $CiDevelopmentSigning) {
+  if (-not $CiDevelopmentSigning -and -not $UnsignedRelease) {
     # Local sparse MSIX shell integration needs a current-user development certificate.
     $bundleArguments.InstallDevCertificate = $true
   }
