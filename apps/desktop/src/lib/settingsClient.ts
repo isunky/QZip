@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AppSettings, AppSettingsPatch, IntegrationStatus, UpdateCheckResult } from "../contracts/settings";
 import { defaultAppSettings } from "../contracts/settings";
+import desktopPackage from "../../package.json";
 
 const isTauri = "__TAURI_INTERNALS__" in window;
 let previewSettings: AppSettings = { ...defaultAppSettings };
@@ -15,7 +16,7 @@ export const settingsClient = {
   reset: () => isTauri ? command<AppSettings>("reset_app_settings") : Promise.resolve(previewSettings = { ...defaultAppSettings }),
   integration: () => isTauri ? command<IntegrationStatus>("get_integration_status") : Promise.resolve({
     platform: "web-preview", fileAssociationsDeclared: false, modernContextMenuAvailable: false,
-    modernContextMenuRegistered: false, updaterConfigured: false, distribution: "web-preview", appVersion: "0.1.0"
+    modernContextMenuRegistered: false, updaterConfigured: false, distribution: "web-preview", appVersion: desktopPackage.version
   }),
   openDefaultApps: () => command<void>("open_default_apps_settings"),
   checkForUpdates: () => isTauri ? command<UpdateCheckResult>("check_for_updates") : Promise.resolve({ configured: false, status: "unconfigured" as const })

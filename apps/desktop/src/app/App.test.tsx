@@ -38,4 +38,22 @@ describe("App appearance controls", () => {
       expect(document.title).toBe("QZip");
     });
   });
+
+  it("keeps system settings and the about page visually separate", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "系统与更新" }));
+    expect(screen.getByRole("heading", { name: "系统与更新" })).toBeInTheDocument();
+    expect(screen.getByText("系统集成")).toBeInTheDocument();
+    expect(screen.queryByText("使用情况遥测")).not.toBeInTheDocument();
+    expect(screen.queryByText("轻压 · QZip")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "关于" }));
+    expect(screen.getByRole("heading", { name: "关于轻压" })).toBeInTheDocument();
+    expect(screen.getByText("轻压 · QZip")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "轻压应用图标" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /GitHub 项目/ })).toBeInTheDocument();
+    expect(screen.queryByText("系统集成")).not.toBeInTheDocument();
+  });
 });

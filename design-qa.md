@@ -1,33 +1,52 @@
-# Settings independent-selection design QA
+# Settings redesign visual QA
 
-## Comparison target
+- Source visual truth: `C:\Users\ZXHY-NB\.codex\generated_images\019fa95a-8852-7732-bae4-917cf8a3c0be\exec-f322315b-bf82-4ef9-926f-9db95daf4f3a.png`
+- Source dimensions: 1774 × 887 px design board containing the System and About targets.
+- Implementation screenshots: `design-qa-system.png`, `design-qa-about.png`, `design-qa-about-compact.png`, `design-qa-about-dark.png`.
+- Combined comparison evidence: `design-qa-comparison.png`.
+- Primary viewport: 1626 × 1086 CSS px and screenshot pixels, density normalized at 1:1.
+- Additional viewports: 900 × 700 light compact state; 1200 × 800 dark state.
+- State: Chinese UI, mint accent, System & updates selected and About selected.
 
-- Source: latest user-reported settings screenshot (`C:/Users/HB-SUN~1/AppData/Local/Temp/codex-clipboard-2ac714f2-d95d-4047-88a8-eaf92afd0d67.png`).
-- Implementation: `http://127.0.0.1:1420/`, Settings > Appearance, light mode and mint accent.
-- Implementation evidence: `artifacts/design-qa/settings-segmented-pill-style.png`.
-- Combined comparison: `artifacts/design-qa/settings-source-vs-pill-style.png`.
-- Comparison crops were normalized to the same visible settings region before visual review.
+## Full-view comparison evidence
 
-## Result
+The implementation preserves the reference hierarchy: persistent settings navigation, a compact page heading, separate modular system cards, a centered brand card, and a two-column About link card. The user-requested privacy card is intentionally omitted and the navigation label is updated to “系统与更新”. The implementation uses the existing app background and production header rather than the design board's presentation canvas.
 
-- P1 fixed: the shared-edge segmented style was replaced with independent inset selection cards.
-- Every selected item now owns a complete one-pixel accent border, a small internal radius, and a subtle elevation shadow.
-- The control group uses visible overflow and a three-pixel inner gap, so first and final selections cannot be clipped by the parent edge.
-- Keyboard focus uses a separate two-pixel outline and does not affect layout dimensions.
+## Focused region comparison evidence
 
-## Verification
+- System cards: status pills, row dividers, aligned actions, and update controls match the reference structure. Folder associations and unsigned-update states remain connected to real application status.
+- About hero: the production 256 px app icon is used at a crisp 144 px slot, followed by product name, version badge, and one-line positioning copy.
+- About actions: GitHub, update, license, and feedback are arranged in the reference two-column grid and remain keyboard accessible.
+- Responsive behavior: at 900 × 700 the cards retain readable spacing without horizontal overflow; vertical scrolling remains available.
+- Dark theme: colors map to existing QZip tokens, maintaining legible borders, status pills, icons, and secondary copy.
 
-- Checked all settings segmented controls: theme, accent, UI scale, density, default archive format, compression level, and conflict policy.
-- Exercised a final-position option (`青灰`) and confirmed a complete `1px solid` active border, visible overflow, and the expected shadow.
-- Restored the default mint accent after the interaction check.
-- UI and desktop TypeScript checks, desktop Vitest (`7/7`), and the production web build pass.
-- Browser console: no errors.
+## Required fidelity surfaces
+
+- Fonts and typography: existing Segoe UI Variable / Microsoft YaHei UI stack retained; page, card, status, and secondary-copy weights establish the same hierarchy as the mock.
+- Spacing and layout rhythm: 900 px content rail, 18–22 px card gaps, compact row heights, consistent 16 px radii, and aligned sidebar spacing match the selected direction.
+- Colors and visual tokens: all surfaces use QZip theme tokens; mint accent and soft selected states remain consistent in light and dark modes.
+- Image quality and asset fidelity: the existing high-resolution QZip fox icon is used directly; no placeholder, CSS-drawn logo, or generated replacement is present.
+- Copy and content: system integration and updates are concise; privacy/telemetry content is removed; About copy is user-facing and bilingual.
 
 ## Comparison history
 
-1. Before: selected borders shared the group edge and visually disappeared at the first item's rounded left edge.
-2. First correction retained the shared-edge visual model and did not fully remove the perceived clipping in the user's environment.
-3. Final correction changes the component model: each selected option is inset from the group surface and renders its own complete border.
-4. After: the combined comparison shows consistent breathing room and an uninterrupted border on all four sides of each selected item.
+1. Initial implementation comparison found two P2 polish issues: the About logo read too small at standard scale, and the selected sidebar item inherited a dark browser focus outline.
+2. The logo slot was increased from 116 px to 144 px and the focus-visible treatment was mapped to the active accent color.
+3. Revised standard, compact, and dark screenshots show the fixes with no remaining P0, P1, or P2 differences.
+
+## Interaction and runtime checks
+
+- Tested navigation between Appearance, System & updates, and About.
+- Tested switching from light to dark mode and returning to light mode.
+- Verified the About links and update action are exposed as interactive controls.
+- Checked browser console warnings and errors: none.
+
+## Findings
+
+No actionable P0, P1, or P2 findings remain. The only intentional design deviation is removal of the privacy card, as requested.
+
+## Follow-up polish
+
+- P3: the unsigned web-preview state makes update controls muted by design; signed release builds will display the enabled state.
 
 final result: passed
