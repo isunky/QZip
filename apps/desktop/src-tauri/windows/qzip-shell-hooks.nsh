@@ -15,8 +15,6 @@
   LangString QZipAssocSubtitle ${LANG_SIMPCHINESE} "选择要由 QZip 打开的压缩文件类型。Windows 可能仍会要求确认默认应用。"
   LangString QZipAssocSelectAll ${LANG_ENGLISH} "Select all"
   LangString QZipAssocSelectAll ${LANG_SIMPCHINESE} "全选"
-  LangString QZipAssocOpenDefaults ${LANG_ENGLISH} "Open Windows Default Apps settings after installation"
-  LangString QZipAssocOpenDefaults ${LANG_SIMPCHINESE} "安装完成后打开 Windows 默认应用设置"
   LangString QZipAssoc7z ${LANG_ENGLISH} "7Z archive (.7z)"
   LangString QZipAssoc7z ${LANG_SIMPCHINESE} "7Z 压缩包 (.7z)"
   LangString QZipAssocZip ${LANG_ENGLISH} "ZIP archive (.zip)"
@@ -56,9 +54,7 @@ Var QZipAssocBz2
 Var QZipAssocIso
 Var QZipAssocCab
 Var QZipAssocWim
-Var QZipOpenDefaultsCheckbox
 Var QZipSelectionLoaded
-Var QZipOpenDefaultsState
 Var QZipState7z
 Var QZipStateZip
 Var QZipStateRar
@@ -206,17 +202,11 @@ Var QZipStateWim
   Call QZipPersistAssociationSelection
 !macroend
 
-!macro QZIP_FINISH_PAGE_OPTIONS
-  !define MUI_PAGE_CUSTOMFUNCTION_SHOW QZipFinishPageShow
-  !define MUI_PAGE_CUSTOMFUNCTION_LEAVE QZipFinishPageLeave
-!macroend
-
 Function QZipLoadAssociationSelection
   ${If} $QZipSelectionLoaded == 1
     Return
   ${EndIf}
   StrCpy $QZipSelectionLoaded 1
-  StrCpy $QZipOpenDefaultsState ${BST_CHECKED}
   ClearErrors
   ReadRegDWORD $0 HKCU "${QZIP_ASSOC_KEY}" "Initialized"
   ${IfNot} ${Errors}
@@ -385,28 +375,6 @@ Function QZipAnyAssociationSelected
   ${OrIf} $QZipStateCab == ${BST_CHECKED}
   ${OrIf} $QZipStateWim == ${BST_CHECKED}
     StrCpy $0 1
-  ${EndIf}
-FunctionEnd
-
-Function QZipFinishPageShow
-  Call QZipAnyAssociationSelected
-  ${If} $0 != 1
-    Return
-  ${EndIf}
-  ; The MUI finish page is 193 dialog units high. Place this below the built-in
-  ; Run QZip and desktop-shortcut choices, while keeping it inside the page.
-  ${NSD_CreateCheckbox} 120u 132u 195u 20u "$(QZipAssocOpenDefaults)"
-  Pop $QZipOpenDefaultsCheckbox
-  ${NSD_SetState} $QZipOpenDefaultsCheckbox $QZipOpenDefaultsState
-FunctionEnd
-
-Function QZipFinishPageLeave
-  ${If} $QZipOpenDefaultsCheckbox == ""
-    Return
-  ${EndIf}
-  ${NSD_GetState} $QZipOpenDefaultsCheckbox $QZipOpenDefaultsState
-  ${If} $QZipOpenDefaultsState == ${BST_CHECKED}
-    ExecShell "open" "ms-settings:defaultapps?registeredAppUser=QZip"
   ${EndIf}
 FunctionEnd
 

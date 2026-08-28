@@ -57,7 +57,7 @@
 
 - [x] NSIS 新增“文件关联”安装步骤，可逐项选择 7Z、ZIP、RAR、TAR、GZ、TGZ、XZ、TXZ、BZ2、ISO、CAB 与 WIM；全新安装默认勾选 7Z、ZIP、RAR。
 - [x] 选择结果写入当前用户注册表，覆盖安装会保留原选择；取消勾选或卸载时会恢复安装前由 QZip 接管的扩展名默认值并清理能力注册。
-- [x] 安装完成页默认勾选“打开 Windows 默认应用设置”。安装器只注册 `Capabilities`/`RegisteredApplications`，不修改 Windows 受保护的 `UserChoice`；需要用户确认的格式由系统设置完成。
+- [x] 安装器只注册 `Capabilities`/`RegisteredApplications`，不修改 Windows 受保护的 `UserChoice`；需要用户确认的格式由系统设置完成。安装完成页不再自动提供打开系统默认应用设置的选项。
 - [x] 应用设置页改为读取实际文件关联能力注册状态，并可直达 QZip 的 Windows 默认应用设置页。
 - [x] 自定义中英文 NSIS 模板已通过真实打包；已目视确认中文文件关联页的标题、说明、全选和 12 个格式标签正常显示。开发签名构建产物为 `target/release/bundle/nsis/QZip_1.0.0_x64-setup.exe`，SHA-256 为 `2FE4DF31C709A375BCBF6324B07E8AC4481DF1EAF0061865C72924BC85C707D8`。升级保留和卸载恢复仍需人工安装验收。
 

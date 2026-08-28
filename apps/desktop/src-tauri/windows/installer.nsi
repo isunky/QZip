@@ -428,9 +428,6 @@ Var AppStartMenuFolder
 ; Show run app after installation.
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_FUNCTION RunMainBinary
-!ifmacrodef QZIP_FINISH_PAGE_OPTIONS
-  !insertmacro QZIP_FINISH_PAGE_OPTIONS
-!endif
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
 !insertmacro MUI_PAGE_FINISH
 
