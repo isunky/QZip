@@ -863,7 +863,7 @@ fn commit_extraction(
             "解压暂存目录已丢失",
         ));
     }
-    if !output.exists() {
+    if !path_exists(output) {
         fs::rename(staging, output).map_err(|_| {
             ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法提交解压结果")
         })?;
@@ -875,21 +875,91 @@ fn commit_extraction(
             "解压目标不是安全目录",
         ));
     }
-    merge_directory(staging, output, policy)?;
+    let mut journal = ExtractionJournal::default();
+    if let Err(error) = merge_directory(staging, output, policy, &mut journal) {
+        journal.rollback()?;
+        return Err(error);
+    }
+    journal.finalize();
     Ok(())
+}
+
+#[derive(Default)]
+struct ExtractionJournal {
+    created_files: Vec<PathBuf>,
+    created_directories: Vec<PathBuf>,
+    replaced_files: Vec<ReplacedFile>,
+}
+
+struct ReplacedFile {
+    target: PathBuf,
+    backup: PathBuf,
+}
+
+impl ExtractionJournal {
+    fn rollback(self) -> Result<(), ArchiveError> {
+        let mut rollback_error = None;
+        for path in self.created_files.into_iter().rev() {
+            if path_exists(&path)
+                && let Err(error) = fs::remove_file(&path)
+            {
+                rollback_error
+                    .get_or_insert_with(|| map_file_write_error(error, "无法回滚新建的解压文件"));
+            }
+        }
+        for path in self.created_directories.into_iter().rev() {
+            if path_exists(&path)
+                && let Err(error) = fs::remove_dir(&path)
+            {
+                rollback_error.get_or_insert_with(|| {
+                    ArchiveError::new(
+                        ArchiveErrorCode::CleanupFailed,
+                        format!("无法回滚新建的解压目录: {error}"),
+                    )
+                });
+            }
+        }
+        for replacement in self.replaced_files.into_iter().rev() {
+            if path_exists(&replacement.target)
+                && let Err(error) = fs::remove_file(&replacement.target)
+            {
+                rollback_error
+                    .get_or_insert_with(|| map_file_write_error(error, "无法回滚被替换的解压文件"));
+                continue;
+            }
+            if let Err(error) = fs::rename(&replacement.backup, &replacement.target) {
+                rollback_error.get_or_insert_with(|| {
+                    ArchiveError::new(
+                        ArchiveErrorCode::CleanupFailed,
+                        format!("无法恢复原有解压文件: {error}"),
+                    )
+                });
+            }
+        }
+        rollback_error.map_or(Ok(()), Err)
+    }
+
+    fn finalize(self) {
+        for replacement in self.replaced_files {
+            let _ = fs::remove_file(replacement.backup);
+        }
+    }
 }
 
 fn merge_directory(
     source: &Path,
     target: &Path,
     policy: ConflictPolicy,
+    journal: &mut ExtractionJournal,
 ) -> Result<(), ArchiveError> {
-    for entry in fs::read_dir(source).map_err(|_| {
-        ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法读取解压暂存目录")
-    })? {
-        let entry = entry.map_err(|_| {
+    let mut entries = fs::read_dir(source)
+        .map_err(|_| ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法读取解压暂存目录"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| {
             ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法读取解压暂存条目")
         })?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
         let source_path = entry.path();
         if path_is_link_or_reparse(&source_path)? {
             return Err(ArchiveError::new(
@@ -897,9 +967,14 @@ fn merge_directory(
                 "解压结果包含不安全链接",
             ));
         }
-        let is_directory = entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false);
+        let is_directory = entry
+            .file_type()
+            .map_err(|_| {
+                ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法读取解压条目类型")
+            })?
+            .is_dir();
         let mut target_path = target.join(entry.file_name());
-        if target_path.exists() {
+        if path_exists(&target_path) {
             if path_is_link_or_reparse(&target_path)? {
                 return Err(ArchiveError::new(
                     ArchiveErrorCode::UnsafePath,
@@ -907,20 +982,20 @@ fn merge_directory(
                 ));
             }
             if is_directory && target_path.is_dir() {
-                merge_directory(&source_path, &target_path, policy)?;
+                merge_directory(&source_path, &target_path, policy, journal)?;
                 continue;
             }
             match policy {
                 ConflictPolicy::Rename => target_path = renamed_path(&target_path),
                 ConflictPolicy::Overwrite => {
-                    if target_path.is_dir() {
+                    if is_directory || target_path.is_dir() {
                         return Err(ArchiveError::new(
                             ArchiveErrorCode::ConflictRequiresDecision,
                             "文件与目录同名，无法安全覆盖",
                         ));
                     }
-                    fs::remove_file(&target_path)
-                        .map_err(|error| map_file_write_error(error, "无法覆盖现有文件"))?;
+                    replace_existing_file(&source_path, &target_path, journal)?;
+                    continue;
                 }
                 ConflictPolicy::Skip => continue,
                 ConflictPolicy::Ask => {
@@ -935,12 +1010,41 @@ fn merge_directory(
             fs::create_dir(&target_path).map_err(|_| {
                 ArchiveError::new(ArchiveErrorCode::PermissionDenied, "无法创建解压目录")
             })?;
-            merge_directory(&source_path, &target_path, policy)?;
+            journal.created_directories.push(target_path.clone());
+            merge_directory(&source_path, &target_path, policy, journal)?;
         } else {
             fs::rename(&source_path, &target_path)
                 .map_err(|error| map_file_write_error(error, "无法写入解压文件"))?;
+            journal.created_files.push(target_path);
         }
     }
+    Ok(())
+}
+
+fn replace_existing_file(
+    source: &Path,
+    target: &Path,
+    journal: &mut ExtractionJournal,
+) -> Result<(), ArchiveError> {
+    let backup = target
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(format!(".qzip-overwrite-{}", Uuid::new_v4()));
+    fs::rename(target, &backup)
+        .map_err(|error| map_file_write_error(error, "无法准备覆盖现有文件"))?;
+    if let Err(error) = fs::rename(source, target) {
+        if fs::rename(&backup, target).is_err() {
+            return Err(ArchiveError::new(
+                ArchiveErrorCode::CleanupFailed,
+                "无法提交解压文件，原文件已保留在临时备份中",
+            ));
+        }
+        return Err(map_file_write_error(error, "无法写入解压文件"));
+    }
+    journal.replaced_files.push(ReplacedFile {
+        target: target.to_owned(),
+        backup,
+    });
     Ok(())
 }
 
@@ -967,11 +1071,15 @@ fn renamed_path(path: &Path) -> PathBuf {
             None => format!("{stem} ({index})"),
         };
         let candidate = parent.join(name);
-        if !candidate.exists() {
+        if !path_exists(&candidate) {
             return candidate;
         }
     }
     parent.join(format!("{stem} ({})", Uuid::new_v4()))
+}
+
+fn path_exists(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok()
 }
 
 fn path_is_link_or_reparse(path: &Path) -> Result<bool, ArchiveError> {
@@ -1376,6 +1484,34 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn extraction_overwrite_rolls_back_when_a_later_conflict_blocks_commit() {
+        let root = test_directory("extract-transaction");
+        let staging = root.join(".qzip-extract-transaction");
+        let output = root.join("output");
+        fs::create_dir(&staging).unwrap();
+        fs::create_dir(&output).unwrap();
+        fs::write(staging.join("01-existing.txt"), "new").unwrap();
+        fs::create_dir(staging.join("02-conflict")).unwrap();
+        fs::write(staging.join("02-conflict").join("inside.txt"), "new nested").unwrap();
+        fs::write(output.join("01-existing.txt"), "old").unwrap();
+        fs::write(output.join("02-conflict"), "old conflict").unwrap();
+
+        let error = commit_extraction(&staging, &output, ConflictPolicy::Overwrite).unwrap_err();
+        assert_eq!(error.code, ArchiveErrorCode::ConflictRequiresDecision);
+        assert_eq!(
+            fs::read_to_string(output.join("01-existing.txt")).unwrap(),
+            "old"
+        );
+        assert_eq!(
+            fs::read_to_string(output.join("02-conflict")).unwrap(),
+            "old conflict"
+        );
+        assert!(!output.join("02-conflict").join("inside.txt").exists());
+        cleanup_staging(&staging).unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
     fn locked_file_is_reported_without_overwriting_the_original() {
@@ -1398,6 +1534,34 @@ mod tests {
         assert_eq!(error.code, ArchiveErrorCode::FileInUse);
         drop(handle);
         assert_eq!(fs::read_to_string(&target).unwrap(), "old");
+        cleanup_staging(&staging).unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn source_move_failure_restores_original_before_reporting_error() {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        let root = test_directory("source-move-failure");
+        let staging = root.join(".qzip-extract-source-locked");
+        let output = root.join("output");
+        fs::create_dir(&staging).unwrap();
+        fs::create_dir(&output).unwrap();
+        let source = staging.join("locked.txt");
+        let target = output.join("locked.txt");
+        fs::write(&source, "new").unwrap();
+        fs::write(&target, "old").unwrap();
+        let handle = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&source)
+            .unwrap();
+
+        let error = commit_extraction(&staging, &output, ConflictPolicy::Overwrite).unwrap_err();
+        assert_eq!(error.code, ArchiveErrorCode::FileInUse);
+        assert_eq!(fs::read_to_string(&target).unwrap(), "old");
+        drop(handle);
         cleanup_staging(&staging).unwrap();
         let _ = fs::remove_dir_all(root);
     }
