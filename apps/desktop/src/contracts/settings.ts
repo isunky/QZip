@@ -40,7 +40,15 @@ export interface IntegrationStatus {
   appVersion: string;
 }
 
-export interface UpdateCheckResult { configured: boolean; status: "ready" | "unconfigured"; }
+export interface UpdateCheckResult {
+  configured: boolean;
+  status: "update_available" | "up_to_date" | "unavailable";
+  currentVersion: string;
+  latestVersion: string;
+  releaseUrl: string;
+  releaseName?: string;
+  publishedAt?: string;
+}
 
 export const defaultAppSettings: AppSettings = {
   schemaVersion: 1,

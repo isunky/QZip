@@ -98,13 +98,13 @@ GitHub Actions 提供 `WINDOWS_PFX_PASSWORD`，构建脚本要求 `QZIP_WINDOWS_
 
 ### 7. 自动更新仍是占位能力
 
-**等级：中｜状态：代码审查确认**
+**等级：中｜状态：已修复（GitHub Release 检查）**
 
-设置页的“检查更新”目前只返回 `ready` 或 `unconfigured`，没有真正查询、下载、校验或安装新版本。对于正式版本，这会造成用户点击后误以为应用已实际检查更新。
+设置页的“检查更新”现在会在 10 秒超时内查询 GitHub 最新稳定 Release，校验返回的版本号并与当前版本比较。检查成功后会明确显示“已是最新版本”或“发现新版本”，后者提供 GitHub 下载页入口；网络失败、HTTP 异常和无效响应会以可恢复错误返回，不再用 `ready/unconfigured` 假装完成检查。
 
-建议：近期可将按钮明确改为打开 GitHub 最新 Release；后续接入完整更新服务后，再启用自动检查、签名验证和安装流程。
+当前仍保留启动自动检查开关但保持禁用，待发布渠道配置 Tauri updater 的签名元数据后再启用自动下载、签名校验和安装流程；手动检查与下载页跳转已可用于正式版本。
 
-相关代码：[desktop/lib.rs](apps/desktop/src-tauri/src/lib.rs:1119)。
+相关代码：[desktop/lib.rs](apps/desktop/src-tauri/src/lib.rs:1262)、[settingsClient.ts](apps/desktop/src/lib/settingsClient.ts:22)、[SettingsPage.tsx](apps/desktop/src/features/settings/SettingsPage.tsx:91)。
 
 ## 稳定性与维护性改进
 

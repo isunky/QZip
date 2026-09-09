@@ -19,5 +19,11 @@ export const settingsClient = {
     modernContextMenuRegistered: false, updaterConfigured: false, distribution: "web-preview", appVersion: desktopPackage.version
   }),
   openDefaultApps: () => command<void>("open_default_apps_settings"),
-  checkForUpdates: () => isTauri ? command<UpdateCheckResult>("check_for_updates") : Promise.resolve({ configured: false, status: "unconfigured" as const })
+  checkForUpdates: () => isTauri ? command<UpdateCheckResult>("check_for_updates") : Promise.resolve({
+    configured: false,
+    status: "unavailable" as const,
+    currentVersion: desktopPackage.version,
+    latestVersion: desktopPackage.version,
+    releaseUrl: "https://github.com/isunky/QZip/releases/latest"
+  })
 };

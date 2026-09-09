@@ -4,7 +4,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, Once},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -47,6 +47,10 @@ const SETTINGS_STORE: &str = "settings.json";
 const SETTINGS_KEY: &str = "appSettings";
 const PREVIEW_CACHE_TTL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 const PREVIEW_MAX_FILE_SIZE: u64 = 1024 * 1024 * 1024;
+const UPDATE_API_URL: &str = "https://api.github.com/repos/isunky/QZip/releases/latest";
+const UPDATE_RELEASE_URL: &str = "https://github.com/isunky/QZip/releases/latest";
+const UPDATE_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+static TLS_PROVIDER_INIT: Once = Once::new();
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -366,11 +370,151 @@ mod archive_entry_tests {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdateCheckResult {
     configured: bool,
-    status: &'static str,
+    status: String,
+    current_version: String,
+    latest_version: String,
+    release_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    release_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    published_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubRelease {
+    tag_name: String,
+    name: Option<String>,
+    published_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+struct ReleaseVersion {
+    major: u64,
+    minor: u64,
+    patch: u64,
+}
+
+fn parse_release_version(value: &str) -> Option<(String, ReleaseVersion)> {
+    let value = value.trim();
+    let value = value
+        .strip_prefix('v')
+        .or_else(|| value.strip_prefix('V'))
+        .unwrap_or(value);
+    let core = value.split(['-', '+']).next()?.trim();
+    let parts = core.split('.').collect::<Vec<_>>();
+    if parts.len() != 3 || parts.iter().any(|part| part.is_empty()) {
+        return None;
+    }
+    let version = ReleaseVersion {
+        major: parts[0].parse().ok()?,
+        minor: parts[1].parse().ok()?,
+        patch: parts[2].parse().ok()?,
+    };
+    Some((
+        format!("{}.{}.{}", version.major, version.minor, version.patch),
+        version,
+    ))
+}
+
+fn update_check_error(code: &str, message: impl Into<String>) -> CommandErrorDto {
+    CommandErrorDto {
+        code: code.to_owned(),
+        message: message.into(),
+        recoverable: true,
+    }
+}
+
+fn update_result_for_release(
+    current_version: &str,
+    release: GitHubRelease,
+) -> Result<UpdateCheckResult, CommandErrorDto> {
+    let Some((current_version, current)) = parse_release_version(current_version) else {
+        return Err(update_check_error(
+            "UPDATE_CHECK_INVALID_VERSION",
+            "当前应用版本号无效，无法比较更新。",
+        ));
+    };
+    let Some((latest_version, latest)) = parse_release_version(&release.tag_name) else {
+        return Err(update_check_error(
+            "UPDATE_CHECK_INVALID_RESPONSE",
+            "GitHub 返回的版本号无效。",
+        ));
+    };
+    Ok(UpdateCheckResult {
+        configured: true,
+        status: if latest > current {
+            "update_available"
+        } else {
+            "up_to_date"
+        }
+        .to_owned(),
+        current_version,
+        latest_version,
+        release_url: UPDATE_RELEASE_URL.to_owned(),
+        release_name: release.name,
+        published_at: release.published_at,
+    })
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_v_prefixed_release_versions() {
+        let (display, version) = parse_release_version("v1.2.3").expect("version parses");
+        assert_eq!(display, "1.2.3");
+        assert_eq!(
+            version,
+            ReleaseVersion {
+                major: 1,
+                minor: 2,
+                patch: 3
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_release_versions() {
+        assert!(parse_release_version("latest").is_none());
+        assert!(parse_release_version("1.2").is_none());
+        assert!(parse_release_version("1.2.3.4").is_none());
+    }
+
+    #[test]
+    fn reports_when_github_release_is_newer() {
+        let result = update_result_for_release(
+            "1.1.2",
+            GitHubRelease {
+                tag_name: "v1.2.0".to_owned(),
+                name: Some("QZip v1.2.0".to_owned()),
+                published_at: Some("2026-09-01T00:00:00Z".to_owned()),
+            },
+        )
+        .expect("release parses");
+        assert_eq!(result.status, "update_available");
+        assert_eq!(result.latest_version, "1.2.0");
+        assert_eq!(result.release_url, UPDATE_RELEASE_URL);
+    }
+
+    #[test]
+    fn reports_when_already_on_latest_release() {
+        let result = update_result_for_release(
+            "1.1.2",
+            GitHubRelease {
+                tag_name: "1.1.2".to_owned(),
+                name: None,
+                published_at: None,
+            },
+        )
+        .expect("release parses");
+        assert_eq!(result.status, "up_to_date");
+        assert_eq!(result.current_version, result.latest_version);
+    }
 }
 
 #[derive(Deserialize)]
@@ -1116,18 +1260,48 @@ fn open_default_apps_settings() -> Result<(), String> {
     }
 }
 #[tauri::command]
-fn check_for_updates() -> UpdateCheckResult {
-    if cfg!(feature = "official-updater") {
-        UpdateCheckResult {
-            configured: true,
-            status: "ready",
-        }
-    } else {
-        UpdateCheckResult {
-            configured: false,
-            status: "unconfigured",
-        }
+async fn check_for_updates() -> Result<UpdateCheckResult, CommandErrorDto> {
+    let current_version = env!("CARGO_PKG_VERSION");
+    TLS_PROVIDER_INIT.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+    let client = reqwest::Client::builder()
+        .user_agent(format!("QZip/{current_version}"))
+        .timeout(UPDATE_REQUEST_TIMEOUT)
+        .build()
+        .map_err(|error| {
+            update_check_error(
+                "UPDATE_CHECK_CLIENT",
+                format!("无法初始化更新检查：{error}"),
+            )
+        })?;
+    let response = client
+        .get(UPDATE_API_URL)
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|error| {
+            update_check_error(
+                "UPDATE_CHECK_NETWORK",
+                format!("无法连接 GitHub 检查更新，请检查网络后重试：{error}"),
+            )
+        })?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let message = if status.as_u16() == 403 || status.as_u16() == 429 {
+            "GitHub 请求次数已达到限制，请稍后重试。".to_owned()
+        } else {
+            format!("GitHub 更新服务返回异常状态（HTTP {}）。", status.as_u16())
+        };
+        return Err(update_check_error("UPDATE_CHECK_HTTP", message));
     }
+    let release = response.json::<GitHubRelease>().await.map_err(|error| {
+        update_check_error(
+            "UPDATE_CHECK_INVALID_RESPONSE",
+            format!("无法读取 GitHub 返回的版本信息：{error}"),
+        )
+    })?;
+    update_result_for_release(current_version, release)
 }
 #[tauri::command]
 fn take_initial_launch_request(state: State<'_, AppState>) -> Option<LaunchRequest> {

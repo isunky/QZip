@@ -16,7 +16,7 @@ import {
   ShieldCheckmarkRegular
 } from "@fluentui/react-icons";
 import { Button, Card, SegmentedControl } from "@qzip/ui";
-import type { AppSettings, AppSettingsPatch, IntegrationStatus } from "../../contracts/settings";
+import type { AppSettings, AppSettingsPatch, IntegrationStatus, UpdateCheckResult } from "../../contracts/settings";
 import { settingsClient } from "../../lib/settingsClient";
 import { useI18n } from "../../lib/i18n";
 import appIcon from "../../../src-tauri/icons/128x128@2x.png";
@@ -57,6 +57,7 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
   const { text } = useI18n();
   const [status, setStatus] = useState<IntegrationStatus | null>(null);
   const [checking, setChecking] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("appearance");
 
   useEffect(() => {
@@ -91,9 +92,17 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
     setChecking(true);
     try {
       const result = await settingsClient.checkForUpdates();
-      onToast(result.configured
-        ? text("更新服务已配置，将开始检查。", "The update service is configured. Checking for updates.")
-        : text("当前发行包未配置官方更新服务。", "The official update service is not configured for this build."));
+      setUpdateResult(result);
+      if (result.status === "update_available") {
+        onToast(text(`发现新版本 ${result.latestVersion}，请打开下载页获取。`, `Version ${result.latestVersion} is available. Open the download page to get it.`));
+      } else if (result.status === "up_to_date") {
+        onToast(text(`当前已是最新版本 ${result.currentVersion}。`, `You are already on the latest version ${result.currentVersion}.`));
+      } else {
+        onToast(text("当前预览环境无法检查更新，请在桌面应用中重试。", "Updates can only be checked from the desktop application."));
+      }
+    } catch (reason) {
+      setUpdateResult(null);
+      onToast(formatUpdateError(reason, text("检查更新失败，请稍后重试。", "Update check failed. Please try again later.")));
     } finally {
       setChecking(false);
     }
@@ -130,8 +139,8 @@ export function SettingsPage({ settings, onBack, onChanged, onToast }: SettingsP
         {activeSection === "appearance" ? <AppearanceSettings settings={settings} patch={patch} /> : null}
         {activeSection === "archive" ? <ArchiveSettings settings={settings} patch={patch} /> : null}
         {activeSection === "notifications" ? <NotificationSettings settings={settings} patch={patch} updateNotifications={updateNotifications} /> : null}
-        {activeSection === "system" ? <SystemSettings settings={settings} status={status} checking={checking} patch={patch} checkUpdates={checkUpdates} onToast={onToast} /> : null}
-        {activeSection === "about" ? <AboutSettings status={status} checking={checking} checkUpdates={checkUpdates} /> : null}
+        {activeSection === "system" ? <SystemSettings settings={settings} status={status} checking={checking} updateResult={updateResult} patch={patch} checkUpdates={checkUpdates} onToast={onToast} /> : null}
+        {activeSection === "about" ? <AboutSettings status={status} checking={checking} updateResult={updateResult} checkUpdates={checkUpdates} /> : null}
       </main>
     </section>
   );
@@ -171,7 +180,7 @@ function NotificationSettings({ settings, patch, updateNotifications }: { settin
   </SettingsSection></Card>;
 }
 
-function SystemSettings({ settings, status, checking, patch, checkUpdates, onToast }: { settings: AppSettings; status: IntegrationStatus | null; checking: boolean; patch: (next: AppSettingsPatch) => Promise<void>; checkUpdates: () => Promise<void>; onToast: (message: string) => void }) {
+function SystemSettings({ settings, status, checking, updateResult, patch, checkUpdates, onToast }: { settings: AppSettings; status: IntegrationStatus | null; checking: boolean; updateResult: UpdateCheckResult | null; patch: (next: AppSettingsPatch) => Promise<void>; checkUpdates: () => Promise<void>; onToast: (message: string) => void }) {
   const { text } = useI18n();
   return <div className="qzip-settings-card-stack">
     <Card className="qzip-settings-feature-card">
@@ -183,14 +192,15 @@ function SystemSettings({ settings, status, checking, patch, checkUpdates, onToa
     </Card>
     <Card className="qzip-settings-feature-card">
       <SettingsCardHeader icon={<ArrowSyncRegular fontSize={22} />} title={text("应用更新", "Application updates")} />
-      <div className="qzip-update-version"><span>{text("当前版本", "Current version")}</span><strong>{status?.appVersion ?? "1.1.2"}</strong><span className="qzip-status-pill" data-tone={status?.updaterConfigured ? "success" : "neutral"}>{status?.updaterConfigured ? text("更新服务可用", "Updater ready") : text("手动更新", "Manual updates")}</span></div>
-      <Toggle checked={settings.checkUpdatesOnStartup} onChange={(checkUpdatesOnStartup) => void patch({ checkUpdatesOnStartup })} label={text("启动时检查更新", "Check for updates at startup")} disabled={!status?.updaterConfigured} hint={status?.updaterConfigured ? text("有新版本时会提醒你。", "You will be notified when a new version is available.") : text("当前版本请通过 GitHub 获取更新。", "Get updates for this build through GitHub.")} />
-      <div className="qzip-update-action"><Button variant="secondary" icon={<ArrowSyncRegular fontSize={18} />} loading={checking} disabled={!status?.updaterConfigured} onClick={() => void checkUpdates()}>{text("检查更新", "Check for updates")}</Button></div>
+      <div className="qzip-update-version"><span>{text("当前版本", "Current version")}</span><strong>{status?.appVersion ?? "1.1.2"}</strong><span className="qzip-status-pill" data-tone="success">{text("GitHub 检查已启用", "GitHub checks enabled")}</span></div>
+      <Toggle checked={settings.checkUpdatesOnStartup} onChange={(checkUpdatesOnStartup) => void patch({ checkUpdatesOnStartup })} label={text("启动时检查更新", "Check for updates at startup")} disabled hint={text("当前支持手动检查并打开 GitHub 下载页；启动自动检查将在更新签名配置后启用。", "Manual checks and the GitHub download page are available. Startup checks will be enabled after signed updater configuration.")} />
+      {updateResult ? <UpdateResult result={updateResult} /> : <p className="qzip-update-hint">{text("点击“检查更新”查询 GitHub 最新稳定版本。", "Click “Check for updates” to query the latest stable GitHub release.")}</p>}
+      <div className="qzip-update-action"><Button variant="secondary" icon={<ArrowSyncRegular fontSize={18} />} loading={checking} onClick={() => void checkUpdates()}>{text("检查更新", "Check for updates")}</Button></div>
     </Card>
   </div>;
 }
 
-function AboutSettings({ status, checking, checkUpdates }: { status: IntegrationStatus | null; checking: boolean; checkUpdates: () => Promise<void> }) {
+function AboutSettings({ status, checking, updateResult, checkUpdates }: { status: IntegrationStatus | null; checking: boolean; updateResult: UpdateCheckResult | null; checkUpdates: () => Promise<void> }) {
   const { text } = useI18n();
   const version = status?.appVersion ?? "1.1.2";
   return <div className="qzip-about-page">
@@ -206,6 +216,7 @@ function AboutSettings({ status, checking, checkUpdates }: { status: Integration
       <AboutLink href="https://github.com/isunky/QZip/blob/main/LICENSE" icon={<DocumentTextRegular fontSize={21} />} label={text("开源许可", "Open-source license")} />
       <AboutLink href="https://github.com/isunky/QZip/issues" icon={<ChatHelpRegular fontSize={21} />} label={text("问题反馈", "Report an issue")} />
     </Card>
+    {updateResult ? <UpdateResult result={updateResult} /> : null}
     <p className="qzip-about-footer">{text("免费 · 无广告 · 本地优先", "Free · Ad-free · Local-first")}</p>
   </div>;
 }
@@ -224,6 +235,37 @@ function StatusRow({ label, status, tone, children }: { label: string; status: s
 
 function AboutLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
   return <a href={href} target="_blank" rel="noreferrer">{icon}<span>{label}</span><ChevronRightRegular fontSize={18} /></a>;
+}
+
+function UpdateResult({ result }: { result: UpdateCheckResult }) {
+  const { text } = useI18n();
+  const isUpdateAvailable = result.status === "update_available";
+  return <div className="qzip-update-result" data-tone={isUpdateAvailable ? "warning" : "success"} role="status" aria-live="polite">
+    <div>
+      <strong>{isUpdateAvailable
+        ? text(`发现新版本 ${result.latestVersion}`, `Version ${result.latestVersion} is available`)
+        : text(`已是最新版本 ${result.currentVersion}`, `You are on the latest version ${result.currentVersion}`)}</strong>
+      {result.releaseName ? <small>{result.releaseName}</small> : null}
+    </div>
+    {isUpdateAvailable ? <a href={result.releaseUrl} target="_blank" rel="noreferrer">{text("打开下载页", "Open download page")}<OpenRegular fontSize={16} /></a> : null}
+  </div>;
+}
+
+function formatUpdateError(reason: unknown, fallback: string) {
+  if (typeof reason === "object" && reason !== null && "message" in reason) {
+    const message = (reason as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  if (typeof reason === "string" && reason.trim()) {
+    try {
+      const parsed = JSON.parse(reason) as { message?: unknown };
+      if (typeof parsed.message === "string" && parsed.message.trim()) return parsed.message;
+    } catch {
+      // Keep plain-text command errors as-is.
+    }
+    return reason;
+  }
+  return fallback;
 }
 
 function Row({ title, children }: { title: string; children: React.ReactNode }) {
