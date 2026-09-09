@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
 use tokio::{
-    io::{AsyncBufReadExt, BufReader},
+    io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::Command,
     sync::mpsc,
     time::Instant,
@@ -373,6 +373,179 @@ impl SevenZipCliBackend {
             .map_err(|error| map_read_failure(error, supplied_password))
     }
 
+    async fn list_tar_wrapper_streaming(
+        &self,
+        archive: &Path,
+        cancellation: CancellationToken,
+    ) -> Result<Vec<ArchiveEntry>, ArchiveError> {
+        if !self.executable.is_file() {
+            return Err(ArchiveError::unavailable("7-Zip sidecar was not found"));
+        }
+        self.verify_runtime_files()?;
+
+        let mut extractor = Command::new(&self.executable);
+        extractor
+            .args([
+                "x".to_owned(),
+                archive.to_string_lossy().into_owned(),
+                "-so".to_owned(),
+                "-y".to_owned(),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        #[cfg(target_os = "windows")]
+        extractor.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        let mut extractor = extractor.spawn().map_err(|error| {
+            ArchiveError::unavailable(format!("could not start 7-Zip: {error}"))
+        })?;
+
+        let mut lister = Command::new(&self.executable);
+        lister
+            .args([
+                "l".to_owned(),
+                "-slt".to_owned(),
+                "-sccUTF-8".to_owned(),
+                "-ttar".to_owned(),
+                "-si".to_owned(),
+                "-an".to_owned(),
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        #[cfg(target_os = "windows")]
+        lister.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        let mut lister = match lister.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = extractor.start_kill();
+                let _ = extractor.wait().await;
+                return Err(ArchiveError::unavailable(format!(
+                    "could not start 7-Zip TAR lister: {error}"
+                )));
+            }
+        };
+
+        let extractor_stdout = extractor
+            .stdout
+            .take()
+            .ok_or_else(|| ArchiveError::unavailable("could not capture 7-Zip archive stream"))?;
+        let mut lister_stdin = lister
+            .stdin
+            .take()
+            .ok_or_else(|| ArchiveError::unavailable("could not open 7-Zip TAR lister input"))?;
+        let pump_task = tokio::spawn(async move {
+            let result =
+                tokio::io::copy(&mut BufReader::new(extractor_stdout), &mut lister_stdin).await;
+            drop(lister_stdin);
+            result
+        });
+
+        let (sender, mut receiver) = mpsc::unbounded_channel();
+        let extractor_stderr_task = spawn_process_line_reader(
+            extractor.stderr.take().ok_or_else(|| {
+                ArchiveError::unavailable("could not capture 7-Zip extractor diagnostics")
+            })?,
+            sender.clone(),
+            ProcessStream::Stderr,
+        );
+        let lister_stdout_task = spawn_process_line_reader(
+            lister
+                .stdout
+                .take()
+                .ok_or_else(|| ArchiveError::unavailable("could not capture 7-Zip TAR listing"))?,
+            sender.clone(),
+            ProcessStream::Stdout,
+        );
+        let lister_stderr_task = spawn_process_line_reader(
+            lister.stderr.take().ok_or_else(|| {
+                ArchiveError::unavailable("could not capture 7-Zip TAR lister diagnostics")
+            })?,
+            sender.clone(),
+            ProcessStream::Stderr,
+        );
+        drop(sender);
+
+        let mut state = InvocationState::new(InvocationMode::Listing);
+        let reporter = archive_core::NoopProgressReporter;
+        let mut extractor_status = None;
+        let mut lister_status = None;
+        let mut cancelled = false;
+        while extractor_status.is_none() || lister_status.is_none() {
+            tokio::select! {
+                _ = cancellation.cancelled() => {
+                    cancelled = true;
+                    let _ = extractor.start_kill();
+                    let _ = lister.start_kill();
+                    break;
+                }
+                status = extractor.wait(), if extractor_status.is_none() => {
+                    extractor_status = Some(status);
+                }
+                status = lister.wait(), if lister_status.is_none() => {
+                    if let Ok(status) = &status
+                        && !status.success()
+                        && status.code() != Some(1)
+                    {
+                        let _ = extractor.start_kill();
+                    }
+                    lister_status = Some(status);
+                }
+                Some(line) = receiver.recv() => {
+                    state.consume(line, ArchiveOperation::List, &reporter);
+                }
+            }
+        }
+        if cancelled {
+            let _ = extractor.wait().await;
+            let _ = lister.wait().await;
+        }
+        let _ = extractor_stderr_task.await;
+        let _ = lister_stdout_task.await;
+        let _ = lister_stderr_task.await;
+        let _ = pump_task.await;
+        while let Some(line) = receiver.recv().await {
+            state.consume(line, ArchiveOperation::List, &reporter);
+        }
+        if cancelled {
+            return Err(ArchiveError::new(
+                ArchiveErrorCode::Cancelled,
+                "archive operation was cancelled",
+            ));
+        }
+
+        let (diagnostics, entries) = state.finish();
+        for status in [extractor_status, lister_status] {
+            match status {
+                Some(Ok(status)) if status.success() || status.code() == Some(1) => {}
+                Some(Ok(status)) => {
+                    return Err(map_read_failure(
+                        map_exit(status.code(), &diagnostics),
+                        false,
+                    ));
+                }
+                Some(Err(error)) => {
+                    return Err(map_read_failure(
+                        ArchiveError::new(
+                            ArchiveErrorCode::Unknown,
+                            format!("7-Zip process failed: {error}"),
+                        ),
+                        false,
+                    ));
+                }
+                None => {
+                    return Err(ArchiveError::new(
+                        ArchiveErrorCode::Unknown,
+                        "7-Zip process ended without an exit status",
+                    ));
+                }
+            }
+        }
+        Ok(entries.unwrap_or_default())
+    }
+
     async fn test_plain(
         &self,
         request: TestArchiveRequest,
@@ -607,20 +780,9 @@ impl ArchiveBackend for SevenZipCliBackend {
                     "TAR.GZ 和 TAR.XZ 不支持密码参数",
                 ));
             }
-            let (temporary_dir, inner_tar) = self
-                .expand_tar_wrapper(&request.archive, cancellation.child_token())
-                .await?;
-            let result = self
-                .list_plain(
-                    ListArchiveRequest {
-                        archive: inner_tar,
-                        password: None,
-                    },
-                    cancellation,
-                )
+            return self
+                .list_tar_wrapper_streaming(&request.archive, cancellation)
                 .await;
-            let _ = fs::remove_dir_all(temporary_dir);
-            return result;
         }
         self.list_plain(request, cancellation).await
     }
@@ -891,6 +1053,24 @@ struct ProcessLine {
     line: String,
 }
 
+fn spawn_process_line_reader<R>(
+    reader: R,
+    sender: mpsc::UnboundedSender<ProcessLine>,
+    stream: ProcessStream,
+) -> tokio::task::JoinHandle<()>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(reader).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if sender.send(ProcessLine { stream, line }).is_err() {
+                break;
+            }
+        }
+    })
+}
+
 struct InvocationState {
     mode: InvocationMode,
     listing: Option<SevenZipListParser>,
@@ -1131,6 +1311,50 @@ mod tests {
             SevenZipArgumentMapper::list(&request),
             vec!["l", "-slt", "-sccUTF-8", "中文.zip"]
         );
+    }
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn tar_wrapper_listing_streams_without_creating_an_expand_directory() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let backend = SevenZipCliBackend::new(root.join("third_party/7zip/bin/win-x64/7z.exe"));
+        let archive = root.join("tests/fixtures/compat/windows-bsdtar-xz.tar.xz");
+        let temporary_root = std::env::temp_dir();
+        let before = expand_directories(&temporary_root);
+
+        let entries = backend
+            .list(
+                ListArchiveRequest {
+                    archive,
+                    password: None,
+                },
+                CancellationToken::new(),
+            )
+            .await
+            .expect("streaming TAR listing succeeds");
+
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.path.ends_with("hello.txt"))
+        );
+        assert_eq!(before, expand_directories(&temporary_root));
+    }
+    #[cfg(target_os = "windows")]
+    fn expand_directories(root: &Path) -> Vec<PathBuf> {
+        let mut directories = fs::read_dir(root)
+            .expect("temporary directory is readable")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry.file_type().is_ok_and(|kind| kind.is_dir())
+                    && entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with("qzip-expand-")
+            })
+            .map(|entry| entry.path())
+            .collect::<Vec<_>>();
+        directories.sort();
+        directories
     }
     #[test]
     fn maps_password_without_echoing_details() {
