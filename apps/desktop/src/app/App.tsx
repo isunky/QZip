@@ -181,14 +181,15 @@ export function App() {
     void archiveClient.onTaskEvent((event) => {
       if (stopped) return;
       setTasks((current) => [event.task, ...current.filter((task) => task.taskId !== event.task.taskId)].sort((left, right) => right.updatedAt - left.updatedAt));
-      if (event.task.status === "completed") {
+      const isResync = event.eventType === "task.resync";
+      if (!isResync && event.task.status === "completed") {
         setToast(event.task.operation === "create" ? text("压缩文件已生成。", "Archive created.") : text("任务已完成。", "Task completed."));
-      } else if (event.task.status === "failed") {
+      } else if (!isResync && event.task.status === "failed") {
         setToast(text(`任务失败：${event.task.error?.message ?? "请在任务中心查看详情"}`, `Task failed: ${event.task.error?.message ?? "View details in the task center"}`));
       }
       const currentSettings = settingsRef.current;
       const terminal = event.task.status === "completed" || event.task.status === "failed";
-      const shouldNotify = terminal && currentSettings.taskNotificationsEnabled && (event.task.status === "completed" ? currentSettings.notifyOnSuccess : currentSettings.notifyOnFailure);
+      const shouldNotify = !isResync && terminal && currentSettings.taskNotificationsEnabled && (event.task.status === "completed" ? currentSettings.notifyOnSuccess : currentSettings.notifyOnFailure);
       if (shouldNotify) {
         void import("@tauri-apps/api/window").then(async ({ getCurrentWindow }) => {
           if (!(await getCurrentWindow().isFocused())) {

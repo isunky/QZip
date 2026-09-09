@@ -26,6 +26,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 const HISTORY_LIMIT: usize = 100;
+const EVENT_CHANNEL_CAPACITY: usize = 256;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
@@ -129,7 +130,7 @@ pub struct TaskManager {
 
 impl TaskManager {
     pub fn new(backend: Arc<dyn ArchiveBackend>, history_path: PathBuf) -> Arc<Self> {
-        let (events, _) = broadcast::channel(256);
+        let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let manager = Arc::new(Self {
             backend,
             tasks: Arc::new(Mutex::new(BTreeMap::new())),
@@ -1397,6 +1398,51 @@ mod tests {
             )
             .unwrap_err();
         assert_eq!(error.code, ArchiveErrorCode::Unknown);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn task_event_receiver_continues_after_buffer_overflow() {
+        let root = test_directory("event-overflow");
+        let manager = TaskManager::new(Arc::new(UnusedBackend), root.join("history.json"));
+        let task_id = Uuid::new_v4().to_string();
+        let snapshot = TaskSnapshot {
+            task_id: task_id.clone(),
+            operation: ArchiveOperation::Test,
+            status: TaskStatus::Running,
+            display_name: "archive.7z".into(),
+            output: None,
+            created_at: now(),
+            updated_at: now(),
+            progress: None,
+            error: None,
+            warnings: vec![],
+            retryable: false,
+        };
+        manager.tasks.lock().expect("task lock").insert(
+            task_id.clone(),
+            TaskRecord {
+                snapshot,
+                spec: TaskSpec::Test {
+                    archive: root.join("archive.7z"),
+                },
+                cancellation: CancellationToken::new(),
+                can_retry: true,
+            },
+        );
+        let mut events = manager.subscribe();
+        for _ in 0..(EVENT_CHANNEL_CAPACITY + 1) {
+            manager.emit("task.progress", &task_id);
+        }
+
+        assert!(matches!(
+            events.try_recv(),
+            Err(broadcast::error::TryRecvError::Lagged(_))
+        ));
+        let event = events
+            .try_recv()
+            .expect("receiver remains usable after lag");
+        assert_eq!(event.task.task_id, task_id);
         let _ = fs::remove_dir_all(root);
     }
 

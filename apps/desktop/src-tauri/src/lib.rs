@@ -23,7 +23,7 @@ use platform_integration::{
 };
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
-use task_runtime::{TaskManager, TaskSnapshot, TaskSpec};
+use task_runtime::{TaskEvent, TaskManager, TaskSnapshot, TaskSpec};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_store::StoreExt;
 use uuid::Uuid;
@@ -1694,10 +1694,34 @@ pub fn run() {
             let tasks = TaskManager::new(backend.clone(), history);
             let handle = app.handle().clone();
             let events = tasks.subscribe();
+            let tasks_for_events = Arc::clone(&tasks);
             tauri::async_runtime::spawn(async move {
                 let mut events = events;
-                while let Ok(event) = events.recv().await {
-                    let _ = handle.emit("qzip://task-event", event);
+                loop {
+                    match events.recv().await {
+                        Ok(event) => {
+                            let _ = handle.emit("qzip://task-event", event);
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                            eprintln!(
+                                "QZip task event stream lagged by {skipped} events; resyncing"
+                            );
+                            // Drop stale buffered events before publishing the current
+                            // snapshots, so an old progress event cannot overwrite a
+                            // terminal state recovered by the resync.
+                            events = tasks_for_events.subscribe();
+                            for task in tasks_for_events.snapshots() {
+                                let _ = handle.emit(
+                                    "qzip://task-event",
+                                    TaskEvent {
+                                        event_type: "task.resync".into(),
+                                        task,
+                                    },
+                                );
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    }
                 }
             });
             let settings = load_settings(app.handle());
