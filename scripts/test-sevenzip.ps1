@@ -28,6 +28,27 @@ try {
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar list --archive (Join-Path $work 'archive name.7z') | Select-String 'world.txt' | Out-Null
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar test --archive (Join-Path $work 'archive name.7z') | Select-String '"valid":true' | Out-Null
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar extract --archive (Join-Path $work 'archive name.7z') --output (Join-Path $work 'output') | Select-String 'completed' | Out-Null
+  $largeSourceDirectoryName = ([string][char]0x5927) + ([char]0x6E05) + ([char]0x5355)
+  $largeSourceDirectory = Join-Path $work $largeSourceDirectoryName
+  $largeFilePrefix = ([string][char]0x6587) + ([char]0x4EF6) + '-'
+  $largeFilePattern = '*' + $largeFilePrefix + '1248.txt'
+  $largeLongNamePattern = '*' + ([string][char]0x957F) + '*.txt'
+  New-Item -ItemType Directory -Path $largeSourceDirectory | Out-Null
+  for ($index = 0; $index -lt 1250; $index++) {
+    $name = if ($index -eq 1249) { ((([string][char]0x957F) * 48) -join '') + '.txt' } else { "$largeFilePrefix$index.txt" }
+    [IO.File]::WriteAllText((Join-Path $largeSourceDirectory $name), "QZip large listing fixture $index")
+  }
+  $largeArchive = Join-Path $work 'large-listing.zip'
+  cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar create --format zip --output $largeArchive $largeSourceDirectory | Select-String 'completed' | Out-Null
+  $largeListLines = @(cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar list --archive $largeArchive)
+  if ($LASTEXITCODE -ne 0) { throw 'Large UTF-8 archive listing command failed.' }
+  $largeCompletedLine = $largeListLines | ForEach-Object { $_.ToString() } | Where-Object { $_ -match 'completed' } | Select-Object -Last 1
+  if (-not $largeCompletedLine) { throw 'Large UTF-8 archive listing did not return a completed event.' }
+  $largeListing = $largeCompletedLine | ConvertFrom-Json
+  $largeFileCount = @($largeListing.data.entries | Where-Object { -not $_.isDirectory }).Count
+  if ($largeFileCount -ne 1250) { throw "Large UTF-8 archive listing returned $largeFileCount files instead of 1250." }
+  if (-not (@($largeListing.data.entries | Where-Object { $_.path -like $largeFilePattern }).Count -eq 1)) { throw 'Large UTF-8 archive listing lost a Chinese filename.' }
+  if (-not (@($largeListing.data.entries | Where-Object { $_.path -like $largeLongNamePattern }).Count -eq 1)) { throw 'Large UTF-8 archive listing lost the long Chinese filename.' }
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar create --format zip --output (Join-Path $work 'archive.zip') $sourceDirectory | Select-String 'completed' | Out-Null
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar test --archive (Join-Path $work 'archive.zip') | Select-String '"valid":true' | Out-Null
   foreach ($format in @('tar.gz', 'tar.xz')) {

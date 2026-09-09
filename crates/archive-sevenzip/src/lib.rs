@@ -68,8 +68,40 @@ impl SevenZipCliBackend {
             return Err(ArchiveError::unavailable("7-Zip sidecar was not found"));
         }
         self.verify_runtime_files()?;
-        self.invoke_process(operation, args, progress, cancellation)
-            .await
+        self.invoke_process(
+            operation,
+            args,
+            progress,
+            cancellation,
+            InvocationMode::Diagnostic,
+        )
+        .await
+    }
+
+    async fn invoke_listing(
+        &self,
+        args: Vec<String>,
+        cancellation: CancellationToken,
+    ) -> Result<Vec<ArchiveEntry>, ArchiveError> {
+        if !self.executable.is_file() {
+            return Err(ArchiveError::unavailable("7-Zip sidecar was not found"));
+        }
+        self.verify_runtime_files()?;
+        let output = self
+            .invoke_process(
+                ArchiveOperation::List,
+                args,
+                Arc::new(archive_core::NoopProgressReporter),
+                cancellation,
+                InvocationMode::Listing,
+            )
+            .await?;
+        output.entries.ok_or_else(|| {
+            ArchiveError::new(
+                ArchiveErrorCode::Unknown,
+                "7-Zip did not return a parsed archive listing",
+            )
+        })
     }
 
     async fn invoke_process(
@@ -78,6 +110,7 @@ impl SevenZipCliBackend {
         args: Vec<String>,
         progress: Arc<dyn ProgressReporter>,
         cancellation: CancellationToken,
+        mode: InvocationMode,
     ) -> Result<InvocationOutput, ArchiveError> {
         let mut command = Command::new(&self.executable);
         command
@@ -99,40 +132,57 @@ impl SevenZipCliBackend {
             .take()
             .ok_or_else(|| ArchiveError::unavailable("could not capture 7-Zip diagnostics"))?;
         let (sender, mut receiver) = mpsc::unbounded_channel();
-        let forward = |stream: tokio::process::ChildStdout,
-                       sender: mpsc::UnboundedSender<String>| async move {
-            let mut lines = BufReader::new(stream).lines();
+        let stdout_sender = sender.clone();
+        let stdout_task = tokio::spawn(async move {
+            let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                let _ = sender.send(line);
+                if stdout_sender
+                    .send(ProcessLine {
+                        stream: ProcessStream::Stdout,
+                        line,
+                    })
+                    .is_err()
+                {
+                    break;
+                }
             }
-        };
-        let stdout_task = tokio::spawn(forward(stdout, sender.clone()));
+        });
         let stderr_sender = sender.clone();
         let stderr_task = tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                let _ = stderr_sender.send(line);
+                if stderr_sender
+                    .send(ProcessLine {
+                        stream: ProcessStream::Stderr,
+                        line,
+                    })
+                    .is_err()
+                {
+                    break;
+                }
             }
         });
         drop(sender);
-        let mut output = String::new();
-        let mut last_percent = None;
-        let mut last_report = Instant::now() - Duration::from_secs(1);
+        let mut state = InvocationState::new(mode);
         loop {
             tokio::select! {
                 _ = cancellation.cancelled() => { let _ = child.start_kill(); let _ = child.wait().await; let _ = stdout_task.await; let _ = stderr_task.await; return Err(ArchiveError::new(ArchiveErrorCode::Cancelled, "archive operation was cancelled")); }
                 Some(line) = receiver.recv() => {
-                    append_bounded(&mut output, &line);
-                    if let Some(percent) = parse_progress(&line)
-                        && last_percent != Some(percent)
-                        && last_report.elapsed() >= Duration::from_millis(100)
-                    {
-                        progress.report(TaskProgress { operation, percent: Some(percent), detail: "7-Zip is working".into() });
-                        last_percent = Some(percent);
-                        last_report = Instant::now();
-                    }
+                    state.consume(line, operation, progress.as_ref());
                 }
-                status = child.wait() => { let status = status.map_err(|error| ArchiveError::new(ArchiveErrorCode::Unknown, format!("7-Zip process failed: {error}")))?; while let Ok(line) = receiver.try_recv() { append_bounded(&mut output, &line); } let _ = stdout_task.await; let _ = stderr_task.await; if status.success() || status.code() == Some(1) { return Ok(InvocationOutput { output, warning: status.code() == Some(1) }); } return Err(map_exit(status.code(), &output)); }
+                status = child.wait() => {
+                    let status = status.map_err(|error| ArchiveError::new(ArchiveErrorCode::Unknown, format!("7-Zip process failed: {error}")))?;
+                    let _ = stdout_task.await;
+                    let _ = stderr_task.await;
+                    while let Ok(line) = receiver.try_recv() {
+                        state.consume(line, operation, progress.as_ref());
+                    }
+                    let (output, entries) = state.finish();
+                    if status.success() || status.code() == Some(1) {
+                        return Ok(InvocationOutput { output, warning: status.code() == Some(1), entries });
+                    }
+                    return Err(map_exit(status.code(), &output));
+                }
             }
         }
     }
@@ -318,16 +368,9 @@ impl SevenZipCliBackend {
         cancellation: CancellationToken,
     ) -> Result<Vec<ArchiveEntry>, ArchiveError> {
         let supplied_password = request.password.is_some();
-        let output = self
-            .invoke(
-                ArchiveOperation::List,
-                SevenZipArgumentMapper::list(&request),
-                Arc::new(archive_core::NoopProgressReporter),
-                cancellation,
-            )
+        self.invoke_listing(SevenZipArgumentMapper::list(&request), cancellation)
             .await
-            .map_err(|error| map_read_failure(error, supplied_password))?;
-        Ok(SevenZipListParser::parse(&output.output))
+            .map_err(|error| map_read_failure(error, supplied_password))
     }
 
     async fn test_plain(
@@ -743,67 +786,83 @@ impl SevenZipArgumentMapper {
     }
 }
 
-pub struct SevenZipListParser;
+#[derive(Default)]
+pub struct SevenZipListParser {
+    entries: Vec<ArchiveEntry>,
+    pending: PendingEntry,
+}
+
+#[derive(Default)]
+struct PendingEntry {
+    path: Option<String>,
+    size: Option<u64>,
+    packed: Option<u64>,
+    attributes: Option<String>,
+    modified: Option<String>,
+    crc: Option<String>,
+    encrypted: bool,
+    symlink: bool,
+    hardlink: bool,
+}
+
 impl SevenZipListParser {
     pub fn parse(output: &str) -> Vec<ArchiveEntry> {
-        #[derive(Default)]
-        struct Pending {
-            path: Option<String>,
-            size: Option<u64>,
-            packed: Option<u64>,
-            attributes: Option<String>,
-            modified: Option<String>,
-            crc: Option<String>,
-            encrypted: bool,
-            symlink: bool,
-            hardlink: bool,
+        let mut parser = Self::default();
+        for line in output.lines() {
+            parser.push_line(line);
         }
-        fn flush(entries: &mut Vec<ArchiveEntry>, pending: &mut Pending) {
-            if let (Some(path), Some(size)) = (pending.path.take(), pending.size.take()) {
-                let path = path.replace('\\', "/");
-                let display_name = path.rsplit('/').next().unwrap_or(&path).to_owned();
-                entries.push(ArchiveEntry {
-                    display_name,
-                    is_directory: pending
-                        .attributes
-                        .as_deref()
-                        .is_some_and(|value| value.contains('D')),
-                    path,
-                    size,
-                    compressed_size: pending.packed.take(),
-                    modified_at: pending.modified.take(),
-                    crc: pending.crc.take(),
-                    attributes: pending.attributes.take(),
-                    encrypted: pending.encrypted,
-                    is_symlink: pending.symlink,
-                    is_hardlink: pending.hardlink,
-                });
-            }
-            *pending = Pending::default();
+        parser.finish()
+    }
+
+    pub fn push_line(&mut self, line: &str) {
+        if line.trim().is_empty() {
+            self.flush_pending();
+            return;
         }
-        let mut entries = Vec::new();
-        let mut pending = Pending::default();
-        for line in output.lines().chain(std::iter::once("")) {
-            if line.trim().is_empty() {
-                flush(&mut entries, &mut pending);
-                continue;
-            }
-            if let Some((key, value)) = line.split_once(" = ") {
-                match key {
-                    "Path" => pending.path = Some(value.into()),
-                    "Size" => pending.size = value.parse().ok(),
-                    "Packed Size" => pending.packed = value.parse().ok(),
-                    "Attributes" => pending.attributes = Some(value.into()),
-                    "Modified" => pending.modified = Some(value.into()),
-                    "CRC" => pending.crc = Some(value.into()),
-                    "Encrypted" => pending.encrypted = value == "+",
-                    "Symbolic Link" => pending.symlink = true,
-                    "Hard Link" => pending.hardlink = true,
-                    _ => {}
-                }
+        if let Some((key, value)) = line.split_once(" = ") {
+            match key {
+                "Path" => self.pending.path = Some(value.into()),
+                "Size" => self.pending.size = value.parse().ok(),
+                "Packed Size" => self.pending.packed = value.parse().ok(),
+                "Attributes" => self.pending.attributes = Some(value.into()),
+                "Modified" => self.pending.modified = Some(value.into()),
+                "CRC" => self.pending.crc = Some(value.into()),
+                "Encrypted" => self.pending.encrypted = value == "+",
+                "Symbolic Link" => self.pending.symlink = true,
+                "Hard Link" => self.pending.hardlink = true,
+                _ => {}
             }
         }
-        entries
+    }
+
+    pub fn finish(mut self) -> Vec<ArchiveEntry> {
+        self.flush_pending();
+        self.entries
+    }
+
+    fn flush_pending(&mut self) {
+        if let (Some(path), Some(size)) = (self.pending.path.take(), self.pending.size.take()) {
+            let path = path.replace('\\', "/");
+            let display_name = path.rsplit('/').next().unwrap_or(&path).to_owned();
+            self.entries.push(ArchiveEntry {
+                display_name,
+                is_directory: self
+                    .pending
+                    .attributes
+                    .as_deref()
+                    .is_some_and(|value| value.contains('D')),
+                path,
+                size,
+                compressed_size: self.pending.packed.take(),
+                modified_at: self.pending.modified.take(),
+                crc: self.pending.crc.take(),
+                attributes: self.pending.attributes.take(),
+                encrypted: self.pending.encrypted,
+                is_symlink: self.pending.symlink,
+                is_hardlink: self.pending.hardlink,
+            });
+        }
+        self.pending = PendingEntry::default();
     }
 }
 
@@ -811,12 +870,91 @@ impl SevenZipListParser {
 struct InvocationOutput {
     output: String,
     warning: bool,
+    entries: Option<Vec<ArchiveEntry>>,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InvocationMode {
+    Diagnostic,
+    Listing,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProcessStream {
+    Stdout,
+    Stderr,
+}
+
+#[derive(Debug)]
+struct ProcessLine {
+    stream: ProcessStream,
+    line: String,
+}
+
+struct InvocationState {
+    mode: InvocationMode,
+    listing: Option<SevenZipListParser>,
+    output: String,
+    last_percent: Option<u8>,
+    last_report: Instant,
+}
+
+impl InvocationState {
+    fn new(mode: InvocationMode) -> Self {
+        Self {
+            mode,
+            listing: (mode == InvocationMode::Listing).then(SevenZipListParser::default),
+            output: String::new(),
+            last_percent: None,
+            last_report: Instant::now() - Duration::from_secs(1),
+        }
+    }
+
+    fn consume(
+        &mut self,
+        line: ProcessLine,
+        operation: ArchiveOperation,
+        progress: &dyn ProgressReporter,
+    ) {
+        if self.mode == InvocationMode::Listing
+            && line.stream == ProcessStream::Stdout
+            && let Some(parser) = self.listing.as_mut()
+        {
+            parser.push_line(&line.line);
+        }
+        if self.mode != InvocationMode::Listing || line.stream == ProcessStream::Stderr {
+            append_bounded(&mut self.output, &line.line);
+        }
+        if let Some(percent) = parse_progress(&line.line)
+            && self.last_percent != Some(percent)
+            && self.last_report.elapsed() >= Duration::from_millis(100)
+        {
+            progress.report(TaskProgress {
+                operation,
+                percent: Some(percent),
+                detail: "7-Zip is working".into(),
+            });
+            self.last_percent = Some(percent);
+            self.last_report = Instant::now();
+        }
+    }
+
+    fn finish(self) -> (String, Option<Vec<ArchiveEntry>>) {
+        (self.output, self.listing.map(SevenZipListParser::finish))
+    }
+}
+
 fn append_bounded(target: &mut String, line: &str) {
     if target.len() < MAX_DIAGNOSTIC_BYTES {
         let available = MAX_DIAGNOSTIC_BYTES - target.len();
-        target.push_str(&line[..line.len().min(available)]);
-        target.push('\n');
+        let mut end = line.len().min(available);
+        while end > 0 && !line.is_char_boundary(end) {
+            end -= 1;
+        }
+        target.push_str(&line[..end]);
+        if target.len() < MAX_DIAGNOSTIC_BYTES {
+            target.push('\n');
+        }
     }
 }
 fn parse_progress(line: &str) -> Option<u8> {
@@ -926,6 +1064,63 @@ mod tests {
         assert_eq!(entries[0].display_name, "封面.docx");
     }
     #[test]
+    fn streaming_parser_keeps_large_utf8_listing_complete() {
+        let mut parser = SevenZipListParser::default();
+        for index in 0..1_500 {
+            parser.push_line(&format!("Path = 文档/第 {index} 项.txt"));
+            parser.push_line("Size = 12");
+            parser.push_line("");
+        }
+
+        let entries = parser.finish();
+        assert_eq!(entries.len(), 1_500);
+        assert_eq!(entries[0].path, "文档/第 0 项.txt");
+        assert_eq!(entries[1_499].path, "文档/第 1499 项.txt");
+    }
+    #[test]
+    fn listing_mode_keeps_stdout_outside_bounded_diagnostics() {
+        let mut state = InvocationState::new(InvocationMode::Listing);
+        let reporter = archive_core::NoopProgressReporter;
+        for index in 0..1_500 {
+            state.consume(
+                ProcessLine {
+                    stream: ProcessStream::Stdout,
+                    line: format!("Path = 文档/第 {index} 项.txt"),
+                },
+                ArchiveOperation::List,
+                &reporter,
+            );
+            state.consume(
+                ProcessLine {
+                    stream: ProcessStream::Stdout,
+                    line: "Size = 12".into(),
+                },
+                ArchiveOperation::List,
+                &reporter,
+            );
+            state.consume(
+                ProcessLine {
+                    stream: ProcessStream::Stdout,
+                    line: String::new(),
+                },
+                ArchiveOperation::List,
+                &reporter,
+            );
+        }
+
+        let (diagnostics, entries) = state.finish();
+        assert!(diagnostics.is_empty());
+        assert_eq!(entries.expect("listing parser is enabled").len(), 1_500);
+    }
+    #[test]
+    fn bounded_diagnostics_never_split_utf8_or_exceed_limit() {
+        let mut diagnostics = String::new();
+        append_bounded(&mut diagnostics, &"中文错误 ".repeat(MAX_DIAGNOSTIC_BYTES));
+
+        assert!(diagnostics.len() <= MAX_DIAGNOSTIC_BYTES);
+        assert!(std::str::from_utf8(diagnostics.as_bytes()).is_ok());
+    }
+    #[test]
     fn list_requests_utf8_console_output() {
         let request = ListArchiveRequest {
             archive: PathBuf::from("中文.zip"),
@@ -1001,6 +1196,7 @@ mod tests {
                 vec!["-n".into(), "20".into(), "127.0.0.1".into()],
                 Arc::new(archive_core::NoopProgressReporter),
                 cancellation,
+                InvocationMode::Diagnostic,
             )
             .await;
         assert_eq!(result.unwrap_err().code, ArchiveErrorCode::Cancelled);
