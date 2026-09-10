@@ -88,13 +88,13 @@ GitHub Actions 提供 `WINDOWS_PFX_PASSWORD`，构建脚本要求 `QZIP_WINDOWS_
 
 ### 6. `.tgz`、`.txz` 别名没有按复合 TAR 格式处理
 
-**等级：中｜状态：已复现**
+**等级：中｜状态：已修复**
 
-同一份归档命名为 `.tar.gz` 时可直接浏览内部文件；改为 `.tgz` 后只显示内部 TAR 文件本身。复合格式识别同样遗漏 `.txz`。
+`.tgz` 和 `.txz` 现在在桌面层、核心格式枚举、文件选择器以及 7-Zip 后端复合包分流中分别映射到 `TarGz` 和 `TarXz`。浏览会继续通过流式 TAR 管道读取内部文件，测试和解压也会走复合包路径，不再把别名文件当作普通 GZip/XZ 文件展示内部 TAR。
 
-建议：统一归档格式识别逻辑，支持 `.tar.gz / .tgz / .tar.xz / .txz` 的浏览、测试和解压，并以真实别名文件加入回归测试。
+回归测试覆盖 `.tgz/.txz` 的格式解析、桌面识别和 7-Zip 复合包分流，并保留普通 `.gz/.xz` 不进入 TAR 分流。
 
-相关代码：[archive-sevenzip/src/lib.rs](crates/archive-sevenzip/src/lib.rs:652)。
+相关代码：[archive-sevenzip/src/lib.rs](crates/archive-sevenzip/src/lib.rs:859)、[desktop/lib.rs](apps/desktop/src-tauri/src/lib.rs:885)、[archive-core/src/lib.rs](crates/archive-core/src/lib.rs:383)。
 
 ### 7. 自动更新仍是占位能力
 

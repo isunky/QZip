@@ -885,7 +885,10 @@ async fn get_backend_capabilities(
 fn pick_input_paths(archives_only: bool) -> Vec<PathBuf> {
     let mut dialog = rfd::FileDialog::new();
     if archives_only {
-        dialog = dialog.add_filter("压缩包", &["7z", "zip", "rar", "tar", "gz", "xz", "bz2"]);
+        dialog = dialog.add_filter(
+            "压缩包",
+            &["7z", "zip", "rar", "tar", "gz", "tgz", "xz", "txz", "bz2"],
+        );
     }
     dialog.pick_files().unwrap_or_default()
 }

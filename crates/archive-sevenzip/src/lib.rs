@@ -230,6 +230,8 @@ impl SevenZipCliBackend {
             .and_then(|name| {
                 name.strip_suffix(".tar.gz")
                     .or_else(|| name.strip_suffix(".tar.xz"))
+                    .or_else(|| name.strip_suffix(".tgz"))
+                    .or_else(|| name.strip_suffix(".txz"))
             })
             .filter(|name| !name.is_empty())
             .unwrap_or("archive");
@@ -859,7 +861,10 @@ fn is_tar_wrapper(path: &Path) -> bool {
         .and_then(|name| name.to_str())
         .is_some_and(|name| {
             let name = name.to_ascii_lowercase();
-            name.ends_with(".tar.gz") || name.ends_with(".tar.xz")
+            name.ends_with(".tar.gz")
+                || name.ends_with(".tar.xz")
+                || name.ends_with(".tgz")
+                || name.ends_with(".txz")
         })
 }
 
@@ -1312,6 +1317,13 @@ mod tests {
             vec!["l", "-slt", "-sccUTF-8", "中文.zip"]
         );
     }
+    #[test]
+    fn treats_tgz_and_txz_as_tar_wrappers() {
+        assert!(is_tar_wrapper(Path::new("release.tgz")));
+        assert!(is_tar_wrapper(Path::new("RELEASE.TXZ")));
+        assert!(!is_tar_wrapper(Path::new("payload.gz")));
+        assert!(!is_tar_wrapper(Path::new("payload.xz")));
+    }
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn tar_wrapper_listing_streams_without_creating_an_expand_directory() {
@@ -1338,6 +1350,36 @@ mod tests {
                 .any(|entry| entry.path.ends_with("hello.txt"))
         );
         assert_eq!(before, expand_directories(&temporary_root));
+    }
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn txz_alias_listing_uses_the_tar_wrapper_stream() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let backend = SevenZipCliBackend::new(root.join("third_party/7zip/bin/win-x64/7z.exe"));
+        let source = root.join("tests/fixtures/compat/windows-bsdtar-xz.tar.xz");
+        let archive = std::env::temp_dir().join(format!("qzip-alias-{}.txz", Uuid::new_v4()));
+        fs::copy(&source, &archive).expect("copy fixture with TXZ alias");
+        let temporary_root = std::env::temp_dir();
+        let before = expand_directories(&temporary_root);
+
+        let entries = backend
+            .list(
+                ListArchiveRequest {
+                    archive: archive.clone(),
+                    password: None,
+                },
+                CancellationToken::new(),
+            )
+            .await
+            .expect("TXZ alias listing succeeds");
+
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.path.ends_with("hello.txt"))
+        );
+        assert_eq!(before, expand_directories(&temporary_root));
+        fs::remove_file(archive).expect("remove TXZ alias fixture");
     }
     #[cfg(target_os = "windows")]
     fn expand_directories(root: &Path) -> Vec<PathBuf> {

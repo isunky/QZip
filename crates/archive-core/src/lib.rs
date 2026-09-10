@@ -385,6 +385,14 @@ mod tests {
             "tar.xz".parse::<ArchiveFormat>().unwrap(),
             ArchiveFormat::TarXz
         );
+        assert_eq!(
+            "tgz".parse::<ArchiveFormat>().unwrap(),
+            ArchiveFormat::TarGz
+        );
+        assert_eq!(
+            "txz".parse::<ArchiveFormat>().unwrap(),
+            ArchiveFormat::TarXz
+        );
     }
     #[test]
     fn rejects_unknown_format() {
