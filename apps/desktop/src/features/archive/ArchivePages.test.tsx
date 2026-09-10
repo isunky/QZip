@@ -292,6 +292,7 @@ describe("archive core flow controls", () => {
       warnings: [],
       retryable: false
     });
+    const close = vi.spyOn(archiveClient, "close").mockResolvedValue(undefined);
     const onStarted = vi.fn();
     render(<BatchExtractPage archives={["D:\\safe.zip", "D:\\secret.7z"]} onBack={vi.fn()} onStarted={onStarted} />);
     fireEvent.click(screen.getByRole("button", { name: "开始批量解压" }));
@@ -300,5 +301,6 @@ describe("archive core flow controls", () => {
     const [tasks, failures] = onStarted.mock.calls[0] as [TaskSnapshot[], { archive: string; message: string }[]];
     expect(tasks).toHaveLength(1);
     expect(failures).toEqual([{ archive: "D:\\secret.7z", message: "需要密码" }]);
+    expect(close).toHaveBeenCalledWith("safe");
   });
 });

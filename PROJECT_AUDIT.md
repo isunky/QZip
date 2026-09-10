@@ -110,13 +110,13 @@ GitHub Actions 提供 `WINDOWS_PFX_PASSWORD`，构建脚本要求 `QZIP_WINDOWS_
 
 ### 8. 压缩包会话未在前端切换页面时释放
 
-**等级：中**
+**等级：中｜状态：已修复**
 
-后端已经提供关闭会话接口，但前端在返回首页、切换归档或完成批量操作时没有调用。反复打开大压缩包会持续保留条目列表和会话内存；加密包会话还会延长密码在内存中的持有时间。
+桌面端现在跟踪当前活动会话，并在返回首页、切换到任务中心或设置页、完成解压任务、切换到新的压缩包，以及进入批量解压流程时释放旧会话。浏览压缩包返回解压页会保留同一会话以支持继续操作，关闭浏览页则沿用统一清理路径。批量解压对每个已准备会话使用 `finally` 关闭，即使输出建议或任务创建失败也不会泄漏；关闭失败按 best-effort 处理，不阻塞页面导航。
 
-建议：在切换归档、返回首页和组件卸载时关闭旧会话；后端增加会话数量或内存上限。
+回归测试覆盖页面切换释放和批量解压后的会话关闭。
 
-相关代码：[desktop/lib.rs](apps/desktop/src-tauri/src/lib.rs:941)、[App.tsx](apps/desktop/src/app/App.tsx:310)。
+相关代码：[archiveClient.ts](apps/desktop/src/lib/archiveClient.ts:19)、[App.tsx](apps/desktop/src/app/App.tsx:116)、[ArchivePages.tsx](apps/desktop/src/features/archive/ArchivePages.tsx:646)。
 
 ### 9. 任务历史写入没有串行化，也没有按最近更新时间保留
 

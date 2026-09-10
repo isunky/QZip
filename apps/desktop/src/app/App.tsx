@@ -100,6 +100,7 @@ export function App() {
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [passwordPrompt, setPasswordPrompt] = useState<PasswordPrompt | null>(null);
   const settingsRef = useRef(settings);
+  const activeSessionIdRef = useRef<string | null>(null);
   const resolvedMode = resolveThemeMode(mode, systemDark);
   const locale = resolveAppLocale(settings.language);
   const brandName = localize(locale, "轻压", "QZip");
@@ -111,6 +112,14 @@ export function App() {
     setMode(next.themeMode as ThemeMode);
     setAccent(next.accentTheme as AccentTheme);
   }, [setAccent, setMode]);
+
+  const closeActiveSession = useCallback(() => {
+    const sessionId = activeSessionIdRef.current;
+    activeSessionIdRef.current = null;
+    if (archiveClient.isTauri && sessionId) {
+      void archiveClient.close(sessionId).catch(() => undefined);
+    }
+  }, []);
 
   useEffect(() => { void settingsClient.get().then(applySettings).catch(() => setToast(text("无法加载本机设置，已使用默认值。", "Could not load local settings. Defaults are being used."))); }, [applySettings, text]);
   useEffect(() => {
@@ -124,6 +133,12 @@ export function App() {
   const prepareArchive = useCallback(async (target: string, destination: ArchiveDestination, password?: string) => {
     try {
       const next = archiveClient.isTauri ? await archiveClient.prepare(target, password) : demoSession;
+      const previousSessionId = activeSessionIdRef.current;
+      const nextSessionId = archiveClient.isTauri ? next.sessionId : null;
+      activeSessionIdRef.current = nextSessionId;
+      if (previousSessionId && previousSessionId !== nextSessionId) {
+        void archiveClient.close(previousSessionId).catch(() => undefined);
+      }
       setArchive(target);
       setSession(next);
       setArchivePassword(password ?? "");
@@ -226,12 +241,14 @@ export function App() {
           }))
           .then((task) => {
             setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+            closeActiveSession();
             setFocusedTaskId(task.taskId);
             setPage("tasks");
             setToast(text("已开始执行右键压缩任务。", "Context-menu compression started."));
           })
           .catch((reason) => setToast(text(`无法启动右键压缩：${String(reason)}`, `Could not start context-menu compression: ${String(reason)}`)));
       } else if (request.kind === "moreOptions") {
+        closeActiveSession();
         setCreateInputs(request.paths);
         setCreateFormat(undefined);
         setPage("create");
@@ -246,6 +263,7 @@ export function App() {
           }))
           .then((task) => {
             setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+            closeActiveSession();
             setFocusedTaskId(task.taskId);
             setPage("tasks");
             setToast(named ? text("已开始解压到同名文件夹。", "Extraction to a same-name folder started.") : text("已开始解压到此处。", "Extraction here started."));
@@ -267,7 +285,7 @@ export function App() {
     checkPendingRequest();
     const pendingRequestTimer = window.setInterval(checkPendingRequest, 750);
     return () => { window.clearInterval(pendingRequestTimer); unlisten?.(); };
-  }, [prepareArchive, text]);
+  }, [closeActiveSession, prepareArchive, text]);
   useEffect(() => {
     if (!archiveClient.isTauri) return;
     let unlisten: (() => void) | undefined;
@@ -276,6 +294,7 @@ export function App() {
       void archiveClient.scan(event.payload.paths)
         .then((result) => {
           if (result.normalPaths.length) {
+            closeActiveSession();
             setCreateInputs(result.paths);
             setCreateFormat(undefined);
             setPage("create");
@@ -283,6 +302,7 @@ export function App() {
               ? text("已识别混合内容，可统一创建新的压缩包。", "Mixed content detected. You can create a new archive from it.")
               : text(`已添加 ${result.paths.length} 个对象。`, `${result.paths.length} items added.`));
           } else if (result.archivePaths.length > 1) {
+            closeActiveSession();
             setBatchArchives(result.archivePaths);
             setPage("batchExtract");
           } else if (result.archivePaths[0]) {
@@ -292,13 +312,14 @@ export function App() {
         .catch((reason) => setToast(text(`无法识别拖入内容：${commandIssue(reason).message}`, `Could not identify dropped content: ${commandIssue(reason).message}`)));
     })).then((dispose) => { unlisten = dispose; }).catch(() => undefined);
     return () => unlisten?.();
-  }, [prepareArchive, text]);
+  }, [closeActiveSession, prepareArchive, text]);
 
   async function openArchive() {
     try {
       const selected = archiveClient.isTauri ? await archiveClient.pickInputPaths(true) : [archive];
       if (!selected[0]) return;
       if (selected.length > 1) {
+        closeActiveSession();
         setBatchArchives(selected);
         setPage("batchExtract");
         return;
@@ -307,17 +328,17 @@ export function App() {
     } catch (reason) { setToast(String(reason)); }
   }
   function addTask(task: TaskSnapshot) { setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]); setToast(text("任务已加入队列，可在任务中心查看进度。", "Task queued. Track its progress in the task center.")); }
-  function showTask(task: TaskSnapshot) { addTask(task); setFocusedTaskId(task.taskId); setPage("tasks"); }
-  function goHome() { setArchivePassword(""); setFocusedTaskId(null); setPage("home"); }
+  function showTask(task: TaskSnapshot) { closeActiveSession(); addTask(task); setFocusedTaskId(task.taskId); setPage("tasks"); }
+  function goHome() { closeActiveSession(); setArchivePassword(""); setFocusedTaskId(null); setPage("home"); }
   function currentPage() {
     if (page === "settings") return <SettingsPage settings={settings} onBack={goHome} onChanged={applySettings} onToast={setToast} />;
-    if (page === "create") return <CreatePage onBack={goHome} onCreated={addTask} onOpenTasks={() => setPage("tasks")} defaultFormat={createFormat ?? settings.defaultFormat} defaultProfile={settings.compressionProfile} defaultTestAfterCreate={settings.testAfterCreate} initialInputs={createInputs} />;
+    if (page === "create") return <CreatePage onBack={goHome} onCreated={addTask} onOpenTasks={() => { closeActiveSession(); setPage("tasks"); }} defaultFormat={createFormat ?? settings.defaultFormat} defaultProfile={settings.compressionProfile} defaultTestAfterCreate={settings.testAfterCreate} initialInputs={createInputs} />;
     if (page === "extract") return <ExtractPage archive={archive} session={session} selectedEntries={selectedEntries} onBack={goHome} onBrowse={() => setPage("browser")} onCreated={(task) => { setArchivePassword(""); showTask(task); }} defaultConflictPolicy={settings.conflictPolicy} initialPassword={archivePassword} />;
-    if (page === "batchExtract") return <BatchExtractPage archives={batchArchives} onBack={goHome} defaultConflictPolicy={settings.conflictPolicy} onStarted={(nextTasks, failures) => { if (nextTasks.length) setTasks((current) => [...nextTasks, ...current.filter((item) => !nextTasks.some((next) => next.taskId === item.taskId))]); setFocusedTaskId(nextTasks[0]?.taskId ?? null); setPage("tasks"); setToast(failures.length ? text(`已启动 ${nextTasks.length} 个任务，${failures.length} 个压缩包需要单独处理。`, `${nextTasks.length} tasks started; ${failures.length} archives need individual attention.`) : text(`已启动 ${nextTasks.length} 个解压任务。`, `${nextTasks.length} extraction tasks started.`)); }} />;
+    if (page === "batchExtract") return <BatchExtractPage archives={batchArchives} onBack={goHome} defaultConflictPolicy={settings.conflictPolicy} onStarted={(nextTasks, failures) => { closeActiveSession(); if (nextTasks.length) setTasks((current) => [...nextTasks, ...current.filter((item) => !nextTasks.some((next) => next.taskId === item.taskId))]); setFocusedTaskId(nextTasks[0]?.taskId ?? null); setPage("tasks"); setToast(failures.length ? text(`已启动 ${nextTasks.length} 个任务，${failures.length} 个压缩包需要单独处理。`, `${nextTasks.length} tasks started; ${failures.length} archives need individual attention.`) : text(`已启动 ${nextTasks.length} 个解压任务。`, `${nextTasks.length} extraction tasks started.`)); }} />;
     if (page === "browser") return <BrowserPage archive={archive} session={session} onBack={() => setPage("extract")} onClose={goHome} onExtract={(entries) => { setSelectedEntries(entries ?? []); setPage("extract"); }} onCreated={addTask} />;
     if (page === "tasks") return <TaskCenter tasks={tasks} focusTaskId={focusedTaskId ?? undefined} onBack={goHome} onClear={() => { if (archiveClient.isTauri) void archiveClient.clearCompleted().then(() => setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status)))).catch((reason) => setToast(text(`无法清理任务：${String(reason)}`, `Could not clear tasks: ${String(reason)}`))); else setTasks((current) => current.filter((task) => !["completed", "failed", "cancelled"].includes(task.status))); }} onCancel={(taskId) => { if (archiveClient.isTauri) void archiveClient.cancel(taskId).catch((reason) => setToast(text(`无法取消任务：${String(reason)}`, `Could not cancel task: ${String(reason)}`))); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "cancelled", updatedAt: Date.now() } : task)); }} onRetry={(taskId, password) => { if (archiveClient.isTauri) void archiveClient.retry(taskId, password).then(showTask).catch((reason) => setToast(text(`无法重试任务：${String(reason)}`, `Could not retry task: ${String(reason)}`))); else setTasks((current) => current.map((task) => task.taskId === taskId ? { ...task, status: "queued", updatedAt: Date.now(), error: undefined } : task)); }} />;
-    return <HomePage onCreate={() => { setCreateInputs([]); setCreateFormat(undefined); setPage("create"); }} onOpenArchive={() => void openArchive()} />;
+    return <HomePage onCreate={() => { closeActiveSession(); setCreateInputs([]); setCreateFormat(undefined); setPage("create"); }} onOpenArchive={() => void openArchive()} />;
   }
   const activeTaskCount = tasks.filter((task) => ["queued", "scanning", "running", "cancelling"].includes(task.status)).length;
-  return <I18nProvider locale={locale}><main className="qzip-app-shell"><Header activePage={page} activeTaskCount={activeTaskCount} iconSrc={appIcon} onHomeClick={goHome} onTasksClick={() => { setFocusedTaskId(null); setPage("tasks"); }} onSettingsClick={() => setPage("settings")} /><section className="qzip-app-content" data-page={page}>{currentPage()}</section>{passwordPrompt ? <section className="qzip-password-prompt" role="dialog" aria-modal="true" aria-labelledby="qzip-password-prompt-title"><form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); const password = String(data.get("password") ?? ""); if (!password) return; void prepareArchive(passwordPrompt.archive, passwordPrompt.destination, password); }}><h2 id="qzip-password-prompt-title">{text("需要压缩包密码", "Archive password required")}</h2><p>{passwordPrompt.message}</p><input name="password" type="password" autoFocus placeholder={text("请输入密码", "Enter password")} aria-label={text("压缩包密码", "Archive password")} /><div><button type="button" onClick={() => setPasswordPrompt(null)}>{text("取消", "Cancel")}</button><button type="submit">{text("继续", "Continue")}</button></div></form></section> : null}{toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}</main></I18nProvider>;
+  return <I18nProvider locale={locale}><main className="qzip-app-shell"><Header activePage={page} activeTaskCount={activeTaskCount} iconSrc={appIcon} onHomeClick={goHome} onTasksClick={() => { closeActiveSession(); setFocusedTaskId(null); setPage("tasks"); }} onSettingsClick={() => { closeActiveSession(); setPage("settings"); }} /><section className="qzip-app-content" data-page={page}>{currentPage()}</section>{passwordPrompt ? <section className="qzip-password-prompt" role="dialog" aria-modal="true" aria-labelledby="qzip-password-prompt-title"><form onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); const password = String(data.get("password") ?? ""); if (!password) return; void prepareArchive(passwordPrompt.archive, passwordPrompt.destination, password); }}><h2 id="qzip-password-prompt-title">{text("需要压缩包密码", "Archive password required")}</h2><p>{passwordPrompt.message}</p><input name="password" type="password" autoFocus placeholder={text("请输入密码", "Enter password")} aria-label={text("压缩包密码", "Archive password")} /><div><button type="button" onClick={() => setPasswordPrompt(null)}>{text("取消", "Cancel")}</button><button type="submit">{text("继续", "Continue")}</button></div></form></section> : null}{toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}</main></I18nProvider>;
 }

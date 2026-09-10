@@ -1,11 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { useAppearanceStore } from "../stores/appearance";
 import { settingsClient } from "../lib/settingsClient";
+import { archiveClient } from "../lib/archiveClient";
 
 describe("App appearance controls", () => {
   afterEach(async () => {
+    vi.restoreAllMocks();
+    Object.defineProperty(archiveClient, "isTauri", { configurable: true, value: false });
     await settingsClient.reset();
     useAppearanceStore.setState({ mode: "light", accent: "mint" });
     document.documentElement.dataset.mode = "light";
@@ -55,5 +58,27 @@ describe("App appearance controls", () => {
     expect(screen.getByRole("img", { name: "轻压应用图标" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /GitHub 项目/ })).toBeInTheDocument();
     expect(screen.queryByText("系统集成")).not.toBeInTheDocument();
+  });
+
+  it("closes the active archive session when switching to another page", async () => {
+    Object.defineProperty(archiveClient, "isTauri", { configurable: true, value: true });
+    const session = { sessionId: "session-switch", format: "zip" as const, compressedSize: 10, estimatedUncompressedSize: 20, entryCount: 1, encrypted: false, risks: [] };
+    vi.spyOn(archiveClient, "tasks").mockResolvedValue([]);
+    vi.spyOn(archiveClient, "onTaskEvent").mockResolvedValue(() => undefined);
+    vi.spyOn(archiveClient, "onLaunchRequest").mockResolvedValue(() => undefined);
+    vi.spyOn(archiveClient, "takeInitialLaunchRequest").mockResolvedValue(null);
+    vi.spyOn(archiveClient, "takePendingShellRequest").mockResolvedValue(null);
+    vi.spyOn(archiveClient, "recordPerformanceMarker").mockResolvedValue(undefined);
+    vi.spyOn(archiveClient, "pickInputPaths").mockResolvedValue(["D:\\sample.zip"]);
+    vi.spyOn(archiveClient, "prepare").mockResolvedValue(session);
+    vi.spyOn(archiveClient, "suggestExtractOutput").mockResolvedValue("D:\\sample");
+    const close = vi.spyOn(archiveClient, "close").mockResolvedValue(undefined);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "打开压缩包" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "快速解压" })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "设置" }));
+    await waitFor(() => expect(close).toHaveBeenCalledWith("session-switch"));
   });
 });

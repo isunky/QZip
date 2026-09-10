@@ -643,8 +643,9 @@ export function BatchExtractPage({
     const failures: { archive: string; message: string }[] = [];
     for (const target of archives) {
       setCurrent(target);
+      let prepared: ArchiveSession | undefined;
       try {
-        const prepared = await archiveClient.prepare(target);
+        prepared = await archiveClient.prepare(target);
         if (prepared.risks.length) throw new Error(text("需要单独打开并确认安全风险", "Open separately to review security risks"));
         const output = await archiveClient.suggestExtractOutput(target, true);
         tasks.push(await archiveClient.extract({
@@ -655,6 +656,8 @@ export function BatchExtractPage({
         }));
       } catch (reason) {
         failures.push({ archive: target, message: errorMessage(reason) });
+      } finally {
+        if (prepared) await archiveClient.close(prepared.sessionId).catch(() => undefined);
       }
       setCompleted((value) => value + 1);
     }
