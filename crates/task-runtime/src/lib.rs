@@ -5,7 +5,7 @@
 
 use std::{
     collections::BTreeMap,
-    fs,
+    fs, io,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
@@ -126,6 +126,7 @@ pub struct TaskManager {
     events: broadcast::Sender<TaskEvent>,
     semaphore: Arc<Semaphore>,
     history_path: PathBuf,
+    history_write_lock: Mutex<()>,
 }
 
 impl TaskManager {
@@ -137,7 +138,9 @@ impl TaskManager {
             events,
             semaphore: Arc::new(Semaphore::new(2)),
             history_path,
+            history_write_lock: Mutex::new(()),
         });
+        recover_history_file(&manager.history_path);
         manager.load_history();
         manager
     }
@@ -660,9 +663,10 @@ impl TaskManager {
         let Ok(bytes) = fs::read(&self.history_path) else {
             return;
         };
-        let Ok(history) = serde_json::from_slice::<Vec<TaskSnapshot>>(&bytes) else {
+        let Ok(mut history) = serde_json::from_slice::<Vec<TaskSnapshot>>(&bytes) else {
             return;
         };
+        sort_history(&mut history);
         let mut tasks = self.tasks.lock().expect("task lock");
         for mut snapshot in history.into_iter().take(HISTORY_LIMIT) {
             // A persisted snapshot has no reconstructable task specification or
@@ -683,7 +687,12 @@ impl TaskManager {
         }
     }
     fn persist_history(&self) {
-        let history: Vec<_> = self
+        // Keep the complete snapshot/serialize/replace sequence serialized. A
+        // task can finish on any worker thread, so sharing a fixed temporary
+        // path without this lock can interleave writes or replace a newer
+        // history with an older snapshot.
+        let _write_guard = self.history_write_lock.lock().expect("history write lock");
+        let mut history: Vec<_> = self
             .tasks
             .lock()
             .expect("task lock")
@@ -695,17 +704,120 @@ impl TaskManager {
                 )
             })
             .map(|record| record.snapshot.clone())
-            .take(HISTORY_LIMIT)
             .collect();
-        if let Some(parent) = self.history_path.parent() {
-            let _ = fs::create_dir_all(parent);
+        sort_history(&mut history);
+        history.truncate(HISTORY_LIMIT);
+
+        let result = (|| -> io::Result<()> {
+            if let Some(parent) = self.history_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let temporary = temporary_history_path(&self.history_path);
+            let write_result = (|| -> io::Result<()> {
+                let mut file = fs::File::create(&temporary)?;
+                serde_json::to_writer(&mut file, &history).map_err(io::Error::other)?;
+                file.sync_all()?;
+                replace_history_file(&temporary, &self.history_path)?;
+                Ok(())
+            })();
+            if write_result.is_err() {
+                let _ = fs::remove_file(&temporary);
+            }
+            write_result
+        })();
+        if let Err(error) = result {
+            eprintln!(
+                "任务历史写入失败（{}）：{}",
+                self.history_path.display(),
+                error
+            );
         }
-        let temporary = self.history_path.with_extension("json.tmp");
-        if let Ok(file) = fs::File::create(&temporary)
-            && serde_json::to_writer(file, &history).is_ok()
-        {
-            let _ = fs::remove_file(&self.history_path);
-            let _ = fs::rename(temporary, &self.history_path);
+    }
+}
+
+fn sort_history(history: &mut [TaskSnapshot]) {
+    history.sort_by(|left, right| {
+        right
+            .updated_at
+            .cmp(&left.updated_at)
+            .then_with(|| right.created_at.cmp(&left.created_at))
+            .then_with(|| right.task_id.cmp(&left.task_id))
+    });
+}
+
+fn temporary_history_path(history_path: &Path) -> PathBuf {
+    let extension = history_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("json");
+    history_path.with_extension(format!("{extension}.{}.tmp", Uuid::new_v4()))
+}
+
+fn history_backup_path(history_path: &Path) -> PathBuf {
+    let extension = history_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("json");
+    history_path.with_extension(format!("{extension}.bak"))
+}
+
+#[cfg(not(windows))]
+fn recover_history_file(_: &Path) {}
+
+#[cfg(windows)]
+fn recover_history_file(history_path: &Path) {
+    let backup = history_backup_path(history_path);
+    match (history_path.exists(), backup.exists()) {
+        (false, true) => {
+            if let Err(error) = fs::rename(&backup, history_path) {
+                eprintln!("任务历史恢复失败（{}）：{}", history_path.display(), error);
+            }
+        }
+        (true, true) => {
+            if let Err(error) = fs::remove_file(&backup) {
+                eprintln!("任务历史备份清理失败（{}）：{}", backup.display(), error);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[cfg(not(windows))]
+fn replace_history_file(temporary: &Path, history_path: &Path) -> io::Result<()> {
+    // POSIX rename atomically replaces the destination while leaving the old
+    // file intact if the write or rename fails.
+    fs::rename(temporary, history_path)
+}
+
+#[cfg(windows)]
+fn replace_history_file(temporary: &Path, history_path: &Path) -> io::Result<()> {
+    // Windows `rename` does not replace an existing file. Keep a uniquely
+    // named backup until the new file is in place, and restore it if the
+    // second move fails. This avoids deleting the only good history copy.
+    let backup = history_backup_path(history_path);
+    if backup.exists() {
+        fs::remove_file(&backup)?;
+    }
+    let had_existing = history_path.exists();
+    if had_existing {
+        fs::rename(history_path, &backup)?;
+    }
+    match fs::rename(temporary, history_path) {
+        Ok(()) => {
+            if had_existing {
+                let _ = fs::remove_file(backup);
+            }
+            Ok(())
+        }
+        Err(error) => {
+            if had_existing {
+                if let Err(restore_error) = fs::rename(&backup, history_path) {
+                    return Err(io::Error::other(format!(
+                        "替换任务历史失败：{error}；恢复原文件失败：{restore_error}"
+                    )));
+                }
+            }
+            Err(error)
         }
     }
 }
@@ -1373,6 +1485,36 @@ mod tests {
         path
     }
 
+    fn history_snapshot(task_id: impl Into<String>, updated_at: u64) -> TaskSnapshot {
+        TaskSnapshot {
+            task_id: task_id.into(),
+            operation: ArchiveOperation::Test,
+            status: TaskStatus::Completed,
+            display_name: "archive.7z".into(),
+            output: None,
+            created_at: updated_at.saturating_sub(1),
+            updated_at,
+            progress: None,
+            error: None,
+            warnings: vec![],
+            retryable: false,
+        }
+    }
+
+    fn insert_history_snapshot(manager: &Arc<TaskManager>, snapshot: TaskSnapshot) {
+        manager.tasks.lock().expect("task lock").insert(
+            snapshot.task_id.clone(),
+            TaskRecord {
+                snapshot,
+                spec: TaskSpec::Test {
+                    archive: PathBuf::new(),
+                },
+                cancellation: CancellationToken::new(),
+                can_retry: false,
+            },
+        );
+    }
+
     #[test]
     fn refuses_an_archive_inside_an_input_directory() {
         let root = test_directory("recursive-output");
@@ -1398,6 +1540,60 @@ mod tests {
             )
             .unwrap_err();
         assert_eq!(error.code, ArchiveErrorCode::Unknown);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn history_keeps_the_most_recent_updated_tasks() {
+        let root = test_directory("history-order");
+        let history_path = root.join("history.json");
+        let persisted = (0..(HISTORY_LIMIT + 20))
+            .map(|index| history_snapshot(format!("task-{index:03}"), index as u64))
+            .collect::<Vec<_>>();
+        fs::write(&history_path, serde_json::to_vec(&persisted).unwrap()).unwrap();
+
+        let manager = TaskManager::new(Arc::new(UnusedBackend), history_path.clone());
+        let loaded = manager.snapshots();
+        assert_eq!(loaded.len(), HISTORY_LIMIT);
+        assert!(loaded.iter().all(|snapshot| snapshot.updated_at >= 20));
+
+        manager.persist_history();
+        let written =
+            serde_json::from_slice::<Vec<TaskSnapshot>>(&fs::read(&history_path).unwrap()).unwrap();
+        assert_eq!(written.len(), HISTORY_LIMIT);
+        assert_eq!(
+            written.first().map(|snapshot| snapshot.updated_at),
+            Some(119)
+        );
+        assert_eq!(written.last().map(|snapshot| snapshot.updated_at), Some(20));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn concurrent_history_writes_leave_a_valid_snapshot() {
+        let root = test_directory("history-concurrent");
+        let history_path = root.join("history.json");
+        let manager = TaskManager::new(Arc::new(UnusedBackend), history_path.clone());
+        for index in 0..8 {
+            insert_history_snapshot(&manager, history_snapshot(format!("task-{index}"), index));
+        }
+
+        std::thread::scope(|scope| {
+            for _ in 0..16 {
+                let manager = Arc::clone(&manager);
+                scope.spawn(move || manager.persist_history());
+            }
+        });
+
+        let written =
+            serde_json::from_slice::<Vec<TaskSnapshot>>(&fs::read(&history_path).unwrap())
+                .expect("concurrent history writes must leave valid JSON");
+        assert_eq!(written.len(), 8);
+        assert!(
+            written
+                .windows(2)
+                .all(|pair| pair[0].updated_at >= pair[1].updated_at)
+        );
         let _ = fs::remove_dir_all(root);
     }
 
