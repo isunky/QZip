@@ -39,7 +39,7 @@
 
 **修复：** 覆盖解压现在先将原文件移入同目录临时备份，再替换为暂存文件；替换失败时会自动恢复原文件。已有目录的合并使用变更日志，任一步失败都会按逆序回滚已创建和已替换内容；备份清理失败也会保留备份以优先保证原文件安全。新增后续冲突触发整体回滚的回归测试，以及 Windows 源文件锁定导致替换失败仍恢复原文件的测试。
 
-相关代码：[task-runtime/src/lib.rs](crates/task-runtime/src/lib.rs:922)。
+相关代码：[task-runtime/src/staging.rs](crates/task-runtime/src/staging.rs:155)。
 
 ### 3. 浏览 TAR.GZ/TAR.XZ 时会先完整解包到系统临时目录
 
@@ -72,7 +72,7 @@
 
 **修复：** 桌面端任务事件转发不再使用 `while let Ok(...)` 静默退出；现在会明确处理 `Lagged` 并从任务管理器读取最新快照，为每个任务发送 `task.resync` 同步事件后继续监听，只有 `Closed` 才结束循环。前端收到同步事件时仍会更新任务列表，但不会重复触发完成/失败 Toast 或系统通知。新增广播缓冲区溢出后接收器继续可用的回归测试。
 
-相关代码：[task-runtime/src/lib.rs](crates/task-runtime/src/lib.rs:132)、[desktop/lib.rs](apps/desktop/src-tauri/src/lib.rs:1699)。
+相关代码：[task-runtime/src/lib.rs](crates/task-runtime/src/lib.rs:131)、[desktop/lib.rs](apps/desktop/src-tauri/src/lib.rs:795)。
 
 ## 发布前应处理
 
@@ -94,7 +94,7 @@ GitHub Actions 提供 `WINDOWS_PFX_PASSWORD`，构建脚本要求 `QZIP_WINDOWS_
 
 回归测试覆盖 `.tgz/.txz` 的格式解析、桌面识别和 7-Zip 复合包分流，并保留普通 `.gz/.xz` 不进入 TAR 分流。
 
-相关代码：[archive-sevenzip/src/lib.rs](crates/archive-sevenzip/src/lib.rs:859)、[desktop/lib.rs](apps/desktop/src-tauri/src/lib.rs:885)、[archive-core/src/lib.rs](crates/archive-core/src/lib.rs:383)。
+相关代码：[archive-sevenzip/src/lib.rs](crates/archive-sevenzip/src/lib.rs:859)、[desktop/lib.rs](apps/desktop/src-tauri/src/lib.rs:190)、[archive-core/src/lib.rs](crates/archive-core/src/lib.rs:383)。
 
 ### 7. 自动更新仍是占位能力
 
@@ -104,7 +104,7 @@ GitHub Actions 提供 `WINDOWS_PFX_PASSWORD`，构建脚本要求 `QZIP_WINDOWS_
 
 当前仍保留启动自动检查开关但保持禁用，待发布渠道配置 Tauri updater 的签名元数据后再启用自动下载、签名校验和安装流程；手动检查与下载页跳转已可用于正式版本。
 
-相关代码：[desktop/lib.rs](apps/desktop/src-tauri/src/lib.rs:1262)、[settingsClient.ts](apps/desktop/src/lib/settingsClient.ts:22)、[SettingsPage.tsx](apps/desktop/src/features/settings/SettingsPage.tsx:91)。
+相关代码：[desktop/updates.rs](apps/desktop/src-tauri/src/updates.rs:1)、[settingsClient.ts](apps/desktop/src/lib/settingsClient.ts:22)、[SettingsPage.tsx](apps/desktop/src/features/settings/SettingsPage.tsx:91)。
 
 ## 稳定性与维护性改进
 
@@ -116,7 +116,7 @@ GitHub Actions 提供 `WINDOWS_PFX_PASSWORD`，构建脚本要求 `QZIP_WINDOWS_
 
 回归测试覆盖页面切换释放和批量解压后的会话关闭。
 
-相关代码：[archiveClient.ts](apps/desktop/src/lib/archiveClient.ts:19)、[App.tsx](apps/desktop/src/app/App.tsx:116)、[ArchivePages.tsx](apps/desktop/src/features/archive/ArchivePages.tsx:646)。
+相关代码：[archiveClient.ts](apps/desktop/src/lib/archiveClient.ts:19)、[App.tsx](apps/desktop/src/app/App.tsx:116)、[ArchivePages.tsx](apps/desktop/src/features/archive/ArchivePages.tsx:518)。
 
 ### 9. 任务历史写入没有串行化，也没有按最近更新时间保留
 
@@ -126,15 +126,23 @@ GitHub Actions 提供 `WINDOWS_PFX_PASSWORD`，构建脚本要求 `QZIP_WINDOWS_
 
 回归测试覆盖最近 100 条保留、旧历史重新排序以及并发写入后 JSON 完整性。
 
-相关代码：[task-runtime/src/lib.rs](crates/task-runtime/src/lib.rs:689)。
+相关代码：[task-runtime/src/history.rs](crates/task-runtime/src/history.rs:13)、[task-runtime/src/lib.rs](crates/task-runtime/src/lib.rs:689)。
 
 ### 10. 大型核心文件承担过多职责
 
-**等级：中**
+**等级：中｜状态：已修复**
 
-`ArchivePages.tsx`、桌面端 `lib.rs` 与 `task-runtime/lib.rs` 均在 1,000 行以上，分别混合了 UI、会话、文件预览、系统集成、任务状态、持久化和安全写入逻辑。功能继续增加后，回归风险会快速上升。
+此前 `ArchivePages.tsx`、桌面端 `lib.rs` 与 `task-runtime/lib.rs` 均在 1,000 行以上，分别混合了 UI、会话、文件预览、系统集成、任务状态、持久化和安全写入逻辑。功能继续增加后，回归风险会快速上升。
 
-建议：按职责拆分为浏览会话、预览、系统集成、任务状态机、历史存储等模块；优先在修复高优问题时顺带抽离相邻代码。
+**修复：** 已按职责拆出边界明确、可独立测试的模块：
+
+- 归档前端将共享展示/格式化逻辑、浏览页和任务中心分别放入 `ArchiveShared.tsx`、`BrowserPage.tsx`、`TaskCenter.tsx`，`ArchivePages.tsx` 仅保留创建、解压和批量解压流程（518 行）。
+- 桌面端将归档条目分页排序、预览与临时目录、系统文件图标、GitHub 更新检查、Windows Shell 集成分别放入 `archive_entries.rs`、`preview.rs`、`system_icons.rs`、`updates.rs`、`shell_integration.rs`；入口 `lib.rs` 已降至 867 行。
+- 任务运行时将历史持久化和安全暂存/提交事务分别放入 `history.rs`、`staging.rs`，`lib.rs` 仅保留任务状态机与执行编排（737 行，测试移至独立 `tests.rs`）。
+
+各拆分模块保留原有公开命令入口或父模块调用边界，相关单测随模块迁移；Rust、前端类型检查及前端测试均已通过。
+
+相关代码：[ArchivePages.tsx](apps/desktop/src/features/archive/ArchivePages.tsx:43)、[ArchiveShared.tsx](apps/desktop/src/features/archive/ArchiveShared.tsx:48)、[desktop/lib.rs](apps/desktop/src-tauri/src/lib.rs:32)、[task-runtime/lib.rs](crates/task-runtime/src/lib.rs:28)。
 
 ## 建议实施顺序
 
