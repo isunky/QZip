@@ -106,27 +106,6 @@ export function App() {
   const brandName = localize(locale, "轻压", "QZip");
   const text = useCallback((zhCN: string, enUS: string) => localize(locale, zhCN, enUS), [locale]);
 
-  useEffect(() => {
-    if (!settingsClient.isTauri) return;
-    let cancelled = false;
-    let frame = 0;
-    let revealFrame = 0;
-    const revealWindow = () => {
-      if (cancelled) return;
-      void import("@tauri-apps/api/window")
-        .then(({ getCurrentWindow }) => getCurrentWindow().show())
-        .catch(() => undefined);
-    };
-    frame = window.requestAnimationFrame(() => {
-      revealFrame = window.requestAnimationFrame(revealWindow);
-    });
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(frame);
-      window.cancelAnimationFrame(revealFrame);
-    };
-  }, []);
-
   const applySettings = useCallback((next: AppSettings) => {
     settingsRef.current = next;
     setSettings(next);
