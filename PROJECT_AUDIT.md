@@ -126,7 +126,7 @@ GitHub Actions 提供 `WINDOWS_PFX_PASSWORD`，构建脚本要求 `QZIP_WINDOWS_
 
 回归测试覆盖最近 100 条保留、旧历史重新排序以及并发写入后 JSON 完整性。
 
-相关代码：[task-runtime/src/lib.rs](crates/task-runtime/src/lib.rs:686)。
+相关代码：[task-runtime/src/lib.rs](crates/task-runtime/src/lib.rs:689)。
 
 ### 10. 大型核心文件承担过多职责
 
