@@ -26,20 +26,16 @@ import type {
 import { archiveClient } from "../../lib/archiveClient";
 import { useI18n } from "../../lib/i18n";
 import { joinOutputPath, splitOutputPath, suggestCreateOutputLocally } from "./archivePath";
+import { DetailWorkspace, FormRow, RiskNotice, Stat } from "./ArchiveShared";
 import {
   advancedFormatOptions,
-  DetailWorkspace,
   errorMessage,
   formatBytes,
   formatLabels,
   fileName,
-  FormRow,
   makeDemoTask,
-  primaryFormatOptions,
-  RiskNotice,
-  Stat,
-  type Page
-} from "./ArchiveShared";
+  primaryFormatOptions
+} from "./archiveUtils";
 export function CreatePage({
   onBack,
   onCreated,
@@ -515,4 +511,4 @@ export function BatchExtractPage({
 
 export { BrowserPage } from "./BrowserPage";
 export { TaskCenter } from "./TaskCenter";
-export type { Page } from "./ArchiveShared";
+export type { Page } from "./archiveUtils";

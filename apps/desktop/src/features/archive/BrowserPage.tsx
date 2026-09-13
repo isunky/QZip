@@ -23,9 +23,9 @@ import { Card, Input } from "@qzip/ui";
 import type { ArchiveEntry, ArchiveSession, TaskSnapshot } from "../../contracts/archive";
 import { archiveClient } from "../../lib/archiveClient";
 import { useI18n } from "../../lib/i18n";
+import { Empty } from "./ArchiveShared";
 import {
   demoEntries,
-  Empty,
   errorMessage,
   fileExtension,
   fileName,
@@ -35,7 +35,7 @@ import {
   makeDemoTask,
   type EntrySortKey,
   type SortDirection
-} from "./ArchiveShared";
+} from "./archiveUtils";
 
 export function BrowserPage({
   archive,
