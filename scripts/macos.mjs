@@ -30,7 +30,8 @@ if (command === 'fetch') {
   for (const name of await readdir(staging)) {
     if (/^(license|copying|readme|history).*\.txt$/i.test(name)) await copyFile(join(staging, name), join(runtime, name));
   }
-  run('/usr/bin/lipo', ['-verify_arch', 'arm64', 'x86_64', join(runtime, '7zz')]);
+  // lipo requires the input file before -verify_arch (otherwise it only prints usage).
+  run('/usr/bin/lipo', [join(runtime, '7zz'), '-verify_arch', 'arm64', 'x86_64']);
   run('/usr/bin/codesign', ['--force', '--sign', '-', join(runtime, '7zz')]);
   run(join(runtime, '7zz'), ['i']);
   const digest = await hash(join(runtime, '7zz'));
