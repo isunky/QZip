@@ -176,7 +176,9 @@ pub(super) async fn get_system_file_icons(extensions: Vec<String>) -> HashMap<St
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_system_icon_extension, system_icon_data_url};
+    use super::normalize_system_icon_extension;
+    #[cfg(target_os = "windows")]
+    use super::system_icon_data_url;
 
     #[test]
     fn normalizes_safe_file_extensions() {
