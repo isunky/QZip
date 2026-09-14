@@ -264,10 +264,87 @@ jobs:
           path: artifacts/release/${{ github.event.client_payload.tag }}/**
           if-no-files-found: error
 
+  build-macos:
+    name: build-${{ github.event.client_payload.tag }}-macos-${{ matrix.arch }}
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'qzip-release-build'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      RELEASE_VERSION: ${{ github.event.client_payload.version }}
+      RELEASE_TAG: ${{ github.event.client_payload.tag }}
+      RELEASE_SHA: ${{ github.event.client_payload.release_sha }}
+      RELEASE_BRANCH: ${{ github.event.client_payload.branch }}
+      QZIP_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.client_payload.release_sha }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Validate release source and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Release dispatch contains invalid stable SemVer metadata.' >&2; exit 1; }
+          [[ "$RELEASE_TAG" == "v$RELEASE_VERSION" ]] || { echo 'Release tag does not match the release version.' >&2; exit 1; }
+          [[ "$RELEASE_BRANCH" == "${{ github.event.repository.default_branch }}" ]] || { echo 'Release dispatch must target the default branch.' >&2; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]] || { echo 'Release checkout does not match the dispatch source.' >&2; exit 1; }
+          [[ "$GITHUB_SHA" == "$RELEASE_SHA" ]] || { echo 'Release dispatch source and provenance source do not reference the same commit.' >&2; exit 1; }
+          git fetch origin "refs/heads/$RELEASE_BRANCH:refs/remotes/origin/$RELEASE_BRANCH" --no-tags
+          [[ "$(git rev-parse "refs/remotes/origin/$RELEASE_BRANCH")" == "$RELEASE_SHA" ]] || { echo 'The release commit is no longer the head of the default branch.' >&2; exit 1; }
+          [[ "$(node -p "require('./package.json').version")" == "$RELEASE_VERSION" ]] || { echo 'Release package version does not match the dispatch version.' >&2; exit 1; }
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+      - name: Fetch and verify official 7-Zip engine
+        run: node scripts/macos.mjs fetch
+      - name: Check macOS workspace and archive round trips
+        run: node scripts/macos.mjs check
+      - name: Build macOS application and DMG
+        run: node scripts/macos.mjs build
+      - name: Prepare macOS release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          mkdir -p artifacts/macos
+          DMG="$(find target -path '*/release/bundle/dmg/*.dmg' -type f -print -quit)"
+          [[ -n "$DMG" ]] || { echo 'macOS DMG was not produced.' >&2; exit 1; }
+          cp "$DMG" "artifacts/macos/QZip-v${VERSION}-macos-${QZIP_ARCH}.dmg"
+          cd artifacts/macos
+          shasum -a 256 *.dmg > "SHA256SUMS-macos-${QZIP_ARCH}.txt"
+      - name: Attest macOS release assets
+        uses: actions/attest@v4
+        with:
+          subject-path: artifacts/macos/**
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qzip-macos-${{ github.event.client_payload.tag }}-${{ matrix.arch }}
+          path: artifacts/macos/
+          if-no-files-found: error
+
   publish:
     name: publish-${{ github.event.client_payload.tag }}
     if: github.event_name == 'repository_dispatch' && github.event.action == 'qzip-release-build'
-    needs: build-nsis
+    needs: [build-nsis, build-macos]
     runs-on: windows-2022
     env:
       RELEASE_TAG: ${{ github.event.client_payload.tag }}
@@ -283,6 +360,34 @@ jobs:
         with:
           name: qzip-windows-${{ github.event.client_payload.tag }}
           path: artifacts/release/${{ github.event.client_payload.tag }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: qzip-macos-${{ github.event.client_payload.tag }}-arm64
+          path: artifacts/release/${{ github.event.client_payload.tag }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: qzip-macos-${{ github.event.client_payload.tag }}-x64
+          path: artifacts/release/${{ github.event.client_payload.tag }}
+      - name: Verify macOS release assets
+        shell: pwsh
+        run: |
+          $releaseRoot = Join-Path $env:GITHUB_WORKSPACE ("artifacts/release/{0}" -f $env:RELEASE_TAG)
+          $assets = @(
+            @{ Name = "QZip-$($env:RELEASE_TAG)-macos-arm64.dmg"; Checksums = 'SHA256SUMS-macos-arm64.txt' },
+            @{ Name = "QZip-$($env:RELEASE_TAG)-macos-x64.dmg"; Checksums = 'SHA256SUMS-macos-x64.txt' }
+          )
+          foreach ($asset in $assets) {
+            $assetPath = Join-Path $releaseRoot $asset.Name
+            $checksumPath = Join-Path $releaseRoot $asset.Checksums
+            if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) { throw "macOS asset was not downloaded: $assetPath" }
+            if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) { throw "macOS checksum was not downloaded: $checksumPath" }
+            $line = (Get-Content -LiteralPath $checksumPath -Raw).Trim()
+            if ($line -notmatch '^([0-9a-fA-F]{64}) \*(.+)$' -or $Matches[2] -ne $asset.Name) {
+              throw "Invalid macOS checksum entry: $checksumPath"
+            }
+            $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $assetPath).Hash
+            if ($actualHash -ine $Matches[1]) { throw "macOS checksum mismatch: $asset.Name" }
+          }
       - name: Fetch release payload verifier
         shell: pwsh
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-sevenzip.ps1

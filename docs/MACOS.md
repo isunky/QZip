@@ -22,7 +22,7 @@ corepack pnpm macos:build
 
 ## 发布与安装
 
-独立的 `macOS test packages` 工作流在 PR/main/手动触发时分别使用 ARM 和 Intel runner 构建，不修改 Windows 发布流程，也不会自动发布未经实机验收的包。
+`macOS test packages` 工作流仍可在 PR/main/手动触发时分别使用 ARM 和 Intel runner 验证；`Build and release QZip` 正式发布 action 现在默认并行构建这两个 macOS 架构，并在 Windows 构建通过后将 DMG 一起发布到同一个 GitHub Release。
 
 两架构产物为 `QZip-v<版本>-macos-arm64.dmg`、`QZip-v<版本>-macos-x64.dmg` 及独立 SHA256 清单。下载 Actions artifacts 后先完成下列验收，再将两架构产物一起上传 GitHub 测试发布；不得把单架构通过称为双架构支持。上传时保留产物和校验清单原始文件名。正式版本 tag 与包名保持一致，更新检查才能匹配架构。
 
