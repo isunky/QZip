@@ -5,6 +5,7 @@ import { Toast } from "../components/Toast";
 import { HomePage } from "../features/home/HomePage";
 import { BatchExtractPage, BrowserPage, CreatePage, ExtractPage, TaskCenter, type Page } from "../features/archive/ArchivePages";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { useAppUpdates } from "../features/settings/useAppUpdates";
 import type { ArchiveSession, TaskSnapshot } from "../contracts/archive";
 import { defaultAppSettings, type AppSettings, uiScaleFactor } from "../contracts/settings";
 import { archiveClient } from "../lib/archiveClient";
@@ -92,6 +93,7 @@ export function App() {
   const [archive, setArchive] = useState("D:\\QZip\\示例压缩包.zip");
   const [session, setSession] = useState<ArchiveSession>(demoSession);
   const [settings, setSettings] = useState<AppSettings>(defaultAppSettings);
+  const updates = useAppUpdates(settings.checkUpdatesOnStartup);
   const [createInputs, setCreateInputs] = useState<string[]>([]);
   const [createFormat, setCreateFormat] = useState<"sevenZip" | "zip" | undefined>();
   const [selectedEntries, setSelectedEntries] = useState<string[]>([]);
@@ -331,7 +333,7 @@ export function App() {
   function showTask(task: TaskSnapshot) { closeActiveSession(); addTask(task); setFocusedTaskId(task.taskId); setPage("tasks"); }
   function goHome() { closeActiveSession(); setArchivePassword(""); setFocusedTaskId(null); setPage("home"); }
   function currentPage() {
-    if (page === "settings") return <SettingsPage settings={settings} onBack={goHome} onChanged={applySettings} onToast={setToast} />;
+    if (page === "settings") return <SettingsPage settings={settings} updates={updates} onBack={goHome} onChanged={applySettings} onToast={setToast} />;
     if (page === "create") return <CreatePage onBack={goHome} onCreated={addTask} onOpenTasks={() => { closeActiveSession(); setPage("tasks"); }} defaultFormat={createFormat ?? settings.defaultFormat} defaultProfile={settings.compressionProfile} defaultTestAfterCreate={settings.testAfterCreate} initialInputs={createInputs} />;
     if (page === "extract") return <ExtractPage archive={archive} session={session} selectedEntries={selectedEntries} onBack={goHome} onBrowse={() => setPage("browser")} onCreated={(task) => { setArchivePassword(""); showTask(task); }} defaultConflictPolicy={settings.conflictPolicy} initialPassword={archivePassword} />;
     if (page === "batchExtract") return <BatchExtractPage archives={batchArchives} onBack={goHome} defaultConflictPolicy={settings.conflictPolicy} onStarted={(nextTasks, failures) => { closeActiveSession(); if (nextTasks.length) setTasks((current) => [...nextTasks, ...current.filter((item) => !nextTasks.some((next) => next.taskId === item.taskId))]); setFocusedTaskId(nextTasks[0]?.taskId ?? null); setPage("tasks"); setToast(failures.length ? text(`已启动 ${nextTasks.length} 个任务，${failures.length} 个压缩包需要单独处理。`, `${nextTasks.length} tasks started; ${failures.length} archives need individual attention.`) : text(`已启动 ${nextTasks.length} 个解压任务。`, `${nextTasks.length} extraction tasks started.`)); }} />;

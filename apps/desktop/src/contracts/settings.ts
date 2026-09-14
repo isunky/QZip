@@ -48,6 +48,21 @@ export interface UpdateCheckResult {
   releaseUrl: string;
   releaseName?: string;
   publishedAt?: string;
+  releaseNotes?: string;
+  releaseTag?: string;
+  downloadSize?: number | null;
+  downloadAvailable?: boolean;
+}
+
+export interface UpdateDownloadProgress {
+  phase: "downloading" | "verifying";
+  downloaded: number;
+  total: number;
+}
+
+export interface DownloadedUpdate {
+  token: string;
+  version: string;
 }
 
 export const defaultAppSettings: AppSettings = {

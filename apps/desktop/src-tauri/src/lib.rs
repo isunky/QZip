@@ -33,6 +33,7 @@ mod archive_entries;
 mod preview;
 mod shell_integration;
 mod system_icons;
+mod update_download;
 mod updates;
 
 struct ArchiveSession {
@@ -657,50 +658,10 @@ fn open_default_apps_settings() -> Result<(), String> {
 }
 #[tauri::command]
 async fn check_for_updates() -> Result<updates::UpdateCheckResult, CommandErrorDto> {
-    let current_version = env!("CARGO_PKG_VERSION");
-    updates::TLS_PROVIDER_INIT.call_once(|| {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
-    let client = reqwest::Client::builder()
-        .user_agent(format!("QZip/{current_version}"))
-        .timeout(updates::UPDATE_REQUEST_TIMEOUT)
-        .build()
-        .map_err(|error| {
-            updates::update_check_error(
-                "UPDATE_CHECK_CLIENT",
-                format!("无法初始化更新检查：{error}"),
-            )
-        })?;
-    let response = client
-        .get(updates::UPDATE_API_URL)
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|error| {
-            updates::update_check_error(
-                "UPDATE_CHECK_NETWORK",
-                format!("无法连接 GitHub 检查更新，请检查网络后重试：{error}"),
-            )
-        })?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let message = if status.as_u16() == 403 || status.as_u16() == 429 {
-            "GitHub 请求次数已达到限制，请稍后重试。".to_owned()
-        } else {
-            format!("GitHub 更新服务返回异常状态（HTTP {}）。", status.as_u16())
-        };
-        return Err(updates::update_check_error("UPDATE_CHECK_HTTP", message));
-    }
-    let release = response
-        .json::<updates::GitHubRelease>()
-        .await
-        .map_err(|error| {
-            updates::update_check_error(
-                "UPDATE_CHECK_INVALID_RESPONSE",
-                format!("无法读取 GitHub 返回的版本信息：{error}"),
-            )
-        })?;
-    updates::update_result_for_release(current_version, release)
+    updates::update_result_for_release(
+        env!("CARGO_PKG_VERSION"),
+        updates::fetch_release(None).await?,
+    )
 }
 #[tauri::command]
 fn take_initial_launch_request(state: State<'_, AppState>) -> Option<LaunchRequest> {
@@ -769,6 +730,7 @@ fn record_performance_marker(name: String) {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(update_download::UpdateDownloads::default())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
@@ -854,6 +816,10 @@ pub fn run() {
             get_integration_status,
             open_default_apps_settings,
             check_for_updates,
+            update_download::download_update,
+            update_download::cancel_update_download,
+            update_download::install_update,
+            update_download::open_update_link,
             take_initial_launch_request,
             take_pending_shell_request,
             preview::open_archive_entry,

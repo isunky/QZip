@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, AppSettingsPatch, IntegrationStatus, UpdateCheckResult } from "../contracts/settings";
+import { Channel, invoke } from "@tauri-apps/api/core";
+import type { AppSettings, AppSettingsPatch, IntegrationStatus, UpdateCheckResult, UpdateDownloadProgress, DownloadedUpdate } from "../contracts/settings";
 import { defaultAppSettings } from "../contracts/settings";
 import desktopPackage from "../../package.json";
 
@@ -19,6 +19,14 @@ export const settingsClient = {
     modernContextMenuRegistered: false, updaterConfigured: false, distribution: "web-preview", appVersion: desktopPackage.version
   }),
   openDefaultApps: () => command<void>("open_default_apps_settings"),
+  downloadUpdate: (tag: string, handler: (progress: UpdateDownloadProgress) => void) => {
+    const onProgress = new Channel<UpdateDownloadProgress>();
+    onProgress.onmessage = handler;
+    return command<DownloadedUpdate>("download_update", { tag, onProgress });
+  },
+  cancelDownload: () => command<void>("cancel_update_download"),
+  installUpdate: (token: string) => command<void>("install_update", { token }),
+  openUpdateLink: (url: string) => isTauri ? command<void>("open_update_link", { url }) : Promise.resolve(window.open(url, "_blank", "noopener,noreferrer")).then(() => undefined),
   checkForUpdates: () => isTauri ? command<UpdateCheckResult>("check_for_updates") : Promise.resolve({
     configured: false,
     status: "unavailable" as const,
