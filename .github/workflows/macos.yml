@@ -1,0 +1,64 @@
+name: macOS test packages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: corepack enable
+      - run: corepack pnpm install --frozen-lockfile
+      - run: node scripts/macos.mjs fetch
+      - run: node scripts/macos.mjs check
+      - run: node scripts/macos.mjs build
+      - name: Prepare separate architecture artifact and checksum
+        shell: bash
+        env:
+          QZIP_ARCH: ${{ matrix.arch }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          mkdir -p artifacts/macos
+          DMG="$(find target -path '*/release/bundle/dmg/*.dmg' -print -quit)"
+          test -n "$DMG"
+          cp "$DMG" "artifacts/macos/QZip-v${VERSION}-macos-${QZIP_ARCH}.dmg"
+          cd artifacts/macos
+          shasum -a 256 *.dmg > "SHA256SUMS-macos-${QZIP_ARCH}.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: QZip-macos-${{ matrix.arch }}
+          path: artifacts/macos/
+          if-no-files-found: error

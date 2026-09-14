@@ -9,6 +9,10 @@
     "pnpm": "11.9.0"
   },
   "scripts": {
+    "macos:fetch": "node scripts/macos.mjs fetch",
+    "macos:check": "node scripts/macos.mjs check",
+    "macos:build": "node scripts/macos.mjs build",
+    "macos:dev": "node scripts/macos.mjs dev",
     "dev": "pnpm --filter @qzip/desktop dev",
     "dev:web": "pnpm --filter @qzip/desktop dev:web",
     "build": "pnpm --filter @qzip/desktop build",

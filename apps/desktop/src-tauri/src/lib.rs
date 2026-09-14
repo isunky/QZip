@@ -3,13 +3,14 @@ use std::{
     fs::OpenOptions,
     io::Write,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
+#[cfg(target_os = "windows")]
+use std::process::{Command, Stdio};
 
 use archive_core::{
     ArchiveBackend, ArchiveEntry, ArchiveError, ArchiveErrorCode, ArchiveFormat,
@@ -30,6 +31,7 @@ use tauri_plugin_store::StoreExt;
 use uuid::Uuid;
 
 mod archive_entries;
+mod desktop_platform;
 mod preview;
 mod shell_integration;
 mod system_icons;
@@ -170,10 +172,15 @@ fn save_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), String> 
 }
 
 fn sidecar_path(app: &AppHandle) -> PathBuf {
+    let filename = if cfg!(target_os = "macos") {
+        "7zz"
+    } else {
+        "7z.exe"
+    };
     if let Ok(path) = app
         .path()
         .resource_dir()
-        .map(|directory| directory.join("7zip").join("7z.exe"))
+        .map(|directory| directory.join("7zip").join(filename))
         && path.is_file()
     {
         return path;
@@ -182,7 +189,11 @@ fn sidecar_path(app: &AppHandle) -> PathBuf {
         .join("..")
         .join("..")
         .join("..")
-        .join("third_party/7zip/bin/win-x64/7z.exe")
+        .join(if cfg!(target_os = "macos") {
+            "third_party/7zip/bin/macos/7zz"
+        } else {
+            "third_party/7zip/bin/win-x64/7z.exe"
+        })
 }
 
 fn secret(password: Option<String>) -> Option<SecretString> {
@@ -626,7 +637,7 @@ fn get_integration_status() -> IntegrationStatus {
         .status()
         .is_ok_and(|status| status.success());
     #[cfg(not(target_os = "windows"))]
-    let file_associations_declared = false;
+    let file_associations_declared = cfg!(target_os = "macos");
     IntegrationStatus {
         platform: std::env::consts::OS.to_owned(),
         file_associations_declared,
@@ -730,6 +741,7 @@ fn record_performance_marker(name: String) {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(desktop_platform::LaunchInbox::default())
         .manage(update_download::UpdateDownloads::default())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
@@ -739,6 +751,8 @@ pub fn run() {
             }
         }))
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            desktop_platform::install_menu(app.handle())?;
             preview::cleanup_stale_preview_cache();
             shell_integration::retry_shell_registration_after_launch();
             let backend = Arc::new(SevenZipCliBackend::new(sidecar_path(app.handle())));
@@ -793,6 +807,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            desktop_platform::get_platform_capabilities,
+            desktop_platform::pending_native_launch,
+            desktop_platform::acknowledge_native_launch,
             get_backend_capabilities,
             pick_input_paths,
             pick_input_folder,
@@ -828,6 +845,7 @@ pub fn run() {
             preview::reveal_in_file_manager,
             record_performance_marker
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run QZip desktop application");
+        .build(tauri::generate_context!())
+        .expect("failed to build QZip desktop application")
+        .run(desktop_platform::on_event);
 }

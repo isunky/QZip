@@ -7,6 +7,7 @@ import {
 } from "@fluentui/react-icons";
 import { Button } from "@qzip/ui";
 import { useI18n } from "../lib/i18n";
+import { usePlatform } from "../lib/platform";
 
 interface HeaderProps {
   activePage?: string;
@@ -29,8 +30,9 @@ async function withCurrentWindow(
 
 export function Header({ activePage, activeTaskCount = 0, iconSrc, onHomeClick, onTasksClick, onSettingsClick }: HeaderProps) {
   const { brandName, text } = useI18n();
+  const platform = usePlatform();
   return (
-    <header className="qzip-titlebar">
+    <header className="qzip-titlebar" style={platform.nativeWindowControls ? { paddingLeft: 84 } : undefined}>
       <button type="button" className="qzip-brand" aria-label={text("返回首页", "Back to home")} onClick={onHomeClick}>
         <span className="qzip-brand__icon" aria-hidden="true">
           <img src={iconSrc} alt="" />
@@ -63,7 +65,7 @@ export function Header({ activePage, activeTaskCount = 0, iconSrc, onHomeClick, 
           {text("设置", "Settings")}
         </Button>
       </nav>
-      <span className="qzip-titlebar__separator" aria-hidden="true" />
+      {!platform.nativeWindowControls && <><span className="qzip-titlebar__separator" aria-hidden="true" />
       <div className="qzip-window-controls" aria-label={text("窗口控制", "Window controls")}>
         <button
           type="button"
@@ -87,7 +89,7 @@ export function Header({ activePage, activeTaskCount = 0, iconSrc, onHomeClick, 
         >
           <DismissRegular fontSize={19} />
         </button>
-      </div>
+      </div></>}
     </header>
   );
 }

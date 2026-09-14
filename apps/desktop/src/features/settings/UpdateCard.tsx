@@ -1,4 +1,5 @@
 import Markdown from "react-markdown";
+import { usePlatform } from "../../lib/platform";
 import { ArrowDownloadRegular, ArrowSyncRegular, CheckmarkCircleRegular, OpenRegular } from "@fluentui/react-icons";
 import { Button } from "@qzip/ui";
 import { useI18n } from "../../lib/i18n";
@@ -7,6 +8,7 @@ import appIcon from "../../../src-tauri/icons/128x128@2x.png";
 
 export function UpdateCard({ updates, currentVersion }: { updates: AppUpdates; currentVersion: string }) {
   const { text, locale } = useI18n();
+  const platform = usePlatform();
   const { result, phase, progress, error, downloaded } = updates;
   const available = result?.status === "update_available";
   const checking = phase === "checking";
@@ -43,7 +45,7 @@ export function UpdateCard({ updates, currentVersion }: { updates: AppUpdates; c
     {result && (available || result.releaseNotes?.trim()) ? <>
       <div className="qzip-update-card__meta">
         {date && !Number.isNaN(date.getTime()) ? <time dateTime={result.publishedAt}>{date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" })}</time> : null}
-        <span>Windows x64</span>{total > 0 ? <span>{size(total)}</span> : null}
+        <span>{platform.os === "macos" ? `macOS ${platform.arch === "aarch64" ? "Apple Silicon" : platform.arch === "x86_64" ? "Intel" : ""}` : "Windows x64"}</span>{total > 0 ? <span>{size(total)}</span> : null}
       </div>
       <div className="qzip-release-notes-heading"><h4>{text("本次更新", "What's new")}</h4><button type="button" onClick={() => void updates.openRelease(result.releaseUrl)}>{text("查看原文", "View on GitHub")}<OpenRegular fontSize={15} /></button></div>
       <div className="qzip-release-notes" tabIndex={0} role="region" aria-label={text("版本更新记录", "Release notes")}>
@@ -62,7 +64,7 @@ export function UpdateCard({ updates, currentVersion }: { updates: AppUpdates; c
       <div className="qzip-update-card__actions">
         {transferring ? <Button variant="secondary" disabled={updates.cancelling} onClick={() => void updates.cancel()}>{updates.cancelling ? text("正在取消…", "Cancelling…") : text("取消下载", "Cancel download")}</Button> : <>
           <Button variant={available ? "tertiary" : "primary"} loading={checking} disabled={busy} icon={<ArrowSyncRegular fontSize={18} />} onClick={() => void updates.check()}>{text("检查更新", "Check for updates")}</Button>
-          {available && result.downloadAvailable ? downloaded ? <Button loading={installing} onClick={() => void updates.install()}>{text("安装更新", "Install update")}</Button> : <Button disabled={busy} icon={<ArrowDownloadRegular fontSize={19} />} onClick={() => void updates.download()}>{error || updates.cancelled ? text("重新下载", "Retry download") : text("下载更新", "Download update")}</Button> : available ? <Button onClick={() => void updates.openRelease(result.releaseUrl)}>{text("前往 GitHub", "Open GitHub")}</Button> : null}
+          {available && result.downloadAvailable ? downloaded ? <Button loading={installing} onClick={() => void updates.install()}>{text("安装更新", "Install update")}</Button> : <Button disabled={busy} icon={<ArrowDownloadRegular fontSize={19} />} onClick={() => void updates.download()}>{error || updates.cancelled ? text("重新下载", "Retry download") : text("下载更新", "Download update")}</Button> : available ? <Button onClick={() => void updates.openRelease(result.manualDownloadUrl ?? result.releaseUrl)}>{result.manualDownloadUrl ? text("下载 macOS 安装包", "Download for macOS") : text("前往 GitHub", "Open GitHub")}</Button> : null}
         </>}
       </div>
       {downloaded ? <small>{text("点击安装将关闭轻压，并打开安装向导。", "Installing closes QZip and opens the setup wizard.")}</small> : null}

@@ -1,11 +1,12 @@
 use std::{
     path::{Path, PathBuf},
-    process::{Command, Stdio},
     time::SystemTime,
 };
 
 use platform_integration::{LaunchKind, LaunchRequest};
 use serde::Deserialize;
+#[cfg(target_os = "windows")]
+use std::process::{Command, Stdio};
 use uuid::Uuid;
 
 #[cfg(target_os = "windows")]

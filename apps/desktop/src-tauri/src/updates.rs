@@ -24,6 +24,7 @@ pub(super) struct UpdateCheckResult {
     pub(super) release_tag: String,
     pub(super) download_size: Option<u64>,
     pub(super) download_available: bool,
+    pub(super) manual_download_url: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -246,7 +247,13 @@ pub(super) fn update_result_for_release(
         ));
     }
     let assets = release_download_assets(&release).ok();
-    let download_size = assets.as_ref().map(|(setup, _)| setup.size);
+    let download_size = if cfg!(target_os = "windows") {
+        assets.as_ref().map(|(setup, _)| setup.size)
+    } else {
+        None
+    };
+    let manual_download_url =
+        mac_download_url(&release, std::env::consts::OS, std::env::consts::ARCH);
     let download_available =
         cfg!(all(target_os = "windows", target_arch = "x86_64")) && assets.is_some();
     Ok(UpdateCheckResult {
@@ -269,12 +276,57 @@ pub(super) fn update_result_for_release(
         release_tag: release.tag_name,
         download_size,
         download_available,
+        manual_download_url,
     })
+}
+
+fn mac_download_url(release: &GitHubRelease, os: &str, arch: &str) -> Option<String> {
+    if os != "macos" {
+        return None;
+    }
+    let arch = match arch {
+        "aarch64" => "arm64",
+        "x86_64" => "x64",
+        _ => return None,
+    };
+    let name = format!("QZip-{}-macos-{arch}.dmg", release.tag_name);
+    let url = format!(
+        "https://github.com/isunky/QZip/releases/download/{}/{name}",
+        release.tag_name
+    );
+    release
+        .assets
+        .iter()
+        .find(|asset| asset.name == name && asset.browser_download_url == url)
+        .map(|_| url)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mac_download_matches_architecture_and_trusted_exact_url() {
+        let url =
+            "https://github.com/isunky/QZip/releases/download/v1.3.0/QZip-v1.3.0-macos-arm64.dmg";
+        let mut release = GitHubRelease {
+            tag_name: "v1.3.0".into(),
+            assets: vec![ReleaseAsset {
+                name: "QZip-v1.3.0-macos-arm64.dmg".into(),
+                browser_download_url: url.into(),
+                size: 100,
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            mac_download_url(&release, "macos", "aarch64"),
+            Some(url.into())
+        );
+        assert!(mac_download_url(&release, "macos", "x86_64").is_none());
+        assert!(mac_download_url(&release, "windows", "aarch64").is_none());
+        release.assets[0].browser_download_url = "https://example.com/installer.dmg".into();
+        assert!(mac_download_url(&release, "macos", "aarch64").is_none());
+    }
 
     #[test]
     fn only_accepts_official_assets_for_the_selected_stable_version() {

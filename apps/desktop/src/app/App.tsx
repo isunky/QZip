@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isMac } from "../lib/platform";
+import { listen } from "@tauri-apps/api/event";
 import type { AccentTheme, ThemeMode } from "@qzip/ui";
 import { Header } from "../components/Header";
 import { Toast } from "../components/Toast";
@@ -103,6 +105,7 @@ export function App() {
   const [passwordPrompt, setPasswordPrompt] = useState<PasswordPrompt | null>(null);
   const settingsRef = useRef(settings);
   const activeSessionIdRef = useRef<string | null>(null);
+  const handledNativeId = useRef<string | undefined>(undefined);
   const resolvedMode = resolveThemeMode(mode, systemDark);
   const locale = resolveAppLocale(settings.language);
   const brandName = localize(locale, "轻压", "QZip");
@@ -228,7 +231,11 @@ export function App() {
       const target = request.paths[0];
       if (!target) return;
       if (request.kind === "open") {
-        void prepareArchive(target, "browser");
+        if (request.paths.length > 1) {
+          closeActiveSession();
+          setBatchArchives(request.paths);
+          setPage("batchExtract");
+        } else void prepareArchive(target, "browser");
       } else if (request.kind === "compressSevenZip" || request.kind === "compressZip") {
         const format = request.kind === "compressZip" ? "zip" : "sevenZip";
         void archiveClient.suggestCreateOutput(request.paths, format)
@@ -273,20 +280,34 @@ export function App() {
           .catch((reason) => setToast(text(`无法启动右键解压：${String(reason)}`, `Could not start context-menu extraction: ${String(reason)}`)));
       }
     };
-    void archiveClient.onLaunchRequest(handleLaunchRequest).then((next) => { unlisten = next; });
+    let disposed = false;
+    let menuUnlisten: (() => void) | undefined;
+    if (isMac) void listen("qzip://menu-settings", () => { closeActiveSession(); setPage("settings"); })
+      .then((next) => { if (disposed) next(); else menuUnlisten = next; });
+    void archiveClient.onLaunchRequest(handleLaunchRequest).then((next) => { if (disposed) next(); else unlisten = next; });
     void archiveClient.takeInitialLaunchRequest().then((request) => { if (request) handleLaunchRequest(request); }).catch(() => undefined);
     let checkingPendingRequest = false;
     const checkPendingRequest = () => {
       if (checkingPendingRequest) return;
       checkingPendingRequest = true;
-      void archiveClient.takePendingShellRequest()
+      void (isMac ? archiveClient.pendingNativeLaunch().then(async (item) => {
+        if (item) {
+          if (disposed) return null;
+          if (item.id !== handledNativeId.current) {
+            handleLaunchRequest(item.request);
+            handledNativeId.current = item.id;
+          }
+          await archiveClient.acknowledgeNativeLaunch(item.id);
+        }
+        return null;
+      }) : archiveClient.takePendingShellRequest())
         .then((request) => { if (request) handleLaunchRequest(request); })
         .catch(() => undefined)
         .finally(() => { checkingPendingRequest = false; });
     };
     checkPendingRequest();
     const pendingRequestTimer = window.setInterval(checkPendingRequest, 750);
-    return () => { window.clearInterval(pendingRequestTimer); unlisten?.(); };
+    return () => { disposed = true; window.clearInterval(pendingRequestTimer); unlisten?.(); menuUnlisten?.(); };
   }, [closeActiveSession, prepareArchive, text]);
   useEffect(() => {
     if (!archiveClient.isTauri) return;

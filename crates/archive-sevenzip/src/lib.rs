@@ -32,8 +32,10 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 const EXPECTED_VERSION: &str = "26.02";
+#[cfg(not(target_os = "macos"))]
 const EXPECTED_EXECUTABLE_SHA256: &str =
     "83967f1b02b43c4efeda302795722c809e0e81b8307de73558d10484d5676a7d";
+#[cfg(not(target_os = "macos"))]
 const EXPECTED_LIBRARY_SHA256: &str =
     "69fd4df057985c40e510e2fac182881c7f85e90aa13ec703f763a8fdb2ce61f8";
 const MAX_DIAGNOSTIC_BYTES: usize = 64 * 1024;
@@ -52,9 +54,16 @@ impl SevenZipCliBackend {
     }
 
     fn verify_runtime_files(&self) -> Result<(), ArchiveError> {
-        verify_sha256(&self.executable, EXPECTED_EXECUTABLE_SHA256)?;
-        let library = self.executable.with_file_name("7z.dll");
-        verify_sha256(&library, EXPECTED_LIBRARY_SHA256)
+        #[cfg(target_os = "macos")]
+        {
+            verify_sha256(&self.executable, env!("QZIP_MAC_ENGINE_SHA256"))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            verify_sha256(&self.executable, EXPECTED_EXECUTABLE_SHA256)?;
+            let library = self.executable.with_file_name("7z.dll");
+            verify_sha256(&library, EXPECTED_LIBRARY_SHA256)
+        }
     }
 
     async fn invoke(
@@ -196,14 +205,7 @@ impl SevenZipCliBackend {
                 CancellationToken::new(),
             )
             .await?;
-        let version = output
-            .output
-            .lines()
-            .find_map(|line| {
-                line.strip_prefix("7-Zip ")
-                    .and_then(|rest| rest.split_whitespace().next())
-            })
-            .unwrap_or_default();
+        let version = engine_version(&output.output).unwrap_or_default();
         if version != EXPECTED_VERSION {
             return Err(ArchiveError::unavailable(format!(
                 "unsupported 7-Zip version: {version}; expected {EXPECTED_VERSION}"
@@ -599,6 +601,16 @@ impl SevenZipCliBackend {
                 .collect(),
         })
     }
+}
+
+fn engine_version(output: &str) -> Option<&str> {
+    output.lines().find_map(|line| {
+        let rest = line.strip_prefix("7-Zip ")?;
+        rest.strip_prefix("(z) ")
+            .unwrap_or(rest)
+            .split_whitespace()
+            .next()
+    })
 }
 
 fn verify_sha256(path: &Path, expected: &str) -> Result<(), ArchiveError> {
@@ -1204,6 +1216,19 @@ fn map_read_failure(error: ArchiveError, supplied_password: bool) -> ArchiveErro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_windows_and_standalone_engine_versions() {
+        assert_eq!(
+            engine_version("7-Zip 26.02 (x64) : Copyright"),
+            Some("26.02")
+        );
+        assert_eq!(
+            engine_version("\n7-Zip (z) 26.02 (arm64) : Copyright"),
+            Some("26.02")
+        );
+        assert_eq!(engine_version("unexpected engine"), None);
+    }
     #[test]
     fn mapper_keeps_paths_as_separate_arguments() {
         let request = CreateArchiveRequest {
@@ -1324,11 +1349,11 @@ mod tests {
         assert!(!is_tar_wrapper(Path::new("payload.gz")));
         assert!(!is_tar_wrapper(Path::new("payload.xz")));
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     #[tokio::test]
     async fn tar_wrapper_listing_streams_without_creating_an_expand_directory() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let backend = SevenZipCliBackend::new(root.join("third_party/7zip/bin/win-x64/7z.exe"));
+        let backend = SevenZipCliBackend::new(test_engine_path(&root));
         let archive = root.join("tests/fixtures/compat/windows-bsdtar-xz.tar.xz");
         let temporary_root = std::env::temp_dir();
         let before = expand_directories(&temporary_root);
@@ -1351,11 +1376,11 @@ mod tests {
         );
         assert_eq!(before, expand_directories(&temporary_root));
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     #[tokio::test]
     async fn txz_alias_listing_uses_the_tar_wrapper_stream() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let backend = SevenZipCliBackend::new(root.join("third_party/7zip/bin/win-x64/7z.exe"));
+        let backend = SevenZipCliBackend::new(test_engine_path(&root));
         let source = root.join("tests/fixtures/compat/windows-bsdtar-xz.tar.xz");
         let archive = std::env::temp_dir().join(format!("qzip-alias-{}.txz", Uuid::new_v4()));
         fs::copy(&source, &archive).expect("copy fixture with TXZ alias");
@@ -1381,7 +1406,15 @@ mod tests {
         assert_eq!(before, expand_directories(&temporary_root));
         fs::remove_file(archive).expect("remove TXZ alias fixture");
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    fn test_engine_path(root: &Path) -> PathBuf {
+        root.join(if cfg!(target_os = "macos") {
+            "third_party/7zip/bin/macos/7zz"
+        } else {
+            "third_party/7zip/bin/win-x64/7z.exe"
+        })
+    }
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     fn expand_directories(root: &Path) -> Vec<PathBuf> {
         let mut directories = fs::read_dir(root)
             .expect("temporary directory is readable")

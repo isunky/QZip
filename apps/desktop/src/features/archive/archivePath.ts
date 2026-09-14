@@ -5,7 +5,7 @@ export function splitOutputPath(path: string) {
   const index = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
   return index < 0
     ? { directory: "", name: path }
-    : { directory: path.slice(0, index), name: path.slice(index + 1) };
+    : { directory: index === 0 ? path.slice(0, 1) : path.slice(0, index), name: path.slice(index + 1) };
 }
 
 export function joinOutputPath(directory: string, name: string) {

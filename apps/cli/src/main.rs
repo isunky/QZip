@@ -20,7 +20,7 @@ use tokio_util::sync::CancellationToken;
 #[derive(Parser)]
 #[command(name = "qzip-cli", about = "QZip M1 backend verifier (developer tool)")]
 struct Cli {
-    /// Directory that contains both 7z.exe and 7z.dll.
+    /// Directory containing the verified platform engine (7z.exe/7z.dll or macOS 7zz).
     #[arg(long, global = true)]
     sevenzip_dir: Option<PathBuf>,
     #[command(subcommand)]
@@ -122,9 +122,19 @@ fn resolve_executable(explicit: Option<PathBuf>) -> PathBuf {
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("..")
                 .join("..")
-                .join("third_party/7zip/bin/win-x64")
+                .join(if cfg!(target_os = "macos") {
+                    "third_party/7zip/bin/macos"
+                } else {
+                    "third_party/7zip/bin/win-x64"
+                })
         });
-    directory.join(if cfg!(windows) { "7z.exe" } else { "7z" })
+    directory.join(if cfg!(windows) {
+        "7z.exe"
+    } else if cfg!(target_os = "macos") {
+        "7zz"
+    } else {
+        "7z"
+    })
 }
 
 async fn run_capabilities(

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [{
+      "label": "main", "title": "QZip", "width": 1080, "height": 720,
+      "minWidth": 760, "minHeight": 520, "resizable": true,
+      "center": true, "decorations": true, "titleBarStyle": "Overlay",
+      "hiddenTitle": true, "backgroundColor": "#f5f6f4"
+    }]
+  },
+  "bundle": {
+    "targets": ["app", "dmg"],
+    "icon": ["../../../third_party/7zip/bin/macos/icon.icns"],
+    "resources": { "../../../third_party/7zip/bin/macos/7zz": "7zip/7zz", "../../../third_party/7zip/bin/macos/*.txt": "7zip/" },
+    "macOS": { "minimumSystemVersion": "12.0", "signingIdentity": "-" },
+    "fileAssociations": [{
+      "ext": ["zip", "7z", "rar", "tar", "gz", "xz", "tgz", "txz", "bz2", "tbz2"],
+      "name": "Archive", "role": "Viewer"
+    }]
+  }
+}

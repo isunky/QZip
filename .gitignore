@@ -22,6 +22,7 @@ third_party/7zip/bin/
 third_party/7zip/source/
 artifacts/windows-shell/
 artifacts/release/
+artifacts/macos/
 artifacts/acceptance/installer-payload-*/
 artifacts/acceptance/ui-create-regression-*.7z
 artifacts/acceptance/password-debug/

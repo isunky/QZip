@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { isMac } from "../../lib/platform";
 import {
   AlertRegular,
   AppsSettingsRegular,
@@ -169,9 +170,9 @@ function SystemSettings({ settings, status, updates, patch, onToast }: { setting
     <Card className="qzip-settings-feature-card">
       <SettingsCardHeader icon={<AppsSettingsRegular fontSize={22} />} title={text("系统集成", "System integration")} />
       <StatusRow label={text("文件关联", "File associations")} status={status?.fileAssociationsDeclared ? text("已配置", "Configured") : text("未配置", "Not configured")} tone={status?.fileAssociationsDeclared ? "success" : "neutral"}>
-        <Button variant="tertiary" icon={<OpenRegular fontSize={18} />} onClick={() => void settingsClient.openDefaultApps().catch((reason) => onToast(String(reason)))}>{text("默认应用设置", "Default apps")}</Button>
+        {isMac ? <span>{text("在 Finder 中选择文件 → 显示简介 → 打开方式 → QZip → 全部更改。", "In Finder: Get Info → Open with → QZip → Change All.")}</span> : <Button variant="tertiary" icon={<OpenRegular fontSize={18} />} onClick={() => void settingsClient.openDefaultApps().catch((reason) => onToast(String(reason)))}>{text("默认应用设置", "Default apps")}</Button>}
       </StatusRow>
-      <StatusRow label={`Windows 11 ${text("右键菜单", "context menu")}`} status={!status ? text("正在检查", "Checking") : status.modernContextMenuRegistered ? text("已注册", "Registered") : status.modernContextMenuAvailable ? text("未注册", "Not registered") : text("当前版本不可用", "Unavailable in this build")} tone={status?.modernContextMenuRegistered ? "success" : "neutral"} />
+      {!isMac && <StatusRow label={`Windows 11 ${text("右键菜单", "context menu")}`} status={!status ? text("正在检查", "Checking") : status.modernContextMenuRegistered ? text("已注册", "Registered") : status.modernContextMenuAvailable ? text("未注册", "Not registered") : text("当前版本不可用", "Unavailable in this build")} tone={status?.modernContextMenuRegistered ? "success" : "neutral"} />}
     </Card>
     <UpdateCard updates={updates} currentVersion={status?.appVersion ?? appVersion} />
     <Card className="qzip-settings-feature-card">

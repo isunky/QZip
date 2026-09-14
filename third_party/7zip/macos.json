@@ -1,0 +1,8 @@
+{
+  "version": "26.02",
+  "url": "https://www.7-zip.org/a/7z2602-mac.tar.xz",
+  "sha256": "1cf6760579502f87e591ff5c73a005ec50b3e4d6f507e8b038382d563c3175b9",
+  "architectures": ["arm64", "x86_64"],
+  "license": "GNU LGPL-2.1-or-later with unRAR restriction",
+  "source": "https://www.7-zip.org/a/7z2602-src.tar.xz"
+}

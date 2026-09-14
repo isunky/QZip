@@ -52,6 +52,7 @@ export interface UpdateCheckResult {
   releaseTag?: string;
   downloadSize?: number | null;
   downloadAvailable?: boolean;
+  manualDownloadUrl?: string | null;
 }
 
 export interface UpdateDownloadProgress {

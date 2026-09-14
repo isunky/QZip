@@ -6,6 +6,8 @@ const isTauri = "__TAURI_INTERNALS__" in window;
 async function command<T>(name: string, args?: Record<string, unknown>): Promise<T> { return invoke<T>(name, args); }
 export const archiveClient = {
   isTauri,
+  pendingNativeLaunch: () => command<{ id: string; request: { kind: string; paths: string[]; source: string } } | null>("pending_native_launch"),
+  acknowledgeNativeLaunch: (id: string) => command<void>("acknowledge_native_launch", { id }),
   capabilities: () => command<BackendCapabilities>("get_backend_capabilities"),
   pickInputPaths: (archivesOnly = false) => command<string[]>("pick_input_paths", { archivesOnly }),
   pickInputFolder: () => command<string | null>("pick_input_folder"),

@@ -224,8 +224,17 @@ pub(super) fn open_path(path: PathBuf) -> Result<(), CommandErrorDto> {
 
 #[tauri::command]
 pub(super) fn reveal_in_file_manager(path: PathBuf) -> Result<(), CommandErrorDto> {
-    Command::new("explorer.exe")
-        .arg("/select,")
+    #[cfg(target_os = "windows")]
+    let (launcher, flag) = ("explorer.exe", "/select,");
+    #[cfg(target_os = "macos")]
+    let (launcher, flag) = ("open", "-R");
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let (launcher, flag) = ("xdg-open", "");
+    let mut command = Command::new(launcher);
+    if !flag.is_empty() {
+        command.arg(flag);
+    }
+    command
         .arg(&path)
         .spawn()
         .map(|_| ())
