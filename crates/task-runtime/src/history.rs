@@ -85,6 +85,7 @@ fn temporary_history_path(history_path: &Path) -> PathBuf {
     history_path.with_extension(format!("{extension}.{}.tmp", Uuid::new_v4()))
 }
 
+#[cfg(windows)]
 fn history_backup_path(history_path: &Path) -> PathBuf {
     let extension = history_path
         .extension()
