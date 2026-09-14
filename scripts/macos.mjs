@@ -77,6 +77,7 @@ if (command === 'fetch') {
   }
   else if (command === 'build' || command === 'dev') {
     const args = ['pnpm', '--filter', '@qzip/desktop', 'tauri', command];
+    if (command === 'build') args.push('--config', 'src-tauri/tauri.macos.conf.json');
     if (command === 'build') args.push('--target', process.arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin');
     run('corepack', args, { env });
     if (await hash(join(runtime, '7zz')) !== digest) throw new Error('Bundler rewrote engine');
