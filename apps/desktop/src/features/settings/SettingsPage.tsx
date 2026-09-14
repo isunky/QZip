@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertRegular,
   AppsSettingsRegular,
@@ -182,6 +182,7 @@ function SystemSettings({ settings, status, updates, patch, onToast }: { setting
 
 function AboutSettings({ status, updates }: { status: IntegrationStatus | null; updates: AppUpdates }) {
   const { text } = useI18n();
+  const updateDialog = useRef<HTMLDialogElement>(null);
   const version = status?.appVersion ?? appVersion;
   return <div className="qzip-about-page">
     <Card className="qzip-about-hero">
@@ -192,11 +193,14 @@ function AboutSettings({ status, updates }: { status: IntegrationStatus | null; 
     </Card>
     <Card className="qzip-about-links" aria-label={text("关于轻压的链接", "About QZip links")}>
       <AboutLink href="https://github.com/isunky/QZip" icon={<CodeRegular fontSize={21} />} label={text("GitHub 项目", "GitHub project")} />
-      <button type="button" onClick={() => void updates.check()} disabled={updates.phase !== "idle" && updates.phase !== "ready"}><ArrowSyncRegular fontSize={21} /><span>{text("检查更新", "Check for updates")}</span><ChevronRightRegular fontSize={18} /></button>
+      <button type="button" onClick={() => { updateDialog.current?.showModal(); if (updates.phase === "idle" && !updates.downloaded) void updates.check(); }}><ArrowSyncRegular fontSize={21} /><span>{text("检查更新", "Check for updates")}</span><ChevronRightRegular fontSize={18} /></button>
       <AboutLink href="https://github.com/isunky/QZip/blob/main/LICENSE" icon={<DocumentTextRegular fontSize={21} />} label={text("开源许可", "Open-source license")} />
       <AboutLink href="https://github.com/isunky/QZip/issues" icon={<ChatHelpRegular fontSize={21} />} label={text("问题反馈", "Report an issue")} />
     </Card>
-    {updates.result || updates.error || updates.phase !== "idle" ? <UpdateCard updates={updates} currentVersion={version} /> : null}
+    <dialog ref={updateDialog} className="qzip-update-dialog" aria-label={text("应用更新", "Application updates")}>
+      <div className="qzip-update-dialog__header"><span>{text("应用更新", "Application updates")}</span><button type="button" autoFocus aria-label={text("关闭更新弹窗", "Close update dialog")} onClick={() => updateDialog.current?.close()}>×</button></div>
+      <UpdateCard updates={updates} currentVersion={version} />
+    </dialog>
     <p className="qzip-about-footer">{text("免费 · 无广告 · 本地优先", "Free · Ad-free · Local-first")}</p>
   </div>;
 }

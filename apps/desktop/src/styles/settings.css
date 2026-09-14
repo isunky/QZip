@@ -493,6 +493,12 @@
   .qzip-about-hero { min-height: 275px; padding-block: 24px; }
   .qzip-about-hero img { height: 88px; width: 88px; }
 }
+.qzip-update-dialog { width: min(680px, calc(100vw - 40px)); max-height: calc(100dvh - 48px); margin: auto; padding: 0; border: 1px solid var(--qzip-color-border-default); border-radius: 20px; background: var(--qzip-color-bg-elevated); color: var(--qzip-color-text-primary); box-shadow: 0 24px 80px rgb(0 0 0 / 20%); overflow: auto; }
+.qzip-update-dialog::backdrop { background: rgb(19 32 45 / 35%); }
+.qzip-update-dialog__header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px 8px 28px; font-size: 14px; }
+.qzip-update-dialog__header button { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: inherit; font-size: 24px; cursor: pointer; }
+.qzip-update-dialog__header button:hover { background: var(--qzip-color-bg-subtle); }
+.qzip-update-dialog .qzip-update-card { border: 0; border-radius: 0; }
 .qzip-update-card { background: var(--qzip-color-bg-elevated); border: 1px solid var(--qzip-color-border-default); border-radius: 20px; overflow: hidden; min-width: 0; }
 .qzip-update-card__hero { display: flex; align-items: center; gap: 20px; padding: 28px 28px 20px; background: linear-gradient(120deg, var(--qzip-color-accent-soft), transparent); }
 .qzip-update-card__hero img { width: 64px; height: 64px; flex-shrink: 0; }

@@ -40,7 +40,7 @@ export function UpdateCard({ updates, currentVersion }: { updates: AppUpdates; c
         <div className="qzip-update-card__versions"><span>{text("当前", "Current")} {currentVersion}</span>{available ? <><span aria-hidden="true">→</span><strong>v{result.latestVersion}</strong><span className="qzip-status-pill" data-tone="success">{text("稳定版", "Stable")}</span></> : null}</div>
       </div>
     </div>
-    {available ? <>
+    {result && (available || result.releaseNotes?.trim()) ? <>
       <div className="qzip-update-card__meta">
         {date && !Number.isNaN(date.getTime()) ? <time dateTime={result.publishedAt}>{date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" })}</time> : null}
         <span>Windows x64</span>{total > 0 ? <span>{size(total)}</span> : null}
