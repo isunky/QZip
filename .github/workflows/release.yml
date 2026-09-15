@@ -382,11 +382,14 @@ jobs:
             if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) { throw "macOS asset was not downloaded: $assetPath" }
             if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) { throw "macOS checksum was not downloaded: $checksumPath" }
             $line = (Get-Content -LiteralPath $checksumPath -Raw).Trim()
-            if ($line -notmatch '^([0-9a-fA-F]{64}) \*(.+)$' -or $Matches[2] -ne $asset.Name) {
+            if ($line -notmatch '^([0-9a-fA-F]{64})\s+\*?(.+)$') {
               throw "Invalid macOS checksum entry: $checksumPath"
             }
+            $checksumHash = $Matches[1]
+            $checksumAsset = $Matches[2]
+            if ($checksumAsset -ne $asset.Name) { throw "Unexpected macOS checksum asset: $checksumAsset" }
             $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $assetPath).Hash
-            if ($actualHash -ine $Matches[1]) { throw "macOS checksum mismatch: $asset.Name" }
+            if ($actualHash -ine $checksumHash) { throw "macOS checksum mismatch: $asset.Name" }
           }
       - name: Fetch release payload verifier
         shell: pwsh
