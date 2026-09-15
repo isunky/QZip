@@ -153,7 +153,7 @@ export function App() {
     } catch (reason) {
       const issue = commandIssue(reason);
       if (archiveClient.isTauri && issue.code === "WRONG_PASSWORD") {
-        void archiveClient.recordPerformanceMarker("archive-error-presented");
+        void archiveClient.recordPerformanceMarker("archive-error-presented").catch(() => undefined);
         setPasswordPrompt({
           archive: target,
           destination,
@@ -162,7 +162,7 @@ export function App() {
             : text("此压缩包已加密，请输入密码后重试。", "This archive is encrypted. Enter its password to continue.")
         });
       } else {
-        if (archiveClient.isTauri) void archiveClient.recordPerformanceMarker("archive-error-presented");
+        if (archiveClient.isTauri) void archiveClient.recordPerformanceMarker("archive-error-presented").catch(() => undefined);
         setPasswordPrompt(null);
         setToast(text(`无法读取压缩包：${issue.message}`, `Could not read the archive: ${issue.message}`));
       }
@@ -187,12 +187,16 @@ export function App() {
   }, [toast]);
   useEffect(() => {
     if (!archiveClient.isTauri || page !== "home") return;
+    let secondFrame: number | undefined;
     const firstFrame = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        void archiveClient.recordPerformanceMarker("home-interactive");
+      secondFrame = window.requestAnimationFrame(() => {
+        void archiveClient.recordPerformanceMarker("home-interactive").catch(() => undefined);
       });
     });
-    return () => window.cancelAnimationFrame(firstFrame);
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame !== undefined) window.cancelAnimationFrame(secondFrame);
+    };
   }, [page]);
   useEffect(() => {
     if (!archiveClient.isTauri) return;

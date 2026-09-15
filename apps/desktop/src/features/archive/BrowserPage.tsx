@@ -106,7 +106,7 @@ export function BrowserPage({
   useEffect(() => {
     if (!archiveClient.isTauri || loading || loadError || reportedSessionRef.current === session.sessionId) return;
     reportedSessionRef.current = session.sessionId;
-    void archiveClient.recordPerformanceMarker("archive-list-first-page");
+    void archiveClient.recordPerformanceMarker("archive-list-first-page").catch(() => undefined);
   }, [loadError, loading, session.sessionId]);
   useEffect(() => {
     if (!archiveClient.isTauri) return;
