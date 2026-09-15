@@ -285,9 +285,9 @@ CHANGELOG；发布流程的版本提交白名单不含 CHANGELOG，无强制机�
 Rust 24 个（tauri、tokio、reqwest、clap 等）+ npm 24 个（react、@fluentui/react-icons、
 zustand 等），无任何许可证记录；PRD §34 要求的 CI 许可证检查未落地（见 R3）。
 兼容性核查结论（正面）：直接依赖中无 GPL/AGPL；7-Zip 以独立未修改 sidecar 调用
-（LGPL-2.1-or-later，unRAR 限制），与 Apache-2.0 无冲突。
+（LGPL-2.1-or-later，unRAR 限制），与当时的 Apache-2.0 许可无冲突。
 
-**影响：** Apache-2.0 分发项目缺少可交付的许可证审计清单；法律义务主体（7-Zip LGPL）已
+**影响：** 当时的 Apache-2.0 分发项目缺少可交付的许可证审计清单；法律义务主体（7-Zip LGPL）已
 覆盖，其余风险有限，但审计/交付合规不完整。
 
 **建议：** 用 cargo-deny/cargo-about + `pnpm licenses` 生成锁定包许可证清单并提交入库；

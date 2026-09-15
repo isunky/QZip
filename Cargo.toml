@@ -14,7 +14,7 @@ members = [
 version = "2.0.2"
 edition = "2024"
 rust-version = "1.96"
-license = "Apache-2.0"
+license = "GPL-3.0-only"
 authors = ["QZip Contributors"]
 repository = "https://github.com/isunky/QZip"
 

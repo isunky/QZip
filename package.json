@@ -1,6 +1,7 @@
 {
   "name": "qzip-desktop",
   "version": "2.0.2",
+  "license": "GPL-3.0-only",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.9.0",

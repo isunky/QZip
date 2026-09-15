@@ -5,7 +5,7 @@
 > 产品类型：开源、Windows 优先、具备跨平台路线图的轻量化桌面压缩软件
 > V1.0 目标平台：Windows 10/11 x64
 > 默认技术栈：Tauri 2 + React + TypeScript + Rust + 7-Zip CLI Sidecar  
-> 默认许可证建议：Apache-2.0  
+> 默认许可证：GPL-3.0-only
 > 文档状态：开发基线  
 > 正式产品名称：中文名“轻压”，英文品牌“QZip”，统一品牌展示为“轻压 · QZip”
 
@@ -2698,7 +2698,7 @@ MSI 和便携 ZIP 暂不作为当前 GitHub Release 资产。
 
 建议：
 
-- 核心项目 Apache-2.0；
+- 核心项目 GPL-3.0-only；
 - 品牌名称、Logo 和官方发行标识单独管理；
 - Pro 模块独立许可；
 - 外部贡献采用明确贡献协议。
