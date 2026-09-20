@@ -1,5 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
+  "build": {
+    "beforeBuildCommand": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../../scripts/run-pnpm.ps1 build:web"
+  },
   "bundle": {
     "resources": {
       "../../../third_party/7zip/bin/win-x64/7z.exe": "7zip/7z.exe",

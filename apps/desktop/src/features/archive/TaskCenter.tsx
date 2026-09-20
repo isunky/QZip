@@ -151,7 +151,7 @@ function TaskCard({
             {task.warnings.length ? <span><strong>{text("警告", "Warnings")}</strong>{task.warnings.join(text("；", "; "))}</span> : null}
           </div>
         ) : null}
-        {showPassword && (needsPassword || task.operation === "create") ? <Input aria-label={text("重试密码", "Retry password")} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={needsPassword ? text("请输入正确密码", "Enter the correct password") : text("原任务如有密码，请重新输入", "Re-enter the password if the original task used one")} /> : null}
+        {needsPassword && showPassword ? <Input aria-label={text("重试密码", "Retry password")} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={text("请输入正确密码", "Enter the correct password")} /> : null}
       </div>
       <div className="qzip-task-card__actions">
         {active ? <Button variant="icon" aria-label={text("暂停任务（暂不支持）", "Pause task (not supported)")} disabled title={text("当前版本暂不支持暂停任务", "Pausing tasks is not supported yet")} icon={<PauseRegular fontSize={22} />} /> : null}
@@ -161,7 +161,7 @@ function TaskCard({
             variant="warning"
             icon={<WarningRegular fontSize={19} />}
             disabled={showPassword && needsPassword && !password}
-            onClick={() => showPassword ? onRetry(task.taskId, password || undefined) : setShowPassword(true)}
+            onClick={() => needsPassword ? (showPassword ? onRetry(task.taskId, password || undefined) : setShowPassword(true)) : onRetry(task.taskId)}
           >
             {showPassword ? text("确认重试", "Retry") : needsPassword ? text("重新输入密码", "Enter password") : text("重试", "Retry")}
           </Button>

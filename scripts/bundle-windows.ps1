@@ -16,14 +16,21 @@ if ($packageManager -notmatch '^pnpm@\d+\.\d+\.\d+(?:-.+)?$') {
   throw "package.json must declare a pinned pnpm packageManager, got '$packageManager'."
 }
 $corepack = Get-Command corepack -ErrorAction SilentlyContinue
-if (-not $corepack) {
-  throw "Corepack is required to run the pinned workspace package manager ($packageManager). Install a supported Node.js version with Corepack."
+$pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
+$npx = Get-Command npx -ErrorAction SilentlyContinue
+$packageManagerLauncher = if ($corepack) { 'corepack' } elseif ($pnpm) { 'pnpm-dlx' } elseif ($npx) { 'npx' } else { $null }
+if (-not $packageManagerLauncher) {
+  throw "Unable to run the pinned workspace package manager ($packageManager). Install Node.js with Corepack, or install pnpm/npx."
 }
 
 function Invoke-WorkspacePnpm {
   param([Parameter(Mandatory)][string[]]$CommandArguments)
 
-  & $corepack.Source $packageManager @CommandArguments
+  switch ($packageManagerLauncher) {
+    'corepack' { & $corepack.Source $packageManager @CommandArguments }
+    'pnpm-dlx' { & $pnpm.Source dlx $packageManager @CommandArguments }
+    'npx' { & $npx.Source --yes $packageManager @CommandArguments }
+  }
   if ($LASTEXITCODE -ne 0) {
     throw "$packageManager failed with exit code $LASTEXITCODE."
   }
@@ -48,7 +55,11 @@ if (-not $UnsignedRelease) {
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-Write-Host "Using workspace package manager $packageManager via Corepack..." -ForegroundColor DarkCyan
+if ($packageManagerLauncher -eq 'corepack') {
+  Write-Host "Using workspace package manager $packageManager via Corepack..." -ForegroundColor DarkCyan
+} else {
+  Write-Warning "Corepack is unavailable; using $packageManager via $packageManagerLauncher. The pinned package-manager version remains enforced."
+}
 Invoke-WorkspacePnpm -CommandArguments @('--filter', '@qzip/desktop', 'tauri', 'build', '--no-bundle', '--config', $tauriBundleConfig)
 
 if ($Release) {

@@ -199,7 +199,7 @@ describe("archive core flow controls", () => {
     expect(screen.getByText("临时目录已清理")).toBeInTheDocument();
   });
 
-  it("shows incomplete compression and allows retry with the original password", () => {
+  it("shows incomplete compression and retries after the locked file is released", () => {
     const onRetry = vi.fn();
     const task: TaskSnapshot = {
       taskId: "locked-create", operation: "create", status: "failed",
@@ -212,9 +212,7 @@ describe("archive core flow controls", () => {
     expect(screen.getByText(/无法读取：占用文件.txt/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "打开结果" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
-    fireEvent.change(screen.getByLabelText("重试密码"), { target: { value: "original-password" } });
-    fireEvent.click(screen.getByRole("button", { name: "确认重试" }));
-    expect(onRetry).toHaveBeenCalledWith("locked-create", "original-password");
+    expect(onRetry).toHaveBeenCalledWith("locked-create");
   });
 
   it("shows the actual archive format on create task cards", () => {
