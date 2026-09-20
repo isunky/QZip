@@ -209,7 +209,9 @@ export function App() {
       if (!isResync && event.task.status === "completed") {
         setToast(event.task.operation === "create" ? text("压缩文件已生成。", "Archive created.") : text("任务已完成。", "Task completed."));
       } else if (!isResync && event.task.status === "failed") {
-        setToast(text(`任务失败：${event.task.error?.message ?? "请在任务中心查看详情"}`, `Task failed: ${event.task.error?.message ?? "View details in the task center"}`));
+        setToast(event.task.operation === "create"
+          ? text("压缩未完成，请在任务中心查看原因并重试。", "Compression incomplete. View details and retry in the task center.")
+          : text(`任务失败：${event.task.error?.message ?? "请在任务中心查看详情"}`, `Task failed: ${event.task.error?.message ?? "View details in the task center"}`));
       }
       const currentSettings = settingsRef.current;
       const terminal = event.task.status === "completed" || event.task.status === "failed";

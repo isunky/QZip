@@ -110,7 +110,7 @@ function TaskCard({
     : task.status === "failed"
       ? needsPassword
         ? text("密码错误", "Password error")
-        : text("失败", "Failed")
+        : task.operation === "create" ? text("压缩未完成", "Compression incomplete") : text("失败", "Failed")
       : task.status === "cancelled"
         ? text("已取消", "Cancelled")
         : task.status === "queued"
@@ -151,7 +151,7 @@ function TaskCard({
             {task.warnings.length ? <span><strong>{text("警告", "Warnings")}</strong>{task.warnings.join(text("；", "; "))}</span> : null}
           </div>
         ) : null}
-        {needsPassword && showPassword ? <Input aria-label={text("重试密码", "Retry password")} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={text("请输入正确密码", "Enter the correct password")} /> : null}
+        {showPassword && (needsPassword || task.operation === "create") ? <Input aria-label={text("重试密码", "Retry password")} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={needsPassword ? text("请输入正确密码", "Enter the correct password") : text("原任务如有密码，请重新输入", "Re-enter the password if the original task used one")} /> : null}
       </div>
       <div className="qzip-task-card__actions">
         {active ? <Button variant="icon" aria-label={text("暂停任务（暂不支持）", "Pause task (not supported)")} disabled title={text("当前版本暂不支持暂停任务", "Pausing tasks is not supported yet")} icon={<PauseRegular fontSize={22} />} /> : null}

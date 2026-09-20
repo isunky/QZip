@@ -199,6 +199,24 @@ describe("archive core flow controls", () => {
     expect(screen.getByText("临时目录已清理")).toBeInTheDocument();
   });
 
+  it("shows incomplete compression and allows retry with the original password", () => {
+    const onRetry = vi.fn();
+    const task: TaskSnapshot = {
+      taskId: "locked-create", operation: "create", status: "failed",
+      displayName: "资料.zip", output: "D:\\result.zip",
+      createdAt: 1, updatedAt: 2, warnings: [], retryable: true,
+      error: { code: "FILE_IN_USE", message: "无法读取：占用文件.txt，请关闭占用程序后重试", recoverable: true }
+    };
+    render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={onRetry} />);
+    expect(screen.getByText("压缩未完成")).toBeInTheDocument();
+    expect(screen.getByText(/无法读取：占用文件.txt/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开结果" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    fireEvent.change(screen.getByLabelText("重试密码"), { target: { value: "original-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认重试" }));
+    expect(onRetry).toHaveBeenCalledWith("locked-create", "original-password");
+  });
+
   it("shows the actual archive format on create task cards", () => {
     const task: TaskSnapshot = {
       taskId: "task-create-zip",

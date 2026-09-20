@@ -1088,6 +1088,10 @@
 
 .qzip-task-card__fact--error {
   color: var(--qzip-color-danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow-y: auto;
 }
 
 .qzip-task-card__output {

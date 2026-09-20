@@ -22,3 +22,4 @@ uuid.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true
+archive-sevenzip = { path = "../archive-sevenzip" }

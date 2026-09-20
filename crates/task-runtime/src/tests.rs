@@ -602,6 +602,108 @@ async fn cancellation_removes_create_staging_and_never_commits_output() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[cfg(windows)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires the verified Windows 7-Zip sidecar"]
+async fn locked_create_fails_without_output_and_retries_after_unlock() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let executable =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../third_party/7zip/bin/win-x64/7z.exe");
+    assert!(
+        executable.is_file(),
+        "fetch the sidecar before running this test"
+    );
+    for (format, extension) in [
+        (ArchiveFormat::SevenZip, "7z"),
+        (ArchiveFormat::Zip, "zip"),
+        (ArchiveFormat::Tar, "tar"),
+        (ArchiveFormat::TarGz, "tar.gz"),
+        (ArchiveFormat::TarXz, "tar.xz"),
+    ] {
+        let root = test_directory("locked-create");
+        let input = root.join("资料");
+        fs::create_dir(&input).unwrap();
+        let locked = input.join("占用文件.txt");
+        fs::write(&locked, "unsaved changes are not part of this file").unwrap();
+        fs::write(input.join("正常.txt"), "readable").unwrap();
+        let handle = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&locked)
+            .unwrap();
+        let output = root.join(format!("result.{extension}"));
+        let backend = Arc::new(archive_sevenzip::SevenZipCliBackend::new(
+            executable.clone(),
+        ));
+        let manager = TaskManager::new(backend.clone(), root.join("history.json"));
+        let task = manager
+            .submit(
+                TaskSpec::Create {
+                    inputs: vec![input.clone()],
+                    output: output.clone(),
+                    format,
+                    profile: CompressionProfile::Balanced,
+                    encrypt_headers: false,
+                    test_after_create: true,
+                    delete_sources_after_success: false,
+                },
+                None,
+            )
+            .unwrap();
+        let failed = wait_for_terminal(&manager, &task.task_id).await;
+        assert_eq!(failed.status, TaskStatus::Failed, "{extension}: {failed:?}");
+        assert!(failed.retryable);
+        assert!(
+            failed.error.unwrap().message.contains("占用文件.txt"),
+            "{extension}"
+        );
+        assert!(
+            !output.exists(),
+            "{extension}: incomplete archive was published"
+        );
+        assert!(
+            !fs::read_dir(&root)
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".qzip-create-"))
+        );
+        drop(handle);
+        assert_eq!(
+            fs::read_to_string(&locked).unwrap(),
+            "unsaved changes are not part of this file"
+        );
+        let retry = manager.retry(&task.task_id, None).unwrap();
+        let completed = wait_for_terminal(&manager, &retry.task_id).await;
+        assert_eq!(
+            completed.status,
+            TaskStatus::Completed,
+            "{extension}: {completed:?}"
+        );
+        let entries = backend
+            .list(
+                archive_core::ListArchiveRequest {
+                    archive: output,
+                    password: None,
+                },
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.path.ends_with("占用文件.txt"))
+        );
+        assert!(entries.iter().any(|entry| entry.path.ends_with("正常.txt")));
+        drop(manager);
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn wrong_password_retry_creates_a_new_successful_task_without_persisting_password() {
     let root = test_directory("password-retry");

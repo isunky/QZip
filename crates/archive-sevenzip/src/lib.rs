@@ -69,7 +69,7 @@ impl SevenZipCliBackend {
     async fn invoke(
         &self,
         operation: ArchiveOperation,
-        args: Vec<String>,
+        mut args: Vec<String>,
         progress: Arc<dyn ProgressReporter>,
         cancellation: CancellationToken,
     ) -> Result<InvocationOutput, ArchiveError> {
@@ -77,6 +77,9 @@ impl SevenZipCliBackend {
             return Err(ArchiveError::unavailable("7-Zip sidecar was not found"));
         }
         self.verify_runtime_files()?;
+        if !args.iter().any(|arg| arg.starts_with("-scc")) {
+            args.push("-sccUTF-8".into());
+        }
         self.invoke_process(
             operation,
             args,
@@ -187,6 +190,9 @@ impl SevenZipCliBackend {
                         state.consume(line, operation, progress.as_ref());
                     }
                     let (output, entries) = state.finish();
+                    if operation == ArchiveOperation::Create && !status.success() {
+                        return Err(create_failure(status.code(), &output));
+                    }
                     if status.success() || status.code() == Some(1) {
                         return Ok(InvocationOutput { output, warning: status.code() == Some(1), entries });
                     }
@@ -1092,6 +1098,7 @@ struct InvocationState {
     mode: InvocationMode,
     listing: Option<SevenZipListParser>,
     output: String,
+    diagnostics: String,
     last_percent: Option<u8>,
     last_report: Instant,
 }
@@ -1102,6 +1109,7 @@ impl InvocationState {
             mode,
             listing: (mode == InvocationMode::Listing).then(SevenZipListParser::default),
             output: String::new(),
+            diagnostics: String::new(),
             last_percent: None,
             last_report: Instant::now() - Duration::from_secs(1),
         }
@@ -1119,7 +1127,9 @@ impl InvocationState {
         {
             parser.push_line(&line.line);
         }
-        if self.mode != InvocationMode::Listing || line.stream == ProcessStream::Stderr {
+        if line.stream == ProcessStream::Stderr {
+            append_bounded(&mut self.diagnostics, &line.line);
+        } else if self.mode != InvocationMode::Listing {
             append_bounded(&mut self.output, &line.line);
         }
         if let Some(percent) = parse_progress(&line.line)
@@ -1137,7 +1147,12 @@ impl InvocationState {
     }
 
     fn finish(self) -> (String, Option<Vec<ArchiveEntry>>) {
-        (self.output, self.listing.map(SevenZipListParser::finish))
+        // Preserve unreadable-file diagnostics ahead of verbose progress output.
+        let mut output = self.diagnostics;
+        if !self.output.is_empty() {
+            append_bounded(&mut output, &self.output);
+        }
+        (output, self.listing.map(SevenZipListParser::finish))
     }
 }
 
@@ -1162,13 +1177,33 @@ fn parse_progress(line: &str) -> Option<u8> {
             .filter(|value| *value <= 100)
     })
 }
+fn create_failure(code: Option<i32>, output: &str) -> ArchiveError {
+    let mut error = map_exit(code, output);
+    error.message = format!(
+        "压缩未完成：无法确认所有文件已完整压缩（7-Zip 返回码 {}）。请关闭占用文件的程序，确认文件存在且有读取权限后重试。\n{}{}",
+        code.unwrap_or(-1),
+        output.trim(),
+        if output.len() >= MAX_DIAGNOSTIC_BYTES {
+            "\n诊断信息过长，仅显示部分内容。"
+        } else {
+            ""
+        }
+    );
+    error
+}
+
 fn map_exit(code: Option<i32>, output: &str) -> ArchiveError {
     let lower = output.to_ascii_lowercase();
     let kind = if lower.contains("wrong password") || lower.contains("password is not correct") {
         ArchiveErrorCode::WrongPassword
     } else if lower.contains("not enough space") || lower.contains("disk full") {
         ArchiveErrorCode::DiskFull
-    } else if lower.contains("used by another process") {
+    } else if lower.contains("used by another process")
+        || lower.contains("being used by another")
+        || lower.contains("sharing violation")
+        || lower.contains("另一个程序")
+        || lower.contains("另一进程")
+    {
         ArchiveErrorCode::FileInUse
     } else if lower.contains("access is denied") {
         ArchiveErrorCode::AccessDenied
@@ -1329,6 +1364,33 @@ mod tests {
 
         assert!(diagnostics.len() <= MAX_DIAGNOSTIC_BYTES);
         assert!(std::str::from_utf8(diagnostics.as_bytes()).is_ok());
+    }
+    #[test]
+    fn create_failure_retains_late_stderr_after_large_stdout() {
+        let mut state = InvocationState::new(InvocationMode::Diagnostic);
+        let reporter = archive_core::NoopProgressReporter;
+        state.consume(
+            ProcessLine {
+                stream: ProcessStream::Stdout,
+                line: "x".repeat(MAX_DIAGNOSTIC_BYTES),
+            },
+            ArchiveOperation::Create,
+            &reporter,
+        );
+        state.consume(
+            ProcessLine {
+                stream: ProcessStream::Stderr,
+                line: "WARNING: sharing violation\n资料/占用文件.txt".into(),
+            },
+            ArchiveOperation::Create,
+            &reporter,
+        );
+        let (output, _) = state.finish();
+        assert!(output.len() <= MAX_DIAGNOSTIC_BYTES);
+        let error = create_failure(Some(1), &output);
+        assert_eq!(error.code, ArchiveErrorCode::FileInUse);
+        assert!(error.message.contains("资料/占用文件.txt"));
+        assert!(error.message.contains("压缩未完成"));
     }
     #[test]
     fn list_requests_utf8_console_output() {
