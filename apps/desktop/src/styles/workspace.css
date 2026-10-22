@@ -527,6 +527,17 @@
   width: min(1320px, 100%);
 }
 
+.qzip-selection-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 8px 20px; border-bottom: 1px solid var(--qzip-color-border-default); color: var(--qzip-color-text-secondary); font-size: 12px; }
+.qzip-selection-toolbar button, .qzip-entry-menu button { background: transparent; border: 0; border-radius: 6px; padding: 7px 10px; font: inherit; color: var(--qzip-color-accent-strong); cursor: pointer; }
+.qzip-selection-toolbar button:hover, .qzip-entry-menu button:hover { background: var(--qzip-color-accent-soft); }
+.qzip-selection-toolbar button:disabled { opacity: .45; cursor: default; }
+.qzip-entry-menu { position: fixed; z-index: 10; display: flex; flex-direction: column; min-width: 150px; padding: 6px; background: var(--qzip-color-bg-elevated); border: 1px solid var(--qzip-color-border-default); border-radius: 10px; box-shadow: var(--qzip-shadow-sm); }
+.qzip-entry-menu button { text-align: left; }
+.qzip-entry-row:focus-visible, .qzip-selection-toolbar button:focus-visible, .qzip-entry-menu button:focus-visible { outline: 2px solid var(--qzip-color-accent); outline-offset: -2px; }
+html[data-density="compact"] .qzip-entry-row { min-height: 38px; font-size: 13px; }
+html[data-density="compact"] .qzip-entry-table__head { min-height: 38px; }
+.qzip-titlebar__resume { color: var(--qzip-color-accent-strong); font-size: 13px; }
+
 .qzip-browser-page__topbar {
   align-items: center;
   display: flex;
@@ -650,9 +661,15 @@
   padding: 9px 20px;
 }
 
-.qzip-browser-toolbar .qzip-input-field {
+.qzip-browser-search {
   margin-left: auto;
-  width: min(250px, 32%);
+  width: min(250px, 40%);
+  min-width: 180px;
+  flex-shrink: 0;
+}
+
+.qzip-browser-search .qzip-input-field {
+  width: 100%;
 }
 
 .qzip-breadcrumb {

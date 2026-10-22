@@ -12,7 +12,7 @@ export const archiveClient = {
   pickInputPaths: (archivesOnly = false) => command<string[]>("pick_input_paths", { archivesOnly }),
   pickInputFolder: () => command<string | null>("pick_input_folder"),
   suggestCreateOutput: (inputs: string[], format: string) => command<string>("suggest_create_output", { inputs, format }),
-  suggestExtractOutput: (archive: string, named = true) => command<string>("suggest_extract_output", { archive, named }),
+  suggestExtractOutput: (archive: string, named = true, sessionId?: string, avoidDuplicateRootFolder?: boolean) => command<string>("suggest_extract_output", { archive, named, sessionId, avoidDuplicateRootFolder }),
   scan: (paths: string[]) => command<ScanResult>("scan_input_paths", { paths }),
   prepare: (archive: string, password?: string) => command<ArchiveSession>("prepare_archive_session", { archive, password }),
   entries: (sessionId: string, directory?: string, search?: string, offset = 0, sortBy: "name" | "size" | "type" | "modified" = "name", sortDirection: "ascending" | "descending" = "ascending") => command<EntryPage>("list_archive_entries", { sessionId, directory, search, offset, sort: { key: sortBy, direction: sortDirection } }),

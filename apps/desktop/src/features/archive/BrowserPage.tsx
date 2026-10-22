@@ -66,11 +66,27 @@ export function BrowserPage({
   const [openError, setOpenError] = useState<string | null>(null);
   const [openingEntry, setOpeningEntry] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const anchorRef = useRef<string | null>(null);
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [contextEntry, setContextEntry] = useState<ArchiveEntry | null>(null);
+  const [menuPoint, setMenuPoint] = useState({ x: 0, y: 0 });
+  const menuOrigin = useRef<HTMLButtonElement | null>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [systemFileIcons, setSystemFileIcons] = useState<Record<string, string>>({});
   const requestedIconExtensionsRef = useRef(new Set<string>());
   const reportedSessionRef = useRef<string | null>(null);
   const listGenerationRef = useRef(0);
+  const selectionScope = useRef("");
+
+  useEffect(() => {
+    if (!contextEntry) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest(".qzip-entry-menu")) setContextEntry(null);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [contextEntry]);
 
   useEffect(() => {
     if (!archiveClient.isTauri) return;
@@ -80,7 +96,8 @@ export function BrowserPage({
       if (cancelled) return;
       setLoading(true);
       setLoadError(null);
-      setSelected(new Set());
+      const scope = `${session.sessionId}\0${directory}\0${search}`;
+      if (scope !== selectionScope.current) { setSelected(new Set()); anchorRef.current = null; selectionScope.current = scope; }
       setEntries([]);
       setTotal(0);
       setNextOffset(undefined);
@@ -135,13 +152,60 @@ export function BrowserPage({
     ? Math.max(0, Math.min(100, 100 - (session.compressedSize / session.estimatedUncompressedSize) * 100))
     : 0;
 
-  function toggleSelected(path: string) {
+  function selectEntry(path: string, modifiers: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean } = {}) {
+    setContextEntry(null);
     setSelected((current) => {
+      if (modifiers.shiftKey && anchorRef.current) {
+        const anchor = shown.findIndex(entry => entry.path === anchorRef.current);
+        const end = shown.findIndex(entry => entry.path === path);
+        if (anchor >= 0 && end >= 0) {
+          const next = modifiers.ctrlKey || modifiers.metaKey ? new Set(current) : new Set<string>();
+          shown.slice(Math.min(anchor, end), Math.max(anchor, end) + 1).forEach(entry => next.add(entry.path));
+          return next;
+        }
+      }
+      if (!modifiers.ctrlKey && !modifiers.metaKey) return new Set([path]);
       const next = new Set(current);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
     });
+    if (!modifiers.shiftKey) anchorRef.current = path;
+  }
+  async function selectAll() {
+    if (loading || selectingAll || loadingMore) return;
+    const generation = listGenerationRef.current;
+    setSelectingAll(true);
+    try {
+      let all = [...shown];
+      let offset = nextOffset;
+      while (archiveClient.isTauri && offset != null) {
+        const page = await archiveClient.entries(session.sessionId, directory || undefined, search || undefined, offset, sortKey, sortDirection);
+        if (generation !== listGenerationRef.current) return;
+        all = [...new Map([...all, ...page.entries].map(entry => [entry.path, entry])).values()];
+        const next = page.nextOffset ?? undefined;
+        if (next != null && next <= offset) throw new Error(text("列表未能继续加载，请重试。", "The list did not advance. Please retry."));
+        offset = next;
+      }
+      if (generation !== listGenerationRef.current) return;
+      if (archiveClient.isTauri) { setEntries(all); setNextOffset(undefined); }
+      setSelected(new Set(all.map(entry => entry.path)));
+    } catch (reason) { if (generation === listGenerationRef.current) setLoadError(errorMessage(reason)); }
+    finally { setSelectingAll(false); }
+  }
+  function goUp() {
+    if (search) setSearch("");
+    else if (breadcrumbs.length) navigateBreadcrumb(breadcrumbs.length - 2);
+  }
+  function handleKeys(event: React.KeyboardEvent<HTMLElement>) {
+    const input = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+      event.preventDefault(); searchRef.current?.querySelector("input")?.focus(); return;
+    }
+    if (event.key === "Escape") { if (contextEntry) { setContextEntry(null); menuOrigin.current?.focus(); } else if (search) setSearch(""); else setSelected(new Set()); return; }
+    if (input) return;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") { event.preventDefault(); void selectAll(); }
+    if (event.key === "Backspace" || (event.altKey && event.key === "ArrowUp")) { event.preventDefault(); goUp(); }
   }
   function changeSort(nextKey: EntrySortKey) {
     setSortDirection((current) => sortKey === nextKey && current === "ascending" ? "descending" : "ascending");
@@ -174,7 +238,7 @@ export function BrowserPage({
     setSelected(new Set());
   }
   async function loadMore() {
-    if (!archiveClient.isTauri || nextOffset == null || loadingMore) return;
+    if (!archiveClient.isTauri || nextOffset == null || loadingMore || selectingAll) return;
     const generation = listGenerationRef.current;
     setLoadingMore(true);
     setLoadError(null);
@@ -213,17 +277,17 @@ export function BrowserPage({
   }
 
   return (
-    <section className="qzip-browser-page">
+    <section className="qzip-browser-page" onKeyDown={handleKeys}>
       <header className="qzip-browser-page__topbar">
-        <button type="button" className="qzip-square-action" aria-label={text("返回快速解压", "Back to quick extract")} onClick={onBack}>
+        <button type="button" className="qzip-square-action" aria-label={text("返回首页", "Back to home")} onClick={onBack}>
           <ArrowLeftRegular fontSize={24} />
         </button>
         <div className="qzip-browser-page__title-icon"><ArchiveRegular fontSize={28} /><span>{formatLabels[session.format]}</span></div>
         <h1>{fileName(archive)}</h1>
         <div className="qzip-browser-actions">
-          <button type="button" onClick={() => void addToArchive(false)}><AddCircleRegular fontSize={22} /> {text("添加", "Add")} <ChevronDownRegular fontSize={16} /></button>
-          <button type="button" onClick={() => onExtract([...selected])}><ArrowDownloadRegular fontSize={22} /> {text("解压", "Extract")} <ChevronDownRegular fontSize={16} /></button>
-          <button type="button" onClick={() => void testArchive()}><ShieldCheckmarkRegular fontSize={22} /> {text("测试", "Test")} <ChevronDownRegular fontSize={16} /></button>
+          <button type="button" onClick={() => void addToArchive(false).catch(reason => setOpenError(errorMessage(reason)))}><AddCircleRegular fontSize={22} /> {text("添加", "Add")}</button>
+          <button type="button" disabled={selectingAll || loading} onClick={() => onExtract([...selected])}><ArrowDownloadRegular fontSize={22} /> {selected.size ? text(`解压选中 (${selected.size})`, `Extract selected (${selected.size})`) : text("解压全部", "Extract all")}</button>
+          <button type="button" onClick={() => void testArchive().catch(reason => setOpenError(errorMessage(reason)))}><ShieldCheckmarkRegular fontSize={22} /> {text("测试", "Test")}</button>
           <button type="button" aria-expanded={propertiesOpen} onClick={() => setPropertiesOpen((value) => !value)}><MoreHorizontalRegular fontSize={22} /> {text("更多", "More")} <ChevronDownRegular fontSize={16} /></button>
         </div>
         {propertiesOpen ? (
@@ -247,9 +311,20 @@ export function BrowserPage({
               </span>
             ))}
           </nav>
-          <Input aria-label={text("搜索压缩包内容", "Search archive contents")} placeholder={text("搜索", "Search")} value={search} onChange={(event) => setSearch(event.target.value)} trailing={<SearchRegular fontSize={20} />} />
+          <div className="qzip-browser-search" ref={searchRef}><Input aria-label={text("搜索当前文件夹", "Search current folder")} placeholder={text("搜索当前文件夹", "Search current folder")} value={search} onChange={(event) => setSearch(event.target.value)} trailing={<SearchRegular fontSize={20} />} /></div>
         </div>
-        <div className="qzip-entry-table" role="table">
+        <div className="qzip-selection-toolbar">
+          <span role="status">{text(`已选择 ${selected.size} 项`, `${selected.size} selected`)}</span>
+          <button type="button" disabled={loading || selectingAll || loadingMore} onClick={() => void selectAll()}>{selectingAll ? text("正在全选…", "Selecting…") : text("全选", "Select all")}</button>
+          <button type="button" disabled={!selected.size} onClick={() => setSelected(new Set())}>{text("取消选择", "Clear selection")}</button>
+          {directory ? <button type="button" onClick={goUp}>{text("上一级", "Up one level")}</button> : null}
+        </div>
+        {contextEntry ? <div className="qzip-entry-menu" style={{ left: menuPoint.x, top: menuPoint.y }} role="menu" aria-label={text("文件操作", "File actions")}>
+          <button role="menuitem" autoFocus onClick={() => { void openEntry(contextEntry); setContextEntry(null); }}>{text("打开", "Open")}</button>
+          <button role="menuitem" onClick={() => { onExtract(selected.has(contextEntry.path) ? [...selected] : [contextEntry.path]); setContextEntry(null); }}>{text("解压选中", "Extract selected")}</button>
+          <button role="menuitem" onClick={() => setContextEntry(null)}>{text("关闭菜单", "Close menu")}</button>
+        </div> : null}
+        <div className="qzip-entry-table" role="grid" aria-label={text("压缩包文件列表", "Archive file list")} aria-multiselectable="true" aria-busy={loading || selectingAll}>
           <div className="qzip-entry-table__head" role="row">
             {([
               ["name", text("名称", "Name")],
@@ -274,13 +349,26 @@ export function BrowserPage({
               className="qzip-entry-row"
               key={entry.path}
               role="row"
-              onClick={() => toggleSelected(entry.path)}
+              aria-selected={selected.has(entry.path)}
+              onClick={(event) => selectEntry(entry.path, event)}
               onDoubleClick={() => void openEntry(entry)}
+              onContextMenu={event => { event.preventDefault(); if (!selected.has(entry.path)) selectEntry(entry.path); menuOrigin.current = event.currentTarget; setMenuPoint({ x: Math.max(0, Math.min(event.clientX, window.innerWidth - 180)), y: Math.max(0, Math.min(event.clientY, window.innerHeight - 150)) }); setContextEntry(entry); }}
+              onKeyDown={event => {
+                if (event.key === "Enter") { event.preventDefault(); void openEntry(entry); }
+                else if (event.key === " ") { event.preventDefault(); selectEntry(entry.path, { ctrlKey: true }); }
+                else if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); if (!selected.has(entry.path)) selectEntry(entry.path); const rect = event.currentTarget.getBoundingClientRect(); menuOrigin.current = event.currentTarget; setMenuPoint({ x: Math.max(0, Math.min(rect.left + 30, window.innerWidth - 180)), y: Math.max(0, Math.min(rect.bottom, window.innerHeight - 150)) }); setContextEntry(entry); }
+                else if (!event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+                  event.preventDefault();
+                  const index = shown.findIndex(item => item.path === entry.path);
+                  const next = shown[index + (event.key === "ArrowDown" ? 1 : -1)];
+                  if (next) { if (!event.ctrlKey && !event.metaKey) selectEntry(next.path, event); const rows = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button.qzip-entry-row"); rows?.[shown.indexOf(next)]?.focus(); }
+                }
+              }}
               data-selected={selected.has(entry.path)}
               disabled={openingEntry === entry.path}
               title={entry.isDirectory ? text("双击打开文件夹", "Double-click to open folder") : text("双击使用默认应用打开", "Double-click to open with the default app")}
             >
-              <span>
+              <span role="gridcell">
                 {openingEntry === entry.path
                   ? <ArrowClockwiseRegular fontSize={23} className="qzip-spin" />
                   : entry.isDirectory
@@ -290,9 +378,9 @@ export function BrowserPage({
                       : <DocumentRegular fontSize={23} />}
                 {entry.displayName}{entry.encrypted ? <LockClosedRegular fontSize={14} /> : null}
               </span>
-              <span>{entry.isDirectory ? "—" : formatBytes(entry.size)}</span>
-              <span>{formatType(entry, locale)}</span>
-              <span>{entry.modifiedAt?.replace("T", " ").slice(0, 16) ?? "—"}</span>
+              <span role="gridcell">{entry.isDirectory ? "—" : formatBytes(entry.size)}</span>
+              <span role="gridcell">{formatType(entry, locale)}</span>
+              <span role="gridcell">{entry.modifiedAt?.replace("T", " ").slice(0, 16) ?? "—"}</span>
             </button>
           ))}
           {loadError ? <div className="qzip-browser-load-error">{text("读取列表失败：", "Could not read the list: ")}{loadError}</div> : null}

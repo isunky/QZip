@@ -320,6 +320,8 @@ export function ExtractPage({
   onBrowse,
   onCreated,
   defaultConflictPolicy = "rename",
+  extractToNamedFolder = true,
+  avoidDuplicateRootFolder = true,
   initialPassword = ""
 }: {
   archive: string;
@@ -329,6 +331,8 @@ export function ExtractPage({
   onBrowse: () => void;
   onCreated: (task: TaskSnapshot) => void;
   defaultConflictPolicy?: ConflictPolicy;
+  extractToNamedFolder?: boolean;
+  avoidDuplicateRootFolder?: boolean;
   initialPassword?: string;
 }) {
   const { text } = useI18n();
@@ -339,6 +343,8 @@ export function ExtractPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasBlocking = session.risks.some((risk) => !risk.overridable);
+  const outputEdited = useRef(false);
+  const submitting = useRef(false);
   const conflictOptions = [
     { value: "rename", label: text("重命名", "Rename") },
     { value: "overwrite", label: text("覆盖", "Overwrite") },
@@ -347,8 +353,13 @@ export function ExtractPage({
 
   useEffect(() => {
     if (!archiveClient.isTauri) return;
-    void archiveClient.suggestExtractOutput(archive, true).then(setOutput).catch(() => undefined);
-  }, [archive]);
+    if (outputEdited.current) return;
+    let cancelled = false;
+    void archiveClient.suggestExtractOutput(archive, extractToNamedFolder, session.sessionId, avoidDuplicateRootFolder)
+      .then(path => { if (!cancelled && !outputEdited.current) setOutput(path); })
+      .catch(reason => { if (!cancelled) setError(errorMessage(reason)); });
+    return () => { cancelled = true; };
+  }, [archive, session.sessionId, extractToNamedFolder, avoidDuplicateRootFolder]);
 
   const pickOutputFolder = async () => {
     if (!archiveClient.isTauri) {
@@ -356,9 +367,11 @@ export function ExtractPage({
       return;
     }
     const picked = await archiveClient.pickInputFolder();
-    if (picked) setOutput(picked);
+    if (picked) { outputEdited.current = true; setOutput(picked); }
   };
   const start = async () => {
+    if (submitting.current || !output.trim()) return;
+    submitting.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -375,14 +388,15 @@ export function ExtractPage({
         : makeDemoTask("extract", fileName(archive), output);
       onCreated(task);
     } catch (reason) {
-      setError(String(reason));
+      setError(errorMessage(reason));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
 
   return (
-    <DetailWorkspace title={text("快速解压", "Quick extract")} onBack={onBack} className="qzip-extract-page">
+    <DetailWorkspace title={text("快速解压", "Quick extract")} onBack={onBack} backLabel={text("返回压缩包", "Return to archive")} className="qzip-extract-page">
       <section className="qzip-archive-identity">
         <div className="qzip-archive-identity__art">
           <ArchiveRegular fontSize={60} />
@@ -406,7 +420,7 @@ export function ExtractPage({
           <Input
             aria-label={text("解压位置", "Extract to")}
             value={output}
-            onChange={(event) => setOutput(event.target.value)}
+            onChange={(event) => { outputEdited.current = true; setOutput(event.target.value); }}
             trailing={
               <button type="button" className="qzip-input-action" aria-label={text("选择解压位置", "Choose extraction folder")} onClick={() => void pickOutputFolder()}>
                 <FolderOpenRegular fontSize={20} />
@@ -443,12 +457,16 @@ export function BatchExtractPage({
   archives,
   onBack,
   onStarted,
-  defaultConflictPolicy = "rename"
+  defaultConflictPolicy = "rename",
+  extractToNamedFolder = true,
+  avoidDuplicateRootFolder = true
 }: {
   archives: string[];
   onBack: () => void;
   onStarted: (tasks: TaskSnapshot[], failures: { archive: string; message: string }[]) => void;
   defaultConflictPolicy?: ConflictPolicy;
+  extractToNamedFolder?: boolean;
+  avoidDuplicateRootFolder?: boolean;
 }) {
   const { text } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -467,7 +485,7 @@ export function BatchExtractPage({
       try {
         prepared = await archiveClient.prepare(target);
         if (prepared.risks.length) throw new Error(text("需要单独打开并确认安全风险", "Open separately to review security risks"));
-        const output = await archiveClient.suggestExtractOutput(target, true);
+        const output = await archiveClient.suggestExtractOutput(target, extractToNamedFolder, prepared.sessionId, avoidDuplicateRootFolder);
         tasks.push(await archiveClient.extract({
           archive: target,
           output,
@@ -490,7 +508,7 @@ export function BatchExtractPage({
     <DetailWorkspace title={text("批量解压", "Batch extraction")} onBack={onBack} className="qzip-batch-extract-page">
       <div className="qzip-batch-summary">
         <ArchiveRegular fontSize={36} />
-        <div><strong>{text(`${archives.length} 个压缩包`, `${archives.length} archives`)}</strong><span>{text("每个压缩包将解压到所在位置的同名文件夹", "Each archive will be extracted to a same-name folder beside it")}</span></div>
+        <div><strong>{text(`${archives.length} 个压缩包`, `${archives.length} archives`)}</strong><span>{extractToNamedFolder ? text("按设置解压到同名文件夹", "Extract to same-name folders using your preferences") : text("解压到各压缩包所在文件夹", "Extract beside each archive")}</span></div>
       </div>
       <div className="qzip-batch-list">
         {archives.map((target, index) => (

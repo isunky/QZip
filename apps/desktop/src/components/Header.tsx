@@ -16,6 +16,8 @@ interface HeaderProps {
   onHomeClick: () => void;
   onTasksClick: () => void;
   onSettingsClick: () => void;
+  onResume?: () => void;
+  resumeLabel?: string;
 }
 
 const isTauri = "__TAURI_INTERNALS__" in window;
@@ -28,7 +30,7 @@ async function withCurrentWindow(
   await action(getCurrentWindow());
 }
 
-export function Header({ activePage, activeTaskCount = 0, iconSrc, onHomeClick, onTasksClick, onSettingsClick }: HeaderProps) {
+export function Header({ activePage, activeTaskCount = 0, iconSrc, onHomeClick, onTasksClick, onSettingsClick, onResume, resumeLabel }: HeaderProps) {
   const { brandName, text } = useI18n();
   const platform = usePlatform();
   return (
@@ -45,6 +47,7 @@ export function Header({ activePage, activeTaskCount = 0, iconSrc, onHomeClick, 
         onDoubleClick={() => void withCurrentWindow((window) => window.toggleMaximize())}
       />
       <nav className="qzip-titlebar__actions" aria-label={text("应用导航", "App navigation")}>
+        {resumeLabel ? <Button variant="tertiary" className="qzip-titlebar__resume" onClick={onResume}>{resumeLabel}</Button> : null}
         <Button
           variant="tertiary"
           className="qzip-titlebar__nav-button"

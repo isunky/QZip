@@ -32,6 +32,7 @@ use uuid::Uuid;
 
 mod archive_entries;
 mod desktop_platform;
+mod extraction_paths;
 mod preview;
 mod shell_integration;
 mod system_icons;
@@ -325,28 +326,32 @@ fn suggest_create_output(
     Ok(unique_path(&parent, stem, format_extension(format)))
 }
 #[tauri::command]
-fn suggest_extract_output(archive: PathBuf, named: bool) -> Result<PathBuf, CommandErrorDto> {
-    let parent = archive.parent().ok_or_else(|| {
+fn suggest_extract_output(
+    archive: PathBuf,
+    named: bool,
+    session_id: Option<String>,
+    avoid_duplicate_root_folder: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<PathBuf, CommandErrorDto> {
+    let avoid = avoid_duplicate_root_folder.unwrap_or_else(|| {
+        state
+            .settings
+            .lock()
+            .expect("settings lock")
+            .avoid_duplicate_root_folder
+    });
+    let sessions = state.sessions.lock().expect("session lock");
+    let entries = session_id
+        .as_ref()
+        .and_then(|id| sessions.get(id))
+        .filter(|session| session.archive == archive)
+        .map_or(&[][..], |session| session.entries.as_slice());
+    extraction_paths::suggested_output(&archive, named, avoid, entries).ok_or_else(|| {
         CommandErrorDto::from(ArchiveError::new(
             ArchiveErrorCode::InvalidRequest,
             "压缩包路径无效",
         ))
-    })?;
-    if !named {
-        return Ok(parent.to_path_buf());
-    }
-    let file_name = archive
-        .file_name()
-        .and_then(|v| v.to_str())
-        .unwrap_or("解压结果");
-    let stem = [
-        ".tar.gz", ".tar.xz", ".tgz", ".txz", ".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2",
-        ".iso", ".cab", ".wim",
-    ]
-    .iter()
-    .find_map(|suffix| file_name.strip_suffix(suffix))
-    .unwrap_or(file_name);
-    Ok(parent.join(stem))
+    })
 }
 #[tauri::command]
 async fn scan_input_paths(paths: Vec<PathBuf>) -> Result<ScanResult, CommandErrorDto> {

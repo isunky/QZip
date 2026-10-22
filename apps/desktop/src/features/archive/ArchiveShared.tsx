@@ -29,9 +29,10 @@ export function RiskNotice({ risks, accepted, onAccepted }: {
   );
 }
 
-export function DetailWorkspace({ title, onBack, className, children }: {
+export function DetailWorkspace({ title, onBack, backLabel, className, children }: {
   title: string;
   onBack: () => void;
+  backLabel?: string;
   className?: string;
   children: ReactNode;
 }) {
@@ -40,7 +41,7 @@ export function DetailWorkspace({ title, onBack, className, children }: {
     <section className={`qzip-detail-page ${className ?? ""}`}>
       <Card className="qzip-detail-panel">
         <header className="qzip-detail-panel__header">
-          <button type="button" aria-label={text("返回首页", "Back to home")} onClick={onBack}><ArrowLeftRegular fontSize={26} /></button>
+          <button type="button" aria-label={backLabel ?? text("返回首页", "Back to home")} onClick={onBack}><ArrowLeftRegular fontSize={26} /></button>
           <h1>{title}</h1>
         </header>
         {children}
