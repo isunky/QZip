@@ -18,7 +18,17 @@ if ($packageManager -notmatch '^pnpm@\d+\.\d+\.\d+(?:-.+)?$') {
 $corepack = Get-Command corepack -ErrorAction SilentlyContinue
 $pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
 $npx = Get-Command npx -ErrorAction SilentlyContinue
-$packageManagerLauncher = if ($corepack) { 'corepack' } elseif ($pnpm) { 'pnpm-dlx' } elseif ($npx) { 'npx' } else { $null }
+$expectedVersion = $packageManager.Substring(5)
+$corepackPinned = $false
+if ($corepack) {
+  try {
+    $versionOutput = & $corepack.Source $packageManager --version 2>$null
+    $corepackPinned = $LASTEXITCODE -eq 0 -and ([string]$versionOutput).Trim() -eq $expectedVersion
+  } catch {
+    $corepackPinned = $false
+  }
+}
+$packageManagerLauncher = if ($corepackPinned) { 'corepack' } elseif ($pnpm) { 'pnpm-dlx' } elseif ($npx) { 'npx' } else { $null }
 if (-not $packageManagerLauncher) {
   throw "Unable to run the pinned workspace package manager ($packageManager). Install Node.js with Corepack, or install pnpm/npx."
 }

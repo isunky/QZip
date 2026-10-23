@@ -50,7 +50,7 @@ if (command === 'fetch') {
   if (await hash(join(runtime, '7zz')) !== digest) throw new Error('Prepared engine changed; rerun fetch');
   const env = { ...process.env, QZIP_MAC_ENGINE_SHA256: digest, MACOSX_DEPLOYMENT_TARGET: '12.0' };
   if (command === 'check') {
-    run('corepack', ['pnpm', 'check'], { env });
+    run(process.execPath, [resolve(root, 'scripts/run-pnpm.mjs'), 'check'], { env });
     run('cargo', ['build', '-p', 'qzip-cli'], { env });
     const cli = resolve(root, 'target/debug/qzip-cli');
     run(cli, ['capabilities'], { env });
@@ -76,10 +76,10 @@ if (command === 'fetch') {
     console.log(`macOS backend smoke passed; fixtures retained at ${work}`);
   }
   else if (command === 'build' || command === 'dev') {
-    const args = ['pnpm', '--filter', '@qzip/desktop', 'tauri', command];
+    const args = [resolve(root, 'scripts/run-pnpm.mjs'), '--filter', '@qzip/desktop', 'tauri', command];
     if (command === 'build') args.push('--config', 'src-tauri/tauri.macos.conf.json');
     if (command === 'build') args.push('--target', process.arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin');
-    run('corepack', args, { env });
+    run(process.execPath, args, { env });
     if (await hash(join(runtime, '7zz')) !== digest) throw new Error('Bundler rewrote engine');
     if (command === 'build') {
       const target = process.arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin';

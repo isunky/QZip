@@ -4,8 +4,8 @@
   "version": "2.0.3",
   "identifier": "app.qzip.desktop",
   "build": {
-    "beforeDevCommand": "corepack pnpm dev:web",
-    "beforeBuildCommand": "corepack pnpm build:web",
+    "beforeDevCommand": "node ../../scripts/run-pnpm.mjs dev:web",
+    "beforeBuildCommand": "node ../../scripts/run-pnpm.mjs build:web",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },

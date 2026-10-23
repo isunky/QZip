@@ -313,7 +313,7 @@ jobs:
           [[ "$(git rev-parse "refs/remotes/origin/$RELEASE_BRANCH")" == "$RELEASE_SHA" ]] || { echo 'The release commit is no longer the head of the default branch.' >&2; exit 1; }
           [[ "$(node -p "require('./package.json').version")" == "$RELEASE_VERSION" ]] || { echo 'Release package version does not match the dispatch version.' >&2; exit 1; }
       - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Fetch and verify official 7-Zip engine
         run: node scripts/macos.mjs fetch
       - name: Check macOS workspace and archive round trips

@@ -40,8 +40,7 @@ jobs:
           toolchain: 1.96.0
           components: clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
-      - run: corepack enable
-      - run: corepack pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - run: node scripts/macos.mjs fetch
       - run: node scripts/macos.mjs check
       - run: node scripts/macos.mjs build

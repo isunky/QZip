@@ -11,11 +11,21 @@ $packageManager = [string]$packageManifest.packageManager
 if ($packageManager -notmatch '^pnpm@\d+\.\d+\.\d+(?:-.+)?$') {
   throw "package.json must declare a pinned pnpm packageManager, got '$packageManager'."
 }
+$expectedVersion = $packageManager.Substring(5)
 
 $corepack = Get-Command corepack -ErrorAction SilentlyContinue
 $pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
 $npx = Get-Command npx -ErrorAction SilentlyContinue
+$corepackPinned = $false
 if ($corepack) {
+  try {
+    $versionOutput = & $corepack.Source $packageManager --version 2>$null
+    $corepackPinned = $LASTEXITCODE -eq 0 -and ([string]$versionOutput).Trim() -eq $expectedVersion
+  } catch {
+    $corepackPinned = $false
+  }
+}
+if ($corepackPinned) {
   & $corepack.Source $packageManager @CommandArguments
 } elseif ($pnpm) {
   Write-Warning "Corepack is unavailable; using $packageManager via pnpm dlx. The pinned package-manager version remains enforced."
