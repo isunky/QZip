@@ -58,6 +58,6 @@ export function Stat({ label, value }: { label: string; value: string }) {
   return <div className="qzip-stat"><span>{label}</span><strong>{value}</strong></div>;
 }
 
-export function Empty({ icon, text }: { icon: ReactNode; text: string }) {
-  return <div className="qzip-work-empty">{icon}<p>{text}</p></div>;
+export function Empty({ icon, text, description, action }: { icon: ReactNode; text: string; description?: string; action?: ReactNode }) {
+  return <div className="qzip-work-empty">{icon}<p>{text}</p>{description ? <small>{description}</small> : null}{action}</div>;
 }

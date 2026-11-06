@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   AddCircleRegular,
   ArchiveRegular,
@@ -19,7 +19,7 @@ import {
   SearchRegular,
   ShieldCheckmarkRegular
 } from "@fluentui/react-icons";
-import { Card, Input } from "@qzip/ui";
+import { Button, Card, Input } from "@qzip/ui";
 import type { ArchiveEntry, ArchiveSession, TaskSnapshot } from "../../contracts/archive";
 import { archiveClient } from "../../lib/archiveClient";
 import { useI18n } from "../../lib/i18n";
@@ -73,6 +73,9 @@ export function BrowserPage({
   const menuOrigin = useRef<HTMLButtonElement | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const propertiesRef = useRef<HTMLDivElement>(null);
+  const propertiesTriggerRef = useRef<HTMLButtonElement>(null);
+  const propertiesId = useId();
   const [systemFileIcons, setSystemFileIcons] = useState<Record<string, string>>({});
   const requestedIconExtensionsRef = useRef(new Set<string>());
   const reportedSessionRef = useRef<string | null>(null);
@@ -87,6 +90,19 @@ export function BrowserPage({
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
   }, [contextEntry]);
+
+  useEffect(() => {
+    if (!propertiesOpen) return;
+    const dismiss = (event: Event) => {
+      if (event.target instanceof Node && !propertiesRef.current?.contains(event.target)) setPropertiesOpen(false);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("focusin", dismiss);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("focusin", dismiss);
+    };
+  }, [propertiesOpen]);
 
   useEffect(() => {
     if (!archiveClient.isTauri) return;
@@ -197,15 +213,34 @@ export function BrowserPage({
     if (search) setSearch("");
     else if (breadcrumbs.length) navigateBreadcrumb(breadcrumbs.length - 2);
   }
+  function clearSearch() {
+    setSearch("");
+    searchRef.current?.querySelector("input")?.focus();
+  }
   function handleKeys(event: React.KeyboardEvent<HTMLElement>) {
     const input = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
       event.preventDefault(); searchRef.current?.querySelector("input")?.focus(); return;
     }
-    if (event.key === "Escape") { if (contextEntry) { setContextEntry(null); menuOrigin.current?.focus(); } else if (search) setSearch(""); else setSelected(new Set()); return; }
+    if (event.key === "Escape") {
+      if (contextEntry) { setContextEntry(null); menuOrigin.current?.focus(); }
+      else if (propertiesOpen) { setPropertiesOpen(false); propertiesTriggerRef.current?.focus(); }
+      else if (search) clearSearch();
+      else setSelected(new Set());
+      return;
+    }
     if (input) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") { event.preventDefault(); void selectAll(); }
     if (event.key === "Backspace" || (event.altKey && event.key === "ArrowUp")) { event.preventDefault(); goUp(); }
+  }
+  function handleMenuKeys(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items[next]?.focus();
   }
   function changeSort(nextKey: EntrySortKey) {
     setSortDirection((current) => sortKey === nextKey && current === "ascending" ? "descending" : "ascending");
@@ -283,43 +318,44 @@ export function BrowserPage({
           <ArrowLeftRegular fontSize={24} />
         </button>
         <div className="qzip-browser-page__title-icon"><ArchiveRegular fontSize={28} /><span>{formatLabels[session.format]}</span></div>
-        <h1>{fileName(archive)}</h1>
+        <h1 title={archive}>{fileName(archive)}</h1>
         <div className="qzip-browser-actions">
-          <button type="button" onClick={() => void addToArchive(false).catch(reason => setOpenError(errorMessage(reason)))}><AddCircleRegular fontSize={22} /> {text("添加", "Add")}</button>
-          <button type="button" disabled={selectingAll || loading} onClick={() => onExtract([...selected])}><ArrowDownloadRegular fontSize={22} /> {selected.size ? text(`解压选中 (${selected.size})`, `Extract selected (${selected.size})`) : text("解压全部", "Extract all")}</button>
-          <button type="button" onClick={() => void testArchive().catch(reason => setOpenError(errorMessage(reason)))}><ShieldCheckmarkRegular fontSize={22} /> {text("测试", "Test")}</button>
-          <button type="button" aria-expanded={propertiesOpen} onClick={() => setPropertiesOpen((value) => !value)}><MoreHorizontalRegular fontSize={22} /> {text("更多", "More")} <ChevronDownRegular fontSize={16} /></button>
-        </div>
-        {propertiesOpen ? (
-          <div className="qzip-browser-properties">
-            <strong>{text("压缩包属性", "Archive properties")}</strong>
-            <span>{formatLabels[session.format]} · {text(`${session.entryCount} 项`, `${session.entryCount} items`)}</span>
-            <button type="button" onClick={() => void addToArchive(true)}><FolderAddRegular fontSize={18} /> {text("添加文件夹", "Add folder")}</button>
-            <button type="button" onClick={onClose}><DismissRegular fontSize={18} /> {text("关闭压缩包", "Close archive")}</button>
+          <button type="button" title={text("添加文件", "Add files")} onClick={() => void addToArchive(false).catch(reason => setOpenError(errorMessage(reason)))}><AddCircleRegular fontSize={22} /> {text("添加", "Add")}</button>
+          <button className="qzip-browser-actions__extract" type="button" title={selected.size ? text(`解压选中 (${selected.size})`, `Extract selected (${selected.size})`) : text("解压全部", "Extract all")} disabled={selectingAll || loading} onClick={() => onExtract([...selected])}><ArrowDownloadRegular fontSize={22} /> {selected.size ? text(`解压选中 (${selected.size})`, `Extract selected (${selected.size})`) : text("解压全部", "Extract all")}</button>
+          <button type="button" title={text("测试压缩包完整性", "Test archive integrity")} onClick={() => void testArchive().catch(reason => setOpenError(errorMessage(reason)))}><ShieldCheckmarkRegular fontSize={22} /> {text("测试", "Test")}</button>
+          <div className="qzip-browser-more" ref={propertiesRef}>
+            <button ref={propertiesTriggerRef} type="button" title={text("更多操作", "More actions")} aria-expanded={propertiesOpen} aria-haspopup="dialog" aria-controls={propertiesOpen ? propertiesId : undefined} onClick={() => { setContextEntry(null); setPropertiesOpen((value) => !value); }}><MoreHorizontalRegular fontSize={22} /> {text("更多", "More")} <ChevronDownRegular className="qzip-browser-actions__chevron" fontSize={16} /></button>
+            {propertiesOpen ? (
+              <div className="qzip-browser-properties" id={propertiesId} role="dialog" aria-label={text("压缩包属性", "Archive properties")}>
+                <div className="qzip-browser-properties__summary"><strong>{text("压缩包属性", "Archive properties")}</strong><span>{formatLabels[session.format]} · {text(`${session.entryCount} 项`, `${session.entryCount} items`)}</span></div>
+                <button type="button" autoFocus onClick={() => { setPropertiesOpen(false); void addToArchive(true).catch(reason => setOpenError(errorMessage(reason))); }}><FolderAddRegular fontSize={18} /> {text("添加文件夹", "Add folder")}</button>
+                <button type="button" onClick={onClose}><DismissRegular fontSize={18} /> {text("关闭压缩包", "Close archive")}</button>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
       </header>
 
       <Card className="qzip-browser-card">
         <div className="qzip-browser-toolbar">
           <nav className="qzip-breadcrumb" aria-label={text("压缩包路径", "Archive path")}>
-            <button type="button" aria-label={text("根目录", "Root folder")} onClick={() => navigateBreadcrumb(-1)}><HomeRegular fontSize={21} /></button>
+            <button type="button" aria-label={text("根目录", "Root folder")} aria-current={!directory ? "page" : undefined} onClick={() => navigateBreadcrumb(-1)}><HomeRegular fontSize={21} /><span>{text("根目录", "Root folder")}</span></button>
             {breadcrumbs.map((part, index) => (
               <span key={`${part}-${index}`}>
                 <ChevronRightRegular fontSize={17} />
-                <button type="button" onClick={() => navigateBreadcrumb(index)}>{part}</button>
+                <button type="button" title={part} aria-current={index === breadcrumbs.length - 1 ? "page" : undefined} onClick={() => navigateBreadcrumb(index)}>{part}</button>
               </span>
             ))}
           </nav>
-          <div className="qzip-browser-search" ref={searchRef}><Input aria-label={text("搜索当前文件夹", "Search current folder")} placeholder={text("搜索当前文件夹", "Search current folder")} value={search} onChange={(event) => setSearch(event.target.value)} trailing={<SearchRegular fontSize={20} />} /></div>
+          <div className="qzip-browser-search" ref={searchRef}><Input aria-label={text("搜索当前文件夹", "Search current folder")} placeholder={text("搜索当前文件夹", "Search current folder")} value={search} onChange={(event) => setSearch(event.target.value)} trailing={search ? <button type="button" className="qzip-search-clear" aria-label={text("清除搜索", "Clear search")} title={text("清除搜索（Esc）", "Clear search (Esc)")} onClick={clearSearch}><DismissRegular fontSize={17} /></button> : <SearchRegular fontSize={20} aria-hidden="true" />} /></div>
         </div>
-        <div className="qzip-selection-toolbar">
+        <div className="qzip-selection-toolbar" data-has-selection={selected.size > 0}>
           <span role="status">{text(`已选择 ${selected.size} 项`, `${selected.size} selected`)}</span>
           <button type="button" disabled={loading || selectingAll || loadingMore} onClick={() => void selectAll()}>{selectingAll ? text("正在全选…", "Selecting…") : text("全选", "Select all")}</button>
           <button type="button" disabled={!selected.size} onClick={() => setSelected(new Set())}>{text("取消选择", "Clear selection")}</button>
           {directory ? <button type="button" onClick={goUp}>{text("上一级", "Up one level")}</button> : null}
         </div>
-        {contextEntry ? <div className="qzip-entry-menu" style={{ left: menuPoint.x, top: menuPoint.y }} role="menu" aria-label={text("文件操作", "File actions")}>
+        {contextEntry ? <div className="qzip-entry-menu" style={{ left: menuPoint.x, top: menuPoint.y }} role="menu" aria-label={text("文件操作", "File actions")} onKeyDown={handleMenuKeys}>
           <button role="menuitem" autoFocus onClick={() => { void openEntry(contextEntry); setContextEntry(null); }}>{text("打开", "Open")}</button>
           <button role="menuitem" onClick={() => { onExtract(selected.has(contextEntry.path) ? [...selected] : [contextEntry.path]); setContextEntry(null); }}>{text("解压选中", "Extract selected")}</button>
           <button role="menuitem" onClick={() => setContextEntry(null)}>{text("关闭菜单", "Close menu")}</button>
@@ -366,7 +402,7 @@ export function BrowserPage({
               }}
               data-selected={selected.has(entry.path)}
               disabled={openingEntry === entry.path}
-              title={entry.isDirectory ? text("双击打开文件夹", "Double-click to open folder") : text("双击使用默认应用打开", "Double-click to open with the default app")}
+              title={`${entry.displayName}\n${entry.isDirectory ? text("双击打开文件夹", "Double-click to open folder") : text("双击使用默认应用打开", "Double-click to open with the default app")}`}
             >
               <span role="gridcell">
                 {openingEntry === entry.path
@@ -376,17 +412,22 @@ export function BrowserPage({
                     : systemFileIcons[fileExtension(entry.displayName)]
                       ? <img className="qzip-entry-row__file-icon" src={systemFileIcons[fileExtension(entry.displayName)]} alt="" aria-hidden="true" />
                       : <DocumentRegular fontSize={23} />}
-                {entry.displayName}{entry.encrypted ? <LockClosedRegular fontSize={14} /> : null}
+                <span className="qzip-entry-row__name">{entry.displayName}</span>{entry.encrypted ? <LockClosedRegular fontSize={14} /> : null}
               </span>
               <span role="gridcell">{entry.isDirectory ? "—" : formatBytes(entry.size)}</span>
-              <span role="gridcell">{formatType(entry, locale)}</span>
+              <span role="gridcell" title={formatType(entry, locale)}>{formatType(entry, locale)}</span>
               <span role="gridcell">{entry.modifiedAt?.replace("T", " ").slice(0, 16) ?? "—"}</span>
             </button>
           ))}
           {loadError ? <div className="qzip-browser-load-error">{text("读取列表失败：", "Could not read the list: ")}{loadError}</div> : null}
-          {openError ? <div className="qzip-browser-load-error">{text("无法打开文件：", "Could not open the file: ")}{openError}</div> : null}
+          {openError ? <div className="qzip-browser-load-error" role="alert">{text("操作未完成：", "Could not complete the action: ")}{openError}</div> : null}
           {nextOffset != null && !loading ? <button type="button" className="qzip-load-more" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? text("正在加载…", "Loading…") : text(`加载更多（已显示 ${entries.length}/${total}）`, `Load more (${entries.length}/${total} shown)`)}</button> : null}
-          {!shown.length && !loading ? <Empty icon={<SearchRegular fontSize={34} />} text={directory ? text("此文件夹为空", "This folder is empty") : text("没有匹配的文件", "No matching files")} /> : null}
+          {!shown.length && !loading && !loadError ? <Empty
+            icon={search ? <SearchRegular fontSize={34} /> : <FolderRegular fontSize={34} />}
+            text={search ? text("没有匹配的文件", "No matching files") : directory ? text("此文件夹为空", "This folder is empty") : text("压缩包为空", "This archive is empty")}
+            description={search ? text("试试其他关键词，或清除搜索查看当前文件夹。", "Try another keyword, or clear the search to view this folder.") : undefined}
+            action={search ? <Button variant="tertiary" onClick={clearSearch}>{text("查看全部文件", "Show all files")}</Button> : undefined}
+          /> : null}
         </div>
         <footer className="qzip-browser-footer">
           <span>{directory || search ? text(`当前结果 ${total} 项`, `${total} results`) : text(`共 ${session.entryCount} 项`, `${session.entryCount} items total`)} · {text(`已显示 ${entries.length}`, `${entries.length} shown`)}</span>

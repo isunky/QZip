@@ -50,6 +50,67 @@ it("selects results beyond the loaded page and includes them when extracting", a
   expect(screen.queryByRole("button", { name: /加载更多/ })).not.toBeInTheDocument();
 });
 
+it("dismisses archive properties with Escape, outside clicks and focus leaving", async () => {
+  setup();
+  vi.spyOn(archiveClient, "entries").mockResolvedValue({ entries: files, total: 3 });
+  render(<BrowserPage archive="D:\\docs.zip" session={session} onBack={vi.fn()} onClose={vi.fn()} onExtract={vi.fn()} onCreated={vi.fn()} />);
+  await screen.findByText("a.txt");
+  const more = screen.getByRole("button", { name: "更多" });
+  fireEvent.click(more);
+  expect(screen.getByRole("dialog", { name: "压缩包属性" })).toBeInTheDocument();
+  const addFolder = screen.getByRole("button", { name: "添加文件夹" });
+  expect(addFolder).toHaveFocus();
+  expect(more).toHaveAttribute("aria-expanded", "true");
+  fireEvent.keyDown(addFolder, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(more).toHaveFocus();
+  fireEvent.click(more);
+  fireEvent.pointerDown(screen.getByRole("grid"));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  fireEvent.click(more);
+  fireEvent.focusIn(screen.getByLabelText("搜索当前文件夹"));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("clears a search from the field or empty state and restores input focus", async () => {
+  setup();
+  vi.spyOn(archiveClient, "entries").mockImplementation(async (_session, _directory, search) => ({ entries: search ? [] : files, total: search ? 0 : files.length }));
+  render(<BrowserPage archive="D:\\docs.zip" session={session} onBack={vi.fn()} onClose={vi.fn()} onExtract={vi.fn()} onCreated={vi.fn()} />);
+  await screen.findByText("a.txt");
+  const search = screen.getByLabelText("搜索当前文件夹");
+  fireEvent.change(search, { target: { value: "missing" } });
+  await screen.findByText("没有匹配的文件");
+  expect(screen.getByText(/试试其他关键词/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "清除搜索" }));
+  expect(search).toHaveValue("");
+  expect(search).toHaveFocus();
+  await screen.findByText("a.txt");
+  fireEvent.change(search, { target: { value: "missing" } });
+  fireEvent.click(await screen.findByRole("button", { name: "查看全部文件" }));
+  expect(search).toHaveValue("");
+  await screen.findByText("a.txt");
+});
+
+it("keeps long file names in their own cell and supports keyboard context menus", async () => {
+  setup();
+  const name = `${"项目设计交付文件-".repeat(20)}.txt`;
+  vi.spyOn(archiveClient, "entries").mockResolvedValue({ entries: [{ ...files[0]!, path: name, displayName: name }], total: 1 });
+  render(<BrowserPage archive="D:\\docs.zip" session={session} onBack={vi.fn()} onClose={vi.fn()} onExtract={vi.fn()} onCreated={vi.fn()} />);
+  const row = await screen.findByRole("row", { name: new RegExp(name) });
+  expect(screen.getByText(name)).toHaveClass("qzip-entry-row__name");
+  expect(row.title).toContain(name);
+  fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+  const open = screen.getByRole("menuitem", { name: "打开" });
+  expect(open).toHaveFocus();
+  fireEvent.keyDown(open, { key: "ArrowDown" });
+  expect(screen.getByRole("menuitem", { name: "解压选中" })).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "Home" });
+  expect(open).toHaveFocus();
+  fireEvent.keyDown(open, { key: "Escape" });
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(row).toHaveFocus();
+});
+
 it("respects extraction preferences without overwriting a user-entered destination", async () => {
   setup();
   const suggest = vi.spyOn(archiveClient, "suggestExtractOutput").mockResolvedValue("D:\\建议位置");

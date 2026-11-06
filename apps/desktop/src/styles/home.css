@@ -41,6 +41,7 @@ html[data-mode="dark"] .qzip-app-shell {
   cursor: pointer;
   gap: 10px;
   padding: 0;
+  flex-shrink: 0;
 }
 
 .qzip-brand__icon {
@@ -87,6 +88,19 @@ html[data-mode="dark"] .qzip-app-shell {
   justify-content: center;
   min-height: 40px;
   padding: 0 12px;
+}
+
+.qzip-titlebar__resume {
+  color: var(--qzip-color-accent-strong);
+  font-size: 13px;
+  max-width: 180px;
+  padding-inline: 10px;
+}
+
+.qzip-titlebar__resume .qzip-button__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .qzip-titlebar__nav-button > svg {
@@ -191,8 +205,8 @@ html[data-mode="dark"] .qzip-app-shell {
   align-items: center;
   align-self: center;
   background: color-mix(in srgb, var(--qzip-color-bg-surface) 95%, transparent);
-  border-radius: 28px;
-  box-shadow: 0 14px 34px rgb(27 42 34 / 8%);
+  border-radius: 24px;
+  box-shadow: 0 8px 28px rgb(27 42 34 / 6%);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -228,9 +242,9 @@ html[data-mode="dark"] .qzip-app-shell {
 }
 
 .qzip-home-card h1 {
-  font-size: clamp(38px, 4.5vw, 52px);
-  font-weight: 700;
-  letter-spacing: 0.035em;
+  font-size: clamp(36px, 4.2vw, 46px);
+  font-weight: 650;
+  letter-spacing: 0.01em;
   line-height: 1.2;
   margin: 0;
 }
@@ -253,15 +267,16 @@ html[data-mode="dark"] .qzip-app-shell {
 
 .qzip-home-card__actions {
   display: grid;
-  gap: 22px;
+  gap: 14px;
   grid-template-columns: repeat(2, minmax(235px, 300px));
   justify-content: center;
   width: min(100%, 610px);
 }
 
 .qzip-home-card__action {
-  font-size: 20px;
-  min-height: 72px;
+  border-radius: 12px;
+  font-size: 18px;
+  min-height: 64px;
 }
 
 .qzip-home-card__format-hint {
@@ -301,6 +316,7 @@ html[data-mode="dark"] .qzip-app-shell {
   font-size: 14px;
   gap: 10px;
   left: 50%;
+  max-width: calc(100vw - 40px);
   padding: 7px 7px 7px 14px;
   position: fixed;
   transform: translateX(-50%);
@@ -309,6 +325,16 @@ html[data-mode="dark"] .qzip-app-shell {
 
 .qzip-toast > svg {
   color: var(--qzip-color-info);
+  flex-shrink: 0;
+}
+
+.qzip-toast > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.qzip-toast > button {
+  flex-shrink: 0;
 }
 
 @media (max-width: 899px) {

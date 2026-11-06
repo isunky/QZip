@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   ArchiveRegular,
   DeleteRegular,
@@ -15,6 +15,7 @@ import { archiveClient } from "../../lib/archiveClient";
 import { useI18n } from "../../lib/i18n";
 import { Empty } from "./ArchiveShared";
 import {
+  errorMessage,
   formatElapsed,
   formatTaskTimestamp,
   isActiveTask,
@@ -57,7 +58,7 @@ export function TaskCenter({
           <div className="qzip-task-content__toolbar">
             <Button variant="tertiary" icon={<HomeRegular fontSize={19} />} onClick={onBack}>{text("返回首页", "Back to home")}</Button>
             {active.length ? <Button variant="danger" icon={<DismissRegular fontSize={19} />} onClick={() => active.forEach((task) => onCancel(task.taskId))}>{text("取消全部进行中", "Cancel active tasks")}</Button> : null}
-            <Button variant="secondary" icon={<DeleteRegular fontSize={19} />} onClick={onClear}>{text("清空已结束", "Clear ended tasks")}</Button>
+            <Button variant="tertiary" disabled={!tasks.some((task) => !isActiveTask(task))} icon={<DeleteRegular fontSize={19} />} onClick={onClear}>{text("清空已结束", "Clear ended tasks")}</Button>
           </div>
         </header>
         <div className="qzip-task-list">
@@ -85,6 +86,10 @@ function TaskCard({
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsId = useId();
+  const [outputAction, setOutputAction] = useState<"open" | "reveal" | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const outputActionPending = useRef(false);
   const needsPassword = task.error?.code === "WRONG_PASSWORD";
   const percent = task.progress?.percent ?? (task.status === "completed" ? 100 : 0);
   const phase = task.progress?.phase;
@@ -115,15 +120,39 @@ function TaskCard({
         ? text("已取消", "Cancelled")
         : task.status === "queued"
           ? text("等待中", "Waiting")
-          : task.operation === "extract"
-            ? text("解压中", "Extracting")
-            : text("压缩中", "Compressing");
+          : task.status === "cancelling"
+            ? text("取消中", "Cancelling")
+            : task.status === "scanning"
+              ? text("检查中", "Checking")
+              : task.operation === "test"
+                ? text("测试中", "Testing")
+                : task.operation === "update"
+                  ? text("更新中", "Updating")
+                  : task.operation === "extract"
+                    ? text("解压中", "Extracting")
+                    : text("压缩中", "Compressing");
   const outputLabel = task.operation === "extract"
     ? text("解压位置", "Extracted to")
     : task.operation === "create"
       ? text("压缩包位置", "Archive saved to")
       : text("目标位置", "Destination");
   const hasDetails = Boolean(task.error || task.warnings.length);
+
+  async function openOutput(action: "open" | "reveal") {
+    if (!task.output || outputActionPending.current) return;
+    outputActionPending.current = true;
+    setOutputAction(action);
+    setActionError(null);
+    try {
+      if (action === "open") await archiveClient.open(task.output);
+      else await archiveClient.reveal(task.output);
+    } catch (reason) {
+      setActionError(errorMessage(reason));
+    } finally {
+      outputActionPending.current = false;
+      setOutputAction(null);
+    }
+  }
 
   return (
     <Card className="qzip-task-card" data-status={task.status} data-focused={focused || undefined}>
@@ -133,24 +162,25 @@ function TaskCard({
       </div>
       <div className="qzip-task-card__body" id={`qzip-task-${task.taskId}`}>
         <div className="qzip-task-card__heading">
-          <strong>{task.displayName}</strong>
+          <strong title={task.displayName}>{task.displayName}</strong>
           {active && task.progress?.percent != null ? <b>{percent}%</b> : null}
         </div>
         {active ? <Progress value={Math.max(percent, task.status === "queued" ? 4 : task.status === "scanning" ? 8 : 0)} /> : null}
         <div className="qzip-task-card__facts">
           <span><strong>{text("操作", "Operation")}</strong>{taskOperationLabel(task.operation, locale)}</span>
           <span><strong>{active ? text("当前阶段", "Current phase") : text("更新时间", "Updated")}</strong>{active ? phaseLabel : formatTaskTimestamp(task.updatedAt, locale)}</span>
-          {task.output ? <span className="qzip-task-card__fact--wide"><strong>{outputLabel}</strong><span className="qzip-task-card__output">{task.output}</span></span> : null}
+          {task.output ? <span className="qzip-task-card__fact--wide"><strong>{outputLabel}</strong><span className="qzip-task-card__output" title={task.output}>{task.output}</span></span> : null}
           {active && task.progress?.currentEntry ? <span className="qzip-task-card__fact--wide"><strong>{text("当前文件", "Current file")}</strong><span className="qzip-task-card__output">{task.progress.currentEntry}</span></span> : null}
           {active ? <span><strong>{text("已用时间", "Elapsed")}</strong>{formatElapsed(task.progress?.elapsedSeconds)}</span> : null}
           {task.error ? <span className="qzip-task-card__fact--wide qzip-task-card__fact--error"><strong>{text("失败原因", "Failure reason")}</strong>{task.error.message}</span> : null}
         </div>
         {detailsOpen && hasDetails ? (
-          <div className="qzip-task-card__details">
+          <div className="qzip-task-card__details" id={detailsId}>
             {task.error ? <span><strong>{text("错误代码", "Error code")}</strong>{task.error.code}</span> : null}
             {task.warnings.length ? <span><strong>{text("警告", "Warnings")}</strong>{task.warnings.join(text("；", "; "))}</span> : null}
           </div>
         ) : null}
+        {actionError ? <p className="qzip-task-card__action-error" role="alert">{text("无法打开：", "Could not open: ")}{actionError}</p> : null}
         {needsPassword && showPassword ? <Input aria-label={text("重试密码", "Retry password")} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={text("请输入正确密码", "Enter the correct password")} /> : null}
       </div>
       <div className="qzip-task-card__actions">
@@ -166,9 +196,9 @@ function TaskCard({
             {showPassword ? text("确认重试", "Retry") : needsPassword ? text("重新输入密码", "Enter password") : text("重试", "Retry")}
           </Button>
         ) : null}
-        {hasDetails ? <Button variant="tertiary" icon={<MoreHorizontalRegular fontSize={19} />} onClick={() => setDetailsOpen((current) => !current)}>{detailsOpen ? text("收起详情", "Hide details") : text("查看详情", "View details")}</Button> : null}
-        {task.status === "completed" && task.output ? <Button variant="primary" icon={<OpenRegular fontSize={19} />} onClick={() => void archiveClient.open(task.output!)}>{text("打开结果", "Open result")}</Button> : null}
-        {task.output ? <Button variant="secondary" onClick={() => void archiveClient.reveal(task.output!)}>{text("打开位置", "Open location")}</Button> : null}
+        {hasDetails ? <Button variant="tertiary" icon={<MoreHorizontalRegular fontSize={19} />} aria-expanded={detailsOpen} aria-controls={detailsOpen ? detailsId : undefined} onClick={() => setDetailsOpen((current) => !current)}>{detailsOpen ? text("收起详情", "Hide details") : text("查看详情", "View details")}</Button> : null}
+        {task.status === "completed" && task.output ? <Button variant="primary" icon={<OpenRegular fontSize={19} />} disabled={outputAction !== null} loading={outputAction === "open"} onClick={() => void openOutput("open")}>{text("打开结果", "Open result")}</Button> : null}
+        {task.output ? <Button variant="secondary" disabled={outputAction !== null} loading={outputAction === "reveal"} onClick={() => void openOutput("reveal")}>{text("打开位置", "Open location")}</Button> : null}
       </div>
     </Card>
   );

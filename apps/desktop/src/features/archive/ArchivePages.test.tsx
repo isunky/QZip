@@ -233,6 +233,34 @@ describe("archive core flow controls", () => {
     expect(screen.getByRole("button", { name: "打开结果" })).toHaveClass("qzip-button--primary");
   });
 
+  it.each(["open", "reveal"] as const)("shows a recoverable error when the %s output action fails", async (action) => {
+    const task: TaskSnapshot = { taskId: "missing-output", operation: "extract", status: "completed", displayName: "资料.zip", output: "D:\\missing", createdAt: 1, updatedAt: 2, warnings: [], retryable: false };
+    const open = vi.spyOn(archiveClient, action).mockRejectedValue(new Error("文件已被移动"));
+    render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={vi.fn()} />);
+    const button = screen.getByRole("button", { name: action === "open" ? "打开结果" : "打开位置" });
+    fireEvent.click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent("文件已被移动");
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(open).toHaveBeenCalledWith(task.output);
+  });
+
+  it("prevents duplicate output actions and disables clearing an empty task list", async () => {
+    const task: TaskSnapshot = { taskId: "opening", operation: "extract", status: "completed", displayName: "资料.zip", output: "D:\\result", createdAt: 1, updatedAt: 2, warnings: [], retryable: false };
+    let finish!: () => void;
+    const open = vi.spyOn(archiveClient, "open").mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const view = render(<TaskCenter tasks={[task]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={vi.fn()} />);
+    const button = screen.getByRole("button", { name: "打开结果" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "打开位置" })).toBeDisabled();
+    finish();
+    await waitFor(() => expect(button).toBeEnabled());
+    view.rerender(<TaskCenter tasks={[]} onBack={vi.fn()} onClear={vi.fn()} onCancel={vi.fn()} onRetry={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "清空已结束" })).toBeDisabled();
+  });
+
   it("shows one list with active tasks first and highlights the focused task", () => {
     const active: TaskSnapshot = {
       taskId: "task-active",

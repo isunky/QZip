@@ -13,4 +13,12 @@ describe("macOS titlebar", () => {
     expect(container.querySelector("header")?.style.paddingLeft).toBe("84px");
     expect(screen.getByRole("button", { name: /设置|Settings/ })).toBeTruthy();
   });
+
+  it("labels compact navigation and identifies the current section", () => {
+    render(<Header activePage="tasks" iconSrc="/icon.png" onHomeClick={vi.fn()} onTasksClick={vi.fn()} onSettingsClick={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "任务" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "任务" })).toHaveAttribute("title", "任务");
+    expect(screen.getByRole("button", { name: "设置" })).toHaveAttribute("title", "设置");
+    expect(screen.getByRole("button", { name: "设置" })).not.toHaveAttribute("aria-current");
+  });
 });

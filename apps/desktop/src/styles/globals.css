@@ -34,3 +34,29 @@ input {
 button {
   -webkit-app-region: no-drag;
 }
+
+:where(button, a, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--qzip-color-accent);
+  outline-offset: 3px;
+}
+
+html[data-reduce-motion="true"] {
+  --qzip-motion-fast: 0ms;
+  --qzip-motion-base: 0ms;
+}
+
+html[data-reduce-motion="true"] .qzip-spin,
+html[data-reduce-motion="true"] .qzip-button__spinner,
+html[data-reduce-motion="true"] .qzip-progress--indeterminate .qzip-progress__bar {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qzip-spin,
+  .qzip-button__spinner,
+  .qzip-progress--indeterminate .qzip-progress__bar {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

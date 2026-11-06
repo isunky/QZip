@@ -1,5 +1,6 @@
 import {
   AppsListRegular,
+  ArrowLeftRegular,
   DismissRegular,
   MaximizeRegular,
   SettingsRegular,
@@ -47,11 +48,13 @@ export function Header({ activePage, activeTaskCount = 0, iconSrc, onHomeClick, 
         onDoubleClick={() => void withCurrentWindow((window) => window.toggleMaximize())}
       />
       <nav className="qzip-titlebar__actions" aria-label={text("应用导航", "App navigation")}>
-        {resumeLabel ? <Button variant="tertiary" className="qzip-titlebar__resume" onClick={onResume}>{resumeLabel}</Button> : null}
+        {resumeLabel ? <Button variant="tertiary" className="qzip-titlebar__resume" title={resumeLabel} icon={<ArrowLeftRegular fontSize={17} />} onClick={onResume}>{resumeLabel}</Button> : null}
         <Button
           variant="tertiary"
           className="qzip-titlebar__nav-button"
           data-active={activePage === "tasks"}
+          aria-current={activePage === "tasks" ? "page" : undefined}
+          title={text("任务", "Tasks")}
           icon={<AppsListRegular fontSize={22} />}
           onClick={onTasksClick}
         >
@@ -62,6 +65,8 @@ export function Header({ activePage, activeTaskCount = 0, iconSrc, onHomeClick, 
           variant="tertiary"
           className="qzip-titlebar__nav-button"
           data-active={activePage === "settings"}
+          aria-current={activePage === "settings" ? "page" : undefined}
+          title={text("设置", "Settings")}
           icon={<SettingsRegular fontSize={22} />}
           onClick={onSettingsClick}
         >

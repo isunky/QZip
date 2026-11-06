@@ -15,16 +15,16 @@
   transition: background-color var(--qzip-motion-fast) var(--qzip-motion-ease),
     border-color var(--qzip-motion-fast) var(--qzip-motion-ease),
     box-shadow var(--qzip-motion-fast) var(--qzip-motion-ease),
-    color var(--qzip-motion-fast) var(--qzip-motion-ease),
-    transform var(--qzip-motion-fast) var(--qzip-motion-ease);
+    color var(--qzip-motion-fast) var(--qzip-motion-ease);
 }
 
-.qzip-button:hover:not(:disabled) {
-  transform: translateY(-1px);
+.qzip-button > svg {
+  flex-shrink: 0;
 }
 
-.qzip-button:active:not(:disabled) {
-  transform: translateY(0);
+.qzip-button__label {
+  line-height: 1.3;
+  min-width: 0;
 }
 
 .qzip-button:focus-visible,
@@ -40,13 +40,18 @@
 
 .qzip-button--primary {
   background: linear-gradient(135deg, var(--qzip-color-accent), var(--qzip-color-accent-strong));
-  box-shadow: 0 7px 14px color-mix(in srgb, var(--qzip-color-accent) 26%, transparent);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--qzip-color-accent) 20%, transparent);
   color: #fff;
 }
 
 .qzip-button--primary:hover:not(:disabled) {
   background: linear-gradient(135deg, var(--qzip-color-accent-hover), var(--qzip-color-accent));
-  box-shadow: 0 9px 18px color-mix(in srgb, var(--qzip-color-accent) 32%, transparent);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--qzip-color-accent) 24%, transparent);
+}
+
+.qzip-button--primary:active:not(:disabled) {
+  background: var(--qzip-color-accent-strong);
+  box-shadow: none;
 }
 
 .qzip-button--secondary {
@@ -75,6 +80,10 @@
   background: var(--qzip-color-bg-elevated);
   border-color: var(--qzip-color-danger);
   color: var(--qzip-color-danger);
+}
+
+.qzip-button--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--qzip-color-danger) 8%, var(--qzip-color-bg-elevated));
 }
 
 .qzip-button--warning {
@@ -153,6 +162,7 @@
   color: var(--qzip-color-text-primary);
   font: inherit;
   min-height: 38px;
+  min-width: 0;
   outline: 0;
   padding: 0 12px;
   width: 100%;
