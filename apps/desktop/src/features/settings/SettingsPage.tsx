@@ -63,6 +63,12 @@ export function SettingsPage({ settings, updates, onBack, onChanged, onToast }: 
   const { text } = useI18n();
   const [status, setStatus] = useState<IntegrationStatus | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("appearance");
+  const updateDialog = useRef<HTMLDialogElement>(null);
+
+  function openUpdates() {
+    updateDialog.current?.showModal();
+    if (updates.phase === "idle" && !updates.downloaded) void updates.check();
+  }
 
   useEffect(() => {
     void settingsClient.integration().then(setStatus).catch(() => setStatus(null));
@@ -123,9 +129,13 @@ export function SettingsPage({ settings, updates, onBack, onChanged, onToast }: 
         {activeSection === "appearance" ? <AppearanceSettings settings={settings} patch={patch} /> : null}
         {activeSection === "archive" ? <ArchiveSettings settings={settings} patch={patch} /> : null}
         {activeSection === "notifications" ? <NotificationSettings settings={settings} patch={patch} updateNotifications={updateNotifications} /> : null}
-        {activeSection === "system" ? <SystemSettings settings={settings} status={status} updates={updates} patch={patch} onToast={onToast} /> : null}
-        {activeSection === "about" ? <AboutSettings status={status} updates={updates} /> : null}
+        {activeSection === "system" ? <SystemSettings settings={settings} status={status} onOpenUpdates={openUpdates} patch={patch} onToast={onToast} /> : null}
+        {activeSection === "about" ? <AboutSettings status={status} onOpenUpdates={openUpdates} /> : null}
       </main>
+      <dialog ref={updateDialog} className="qzip-update-dialog" aria-label={text("应用更新", "Application updates")}>
+        <div className="qzip-update-dialog__header"><span>{text("应用更新", "Application updates")}</span><button type="button" autoFocus aria-label={text("关闭更新弹窗", "Close update dialog")} onClick={() => updateDialog.current?.close()}>×</button></div>
+        <UpdateCard updates={updates} currentVersion={status?.appVersion ?? appVersion} />
+      </dialog>
     </section>
   );
 }
@@ -164,7 +174,7 @@ function NotificationSettings({ settings, patch, updateNotifications }: { settin
   </SettingsSection></Card>;
 }
 
-function SystemSettings({ settings, status, updates, patch, onToast }: { settings: AppSettings; status: IntegrationStatus | null; updates: AppUpdates; patch: (next: AppSettingsPatch) => Promise<void>; onToast: (message: string) => void }) {
+function SystemSettings({ settings, status, onOpenUpdates, patch, onToast }: { settings: AppSettings; status: IntegrationStatus | null; onOpenUpdates: () => void; patch: (next: AppSettingsPatch) => Promise<void>; onToast: (message: string) => void }) {
   const { text } = useI18n();
   return <div className="qzip-settings-card-stack">
     <Card className="qzip-settings-feature-card">
@@ -174,16 +184,18 @@ function SystemSettings({ settings, status, updates, patch, onToast }: { setting
       </StatusRow>
       {!isMac && <StatusRow label={`Windows 11 ${text("右键菜单", "context menu")}`} status={!status ? text("正在检查", "Checking") : status.modernContextMenuRegistered ? text("已注册", "Registered") : status.modernContextMenuAvailable ? text("未注册", "Not registered") : text("当前版本不可用", "Unavailable in this build")} tone={status?.modernContextMenuRegistered ? "success" : "neutral"} />}
     </Card>
-    <UpdateCard updates={updates} currentVersion={status?.appVersion ?? appVersion} />
     <Card className="qzip-settings-feature-card">
+      <SettingsCardHeader icon={<ArrowSyncRegular fontSize={22} />} title={text("应用更新", "Application updates")} />
+      <StatusRow label={text("当前版本", "Current version")} status={`v${status?.appVersion ?? appVersion}`} tone="neutral">
+        <Button variant="tertiary" icon={<ArrowSyncRegular fontSize={18} />} onClick={onOpenUpdates}>{text("检查更新", "Check for updates")}</Button>
+      </StatusRow>
       <Toggle checked={settings.checkUpdatesOnStartup} onChange={(checkUpdatesOnStartup) => void patch({ checkUpdatesOnStartup })} label={text("启动时检查更新", "Check for updates at startup")} disabled={!settingsClient.isTauri} hint={text("仅检查新版本，不会自动下载或安装。", "Checks for new versions without downloading or installing automatically.")} />
     </Card>
   </div>;
 }
 
-function AboutSettings({ status, updates }: { status: IntegrationStatus | null; updates: AppUpdates }) {
+function AboutSettings({ status, onOpenUpdates }: { status: IntegrationStatus | null; onOpenUpdates: () => void }) {
   const { text } = useI18n();
-  const updateDialog = useRef<HTMLDialogElement>(null);
   const version = status?.appVersion ?? appVersion;
   return <div className="qzip-about-page">
     <Card className="qzip-about-hero">
@@ -194,14 +206,10 @@ function AboutSettings({ status, updates }: { status: IntegrationStatus | null; 
     </Card>
     <Card className="qzip-about-links" aria-label={text("关于轻压的链接", "About QZip links")}>
       <AboutLink href="https://github.com/isunky/QZip" icon={<CodeRegular fontSize={21} />} label={text("GitHub 项目", "GitHub project")} />
-      <button type="button" onClick={() => { updateDialog.current?.showModal(); if (updates.phase === "idle" && !updates.downloaded) void updates.check(); }}><ArrowSyncRegular fontSize={21} /><span>{text("检查更新", "Check for updates")}</span><ChevronRightRegular fontSize={18} /></button>
+      <button type="button" onClick={onOpenUpdates}><ArrowSyncRegular fontSize={21} /><span>{text("检查更新", "Check for updates")}</span><ChevronRightRegular fontSize={18} /></button>
       <AboutLink href="https://github.com/isunky/QZip/blob/main/LICENSE" icon={<DocumentTextRegular fontSize={21} />} label={text("开源许可", "Open-source license")} />
       <AboutLink href="https://github.com/isunky/QZip/issues" icon={<ChatHelpRegular fontSize={21} />} label={text("问题反馈", "Report an issue")} />
     </Card>
-    <dialog ref={updateDialog} className="qzip-update-dialog" aria-label={text("应用更新", "Application updates")}>
-      <div className="qzip-update-dialog__header"><span>{text("应用更新", "Application updates")}</span><button type="button" autoFocus aria-label={text("关闭更新弹窗", "Close update dialog")} onClick={() => updateDialog.current?.close()}>×</button></div>
-      <UpdateCard updates={updates} currentVersion={version} />
-    </dialog>
     <p className="qzip-about-footer">{text("免费 · 无广告 · 本地优先", "Free · Ad-free · Local-first")}</p>
   </div>;
 }
