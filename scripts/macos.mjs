@@ -17,12 +17,15 @@ const hash = async (file) => createHash('sha256').update(await readFile(file)).d
 const command = process.argv[2] ?? 'fetch';
 if (command === 'fetch') {
   const manifest = JSON.parse(await readFile(resolve(root, 'third_party/7zip/macos.json'), 'utf8'));
+  const architecture = process.arch === 'arm64' ? 'arm64' : process.arch === 'x64' ? 'x86_64' : null;
+  if (!architecture) throw new Error(`Unsupported macOS architecture: ${process.arch}`);
+  const engine = manifest.architectures[architecture];
   const staging = await mkdtemp(join(tmpdir(), 'qzip-macos-'));
   const archive = join(staging, 'engine.tar.xz');
-  const response = await globalThis.fetch(manifest.url);
+  const response = await globalThis.fetch(engine.url);
   if (!response.ok) throw new Error(`Engine download failed: ${response.status}`);
   await writeFile(archive, Buffer.from(await response.arrayBuffer()));
-  if (await hash(archive) !== manifest.sha256) throw new Error('Official engine archive SHA256 mismatch');
+  if (await hash(archive) !== engine.sha256) throw new Error('Official engine archive SHA256 mismatch');
   run('/usr/bin/tar', ['-xf', archive, '-C', staging]);
   await mkdir(runtime, { recursive: true });
   await copyFile(join(staging, '7zz'), join(runtime, '7zz'));
@@ -31,7 +34,7 @@ if (command === 'fetch') {
     if (/^(license|copying|readme|history).*\.txt$/i.test(name)) await copyFile(join(staging, name), join(runtime, name));
   }
   // lipo requires the input file before -verify_arch (otherwise it only prints usage).
-  run('/usr/bin/lipo', [join(runtime, '7zz'), '-verify_arch', 'arm64', 'x86_64']);
+  run('/usr/bin/lipo', [join(runtime, '7zz'), '-verify_arch', architecture]);
   run('/usr/bin/codesign', ['--force', '--sign', '-', join(runtime, '7zz')]);
   run(join(runtime, '7zz'), ['i']);
   const digest = await hash(join(runtime, '7zz'));

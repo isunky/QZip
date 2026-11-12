@@ -1,22 +1,22 @@
 {
   "name": "7-Zip",
-  "version": "26.02",
-  "released": "2026-06-25",
+  "version": "26.06",
+  "released": "2026-11-06",
   "platform": "windows-x64",
   "runtime": {
-    "url": "https://www.7-zip.org/a/7z2602-x64.msi",
-    "sha256": "db407a4f6d4999e5c7bc00ce8a882be94717b56e7fa68140fe3f12605d91643e",
-    "archive": "7z2602-x64.msi",
+    "url": "https://www.7-zip.org/a/7z2606-x64.msi",
+    "sha256": "6dc822569e777d9a3ecd5ffcbc22b55600af87e6c5d9810a64e8566cf5a4af9f",
+    "archive": "7z2606-x64.msi",
     "files": ["7z.exe", "7z.dll"],
     "fileHashes": {
-      "7z.exe": "83967f1b02b43c4efeda302795722c809e0e81b8307de73558d10484d5676a7d",
-      "7z.dll": "69fd4df057985c40e510e2fac182881c7f85e90aa13ec703f763a8fdb2ce61f8"
+      "7z.exe": "dc0493429fe28136fcb177a0e77c9875cbb3b0bff5f2f8eeba4df302e98cef76",
+      "7z.dll": "500db9eb17f3c21b729ba41dd02ecfe1823da05028c7e4ba129084cc74cc364e"
     }
   },
   "source": {
-    "url": "https://www.7-zip.org/a/7z2602-src.tar.xz",
-    "sha256": "cf967c98bca02a4b8b16375f441825a8e141362f14be1969bbec8e1ca0bff9dd",
-    "archive": "7z2602-src.tar.xz"
+    "url": "https://github.com/ip7z/7zip/releases/download/26.06/7z2606-src.tar.xz",
+    "sha256": "a4e374c8f864f51df48c2cfd0e1413ec3b2ea030deae852d6a655402ebb61ac4",
+    "archive": "7z2606-src.tar.xz"
   },
   "license": "GNU LGPL-2.1-or-later with unRAR restriction",
   "modified": false

@@ -16,7 +16,7 @@ corepack pnpm macos:dev
 corepack pnpm macos:build
 ```
 
-引擎来自 7-Zip 官方 26.02 macOS 下载，下载包固定 SHA256；验证后对内置 universal 7zz 做 ad-hoc 签名，将签名后的摘要嵌入 Rust 主程序。应用每次调用仍检查引擎完整性。不要在生成摘要后重签引擎；构建脚本会校验最终 .app 内的引擎摘要。无需用户安装 Homebrew 或 Rosetta。
+引擎来自 7-Zip 官方 26.06 macOS 下载，按 Apple Silicon 或 Intel 架构选择对应下载包并固定 SHA256；验证后对内置 7zz 做 ad-hoc 签名，将签名后的摘要嵌入 Rust 主程序。应用每次调用仍检查引擎完整性。不要在生成摘要后重签引擎；构建脚本会校验最终 .app 内的引擎摘要。无需用户安装 Homebrew 或 Rosetta。
 
 `macos:fetch` 将引擎、许可证、图标和环境摘要放在被 Git 忽略的 `third_party/7zip/bin/macos`，临时下载路径会打印，便于排查。更改引擎版本必须重新验证官方下载包并更新清单。
 

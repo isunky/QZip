@@ -1,6 +1,6 @@
 # 7-Zip Sidecar compliance record
 
-QZip M1 uses the official **7-Zip 26.02 Windows x64** command-line runtime.
+QZip uses the official **7-Zip 26.06 Windows x64** command-line runtime.
 `manifest.json` pins the official MSI and source archive URLs and their
 SHA-256 hashes. The MSI is used only to extract `7z.exe` and its adjacent
 `7z.dll`; it is never installed and the extracted files are ignored by Git.

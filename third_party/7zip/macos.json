@@ -1,8 +1,9 @@
 {
-  "version": "26.02",
-  "url": "https://www.7-zip.org/a/7z2602-mac.tar.xz",
-  "sha256": "1cf6760579502f87e591ff5c73a005ec50b3e4d6f507e8b038382d563c3175b9",
-  "architectures": ["arm64", "x86_64"],
+  "version": "26.06",
+  "architectures": {
+    "arm64": { "url": "https://github.com/ip7z/7zip/releases/download/26.06/7z2606-mac.tar.xz", "sha256": "b6f17920b4240940461dac8ef4009891881ac44d2a5ead625ede2ec8472185dd" },
+    "x86_64": { "url": "https://github.com/ip7z/7zip/releases/download/26.06/7z2606-mac-x64.tar.xz", "sha256": "3af68b124052da7fc2a246c96b0bea6a68bfee389baa788f4cead1a133445586" }
+  },
   "license": "GNU LGPL-2.1-or-later with unRAR restriction",
-  "source": "https://www.7-zip.org/a/7z2602-src.tar.xz"
+  "source": "https://github.com/ip7z/7zip/releases/download/26.06/7z2606-src.tar.xz"
 }

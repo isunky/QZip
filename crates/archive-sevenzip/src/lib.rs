@@ -31,13 +31,13 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-const EXPECTED_VERSION: &str = "26.02";
+const EXPECTED_VERSION: &str = "26.06";
 #[cfg(not(target_os = "macos"))]
 const EXPECTED_EXECUTABLE_SHA256: &str =
-    "83967f1b02b43c4efeda302795722c809e0e81b8307de73558d10484d5676a7d";
+    "dc0493429fe28136fcb177a0e77c9875cbb3b0bff5f2f8eeba4df302e98cef76";
 #[cfg(not(target_os = "macos"))]
 const EXPECTED_LIBRARY_SHA256: &str =
-    "69fd4df057985c40e510e2fac182881c7f85e90aa13ec703f763a8fdb2ce61f8";
+    "500db9eb17f3c21b729ba41dd02ecfe1823da05028c7e4ba129084cc74cc364e";
 const MAX_DIAGNOSTIC_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug)]
@@ -1255,12 +1255,12 @@ mod tests {
     #[test]
     fn reads_windows_and_standalone_engine_versions() {
         assert_eq!(
-            engine_version("7-Zip 26.02 (x64) : Copyright"),
-            Some("26.02")
+            engine_version("7-Zip 26.06 (x64) : Copyright"),
+            Some("26.06")
         );
         assert_eq!(
-            engine_version("\n7-Zip (z) 26.02 (arm64) : Copyright"),
-            Some("26.02")
+            engine_version("\n7-Zip (z) 26.06 (arm64) : Copyright"),
+            Some("26.06")
         );
         assert_eq!(engine_version("unexpected engine"), None);
     }

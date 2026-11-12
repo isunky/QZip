@@ -23,7 +23,7 @@ try {
   $sourceDirectory = Join-Path $work $inputDirectoryName
   New-Item -ItemType Directory -Path $sourceDirectory | Out-Null
   [IO.File]::WriteAllText((Join-Path $sourceDirectory $fixtureFileName), 'QZip M1 Unicode fixture')
-  cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar capabilities | Select-String '26.02' | Out-Null
+  cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar capabilities | Select-String '26.06' | Out-Null
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar create --format 7z --output (Join-Path $work 'archive name.7z') $sourceDirectory | Select-String 'completed' | Out-Null
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar list --archive (Join-Path $work 'archive name.7z') | Select-String 'world.txt' | Out-Null
   cargo run --quiet -p qzip-cli -- --sevenzip-dir $sidecar test --archive (Join-Path $work 'archive name.7z') | Select-String '"valid":true' | Out-Null
