@@ -148,10 +148,10 @@ else {
   }
   else {
     $pendingVersion = Get-IncrementedVersion $latestVersion $Increment
-    if ($currentVersion.CompareTo($pendingVersion) -ne 0) {
-      throw "Project version $currentVersionText is ahead of the latest stable tag, but is not its $Increment increment."
+    if ($currentVersion.CompareTo($pendingVersion) -gt 0) {
+      throw "Project version $currentVersionText is ahead of the requested $Increment release v$(Format-Version $pendingVersion). Refusing to downgrade."
     }
-    $targetVersion = $currentVersion
+    $targetVersion = $pendingVersion
   }
 }
 
